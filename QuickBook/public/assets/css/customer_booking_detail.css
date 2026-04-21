@@ -1,0 +1,225 @@
+/* ============================================================
+   QUICKBOOK — Customer Booking Detail Page
+   Extends customer_bookings.css (loaded first)
+   ============================================================ */
+
+/* ── Two-column layout ── */
+.bd-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+/* ── Cards ── */
+.bd-card { padding: 1.6rem 1.75rem; margin-bottom: 1.25rem; }
+.bd-card:last-child { margin-bottom: 0; }
+
+.bd-section-title {
+  font-family: var(--font-h);
+  font-size: .8rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 1.2rem;
+}
+
+/* ── Service header ── */
+.bd-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.1rem;
+  margin-bottom: 1rem;
+}
+.bd-service-av {
+  width: 60px; height: 60px; border-radius: var(--r-md);
+  background: var(--surface-md); border: 1px solid var(--border-md);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.7rem; flex-shrink: 0;
+}
+.bd-card-title {
+  font-family: var(--font-h);
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -.03em;
+  color: var(--white);
+  line-height: 1.1;
+}
+.bd-card-sub {
+  font-size: .8rem;
+  color: var(--muted);
+  margin-top: .25rem;
+}
+.bd-service-desc {
+  font-size: .84rem;
+  color: var(--off);
+  line-height: 1.65;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+
+/* ── Detail grid ── */
+.bd-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .9rem 1.5rem;
+}
+
+.bd-detail-label {
+  font-family: var(--font-m);
+  font-size: .62rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: .22rem;
+}
+.bd-detail-val {
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--white);
+}
+.bd-mono { font-family: var(--font-m); color: var(--gold-bright); }
+
+/* ── Notes ── */
+.bd-notes {
+  font-size: .84rem;
+  color: var(--off);
+  line-height: 1.65;
+  background: var(--surface-md);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: .9rem 1.1rem;
+}
+
+/* ── Price summary ── */
+.bd-price-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: .84rem;
+  color: var(--off);
+  padding: .3rem 0;
+}
+.bd-price-val { font-family: var(--font-m); color: var(--white); }
+.bd-price-divider {
+  height: 1px;
+  background: var(--border);
+  margin: .65rem 0;
+}
+.bd-price-row--total {
+  font-family: var(--font-h);
+  font-weight: 800;
+  font-size: .95rem;
+  color: var(--white);
+}
+.bd-price-total {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--gold-bright);
+  letter-spacing: -.03em;
+}
+.bd-loyalty-note {
+  margin-top: .9rem;
+  font-family: var(--font-m);
+  font-size: .65rem;
+  color: var(--gold);
+  background: var(--gold-soft);
+  border: 1px solid var(--gold-border);
+  border-radius: var(--r-sm);
+  padding: .45rem .8rem;
+  text-align: center;
+}
+
+/* ── Timeline ── */
+.bd-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.bd-timeline-step {
+  display: flex;
+  align-items: flex-start;
+  gap: .85rem;
+  padding-bottom: 1.1rem;
+  position: relative;
+}
+.bd-timeline-step:last-child { padding-bottom: 0; }
+.bd-timeline-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 7px; top: 18px;
+  width: 2px;
+  bottom: 0;
+  background: var(--border);
+}
+.bd-timeline-step.done:not(:last-child)::after { background: var(--gold-border-md); }
+
+.bd-tl-dot {
+  width: 16px; height: 16px; border-radius: 99px;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0; margin-top: 2px;
+  position: relative; z-index: 1;
+  transition: border-color .2s, background .2s, box-shadow .2s;
+}
+.bd-tl-dot.done { border-color: var(--gold); background: var(--gold-dim); }
+.bd-tl-dot.active {
+  border-color: var(--gold-bright);
+  background: var(--gold);
+  box-shadow: 0 0 10px rgba(201,168,76,.45);
+}
+.bd-tl-dot--cancel { border-color: var(--red); background: rgba(244,63,94,.2); }
+
+.bd-tl-label {
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.bd-timeline-step.done .bd-tl-label  { color: var(--off); }
+.bd-timeline-step.active .bd-tl-label { color: var(--white); }
+.bd-timeline-step--cancel .bd-tl-label { color: var(--red); }
+.bd-timeline-step.muted .bd-tl-label { color: var(--faint); }
+
+/* ── Actions ── */
+.bd-actions { display: flex; flex-direction: column; gap: .65rem; }
+.bd-btn-full {
+  width: 100%;
+  justify-content: center;
+  padding: .65rem 1.2rem;
+  font-size: .84rem;
+  border-radius: var(--r-md);
+}
+
+/* ── Flash message ── */
+.bd-flash {
+  padding: .85rem 1.25rem;
+  border-radius: var(--r-md);
+  font-size: .84rem;
+  font-weight: 500;
+  margin-bottom: 1.5rem;
+  display: flex; align-items: center; gap: .65rem;
+}
+.bd-flash--success { background: var(--green-soft); color: var(--green); border: 1px solid var(--green-border); }
+.bd-flash--error   { background: var(--red-soft);   color: var(--red);   border: 1px solid var(--red-border); }
+
+/* ── Status badge color variants ── */
+.bd-status-badge--yellow { background: var(--yellow-soft); color: var(--yellow); border-color: var(--yellow-border); }
+.bd-status-badge--green  { background: var(--green-soft);  color: var(--green);  border-color: var(--green-border); }
+.bd-status-badge--blue   { background: var(--blue-soft);   color: var(--blue);   border-color: var(--blue-border); }
+.bd-status-badge--red    { background: var(--red-soft);    color: var(--red);    border-color: var(--red-border); }
+
+.bd-status-dot--yellow { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+.bd-status-dot--green  { background: var(--green);  box-shadow: 0 0 6px var(--green); }
+.bd-status-dot--blue   { background: var(--blue);   box-shadow: 0 0 6px var(--blue); }
+.bd-status-dot--red    { background: var(--red);    box-shadow: 0 0 6px var(--red); }
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .bd-grid { grid-template-columns: 1fr; }
+  .bd-sidebar { order: -1; }
+}
+@media (max-width: 540px) {
+  .bd-detail-grid { grid-template-columns: 1fr; }
+  .bd-card { padding: 1.2rem 1.1rem; }
+}
