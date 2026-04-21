@@ -16,12 +16,12 @@ require_once __DIR__ . '/../config/database.php';
 
 
 // ── Parse URI ─────────────────────────────────────────────────
-$requestUri  = $_SERVER['REQUEST_URI'];
+// ── Parse URI ─────────────────────────────────────────────────
 $basePath    = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
-$uri         = substr($requestUri, strlen($basePath));
-$uri         = strtok($uri, '?');           // strip query string
-$uri         = trim($uri, '/');             // e.g. "auth/login"
-$method      = $_SERVER['REQUEST_METHOD'];  // GET | POST
+$uri         = $_GET['url'] ?? '';                 // set by .htaccess RewriteRule
+$uri         = trim($uri, '/');                    // e.g. "auth/login"
+$method      = $_SERVER['REQUEST_METHOD'];         // GET | POST
+
 
 // ── Route Table ───────────────────────────────────────────────
 //  Format:
@@ -37,13 +37,13 @@ $routes = [
     'GET:home'      => ['HomeController',  'index'],
 
     // ── Auth views (GET shows the page) ──────────────────────
-    'GET:login'             => ['AuthViewController', 'showLogin'],
-    'GET:auth/login'        => ['AuthViewController', 'showLogin'],
-    'GET:register'          => ['AuthViewController', 'showRegister'],
-    'GET:auth/register'     => ['AuthViewController', 'showRegister'],
-    'GET:forgot-password'   => ['AuthViewController', 'showForgotPassword'],
+    'GET:login'                => ['AuthViewController', 'showLogin'],
+    'GET:auth/login'           => ['AuthViewController', 'showLogin'],
+    'GET:register'             => ['AuthViewController', 'showRegister'],
+    'GET:auth/register'        => ['AuthViewController', 'showRegister'],
+    'GET:forgot-password'      => ['AuthViewController', 'showForgotPassword'],
     'GET:auth/forgot-password' => ['AuthViewController', 'showForgotPassword'],
-    'GET:reset-password'    => ['AuthViewController', 'showResetForm'],
+    'GET:reset-password'       => ['AuthViewController', 'showResetForm'],
 
     // ── Auth actions (POST processes the form) ────────────────
     'POST:auth/login'           => ['AuthController', 'login'],
@@ -56,40 +56,46 @@ $routes = [
     'POST:auth/reset-password'  => ['AuthController', 'resetPassword'],
 
     // ── Customer dashboard ────────────────────────────────────
-    'GET:dashboard'             => ['CustomerController', 'dashboard'],
-    'GET:bookings'              => ['CustomerController', 'bookings'],
-    'GET:bookings/{any}'        => ['CustomerController', 'bookingDetail'],
-    'POST:bookings/{any}/cancel'=> ['CustomerController', 'cancelBooking'],
-    'GET:loyalty'               => ['CustomerController', 'loyalty'],
-    'GET:profile'               => ['CustomerController', 'profile'],
-    'POST:profile'              => ['CustomerController', 'updateProfile'],
+    'GET:dashboard'                  => ['CustomerController', 'dashboard'],
+    'GET:bookings'                   => ['CustomerController', 'bookings'],
+    'GET:bookings/{any}'             => ['CustomerController', 'bookingDetail'],
+    'POST:bookings/{any}/cancel'     => ['CustomerController', 'cancelBooking'],
+    'GET:bookings/{any}/cancel'      => ['CustomerController', 'cancelBooking'],
+    'GET:loyalty'                    => ['CustomerController', 'loyalty'],
+    'GET:profile'                    => ['CustomerController', 'profile'],
+    'POST:profile'                   => ['CustomerController', 'updateProfile'],
 
     // ── Browse & booking flow ─────────────────────────────────
-    'GET:browse'                => ['BrowseController',   'index'],
-    'GET:browse/{any}'          => ['BrowseController',   'category'],
-    'GET:providers/{any}'       => ['ProviderController', 'show'],
-    'POST:book'                 => ['BookingController',  'store'],
+    'GET:browse'                     => ['BrowseController',    'index'],
+    'GET:browse/{any}'               => ['BrowseController',    'category'],
+    'GET:providers/{any}'            => ['ProviderController',  'show'],
+    'POST:book'                      => ['BookingController',   'store'],
 
     // ── Provider dashboard ────────────────────────────────────
-    'GET:provider/dashboard'       => ['ProviderDashController', 'index'],
-    'GET:provider/bookings'        => ['ProviderDashController', 'bookings'],
-    'POST:provider/bookings/{any}' => ['ProviderDashController', 'updateBooking'],
-    'GET:provider/services'        => ['ProviderDashController', 'services'],
-    'POST:provider/services'       => ['ProviderDashController', 'storeService'],
-    'POST:provider/services/{any}' => ['ProviderDashController', 'updateService'],
-    'GET:provider/availability'    => ['ProviderDashController', 'availability'],
-    'POST:provider/availability'   => ['ProviderDashController', 'updateAvailability'],
-    'GET:provider/profile'         => ['ProviderDashController', 'profile'],
-    'POST:provider/profile'        => ['ProviderDashController', 'updateProfile'],
+    'GET:provider/dashboard'                  => ['ProviderDashController', 'index'],
+    'GET:provider/bookings'                   => ['ProviderDashController', 'bookings'],
+    'POST:provider/bookings/{any}'            => ['ProviderDashController', 'updateBooking'],
+    'GET:provider/services'                   => ['ProviderDashController', 'services'],
+    'POST:provider/services/store'            => ['ProviderDashController', 'storeService'],
+    'POST:provider/service/update/{any}'      => ['ProviderDashController', 'updateService'],
+    'POST:provider/service/delete/{any}'      => ['ProviderDashController', 'deleteService'],
+    'POST:provider/service/toggle/{any}'      => ['ProviderDashController', 'toggleService'],
+    'GET:provider/availability'               => ['ProviderDashController', 'availability'],
+    'POST:provider/availability/store'        => ['ProviderDashController', 'storeAvailability'],
+    'POST:provider/availability/update/{any}' => ['ProviderDashController', 'updateAvailability'],
+    'POST:provider/availability/delete/{any}' => ['ProviderDashController', 'deleteAvailability'],
+    'GET:provider/profile'                    => ['ProviderDashController', 'profile'],
+    'POST:provider/profile'                   => ['ProviderDashController', 'updateProfile'],
 
     // ── Admin ─────────────────────────────────────────────────
-    'GET:admin/dashboard'          => ['AdminController', 'dashboard'],
-    'GET:admin/bookings'           => ['AdminController', 'bookings'],
-    'POST:admin/bookings/{any}'    => ['AdminController', 'updateBooking'],
-    'GET:admin/providers'          => ['AdminController', 'providers'],
-    'POST:admin/providers/{any}'   => ['AdminController', 'updateProvider'],
-    'GET:admin/users'              => ['AdminController', 'users'],
-    'GET:admin/reports'            => ['AdminController', 'reports'],
+    'GET:admin/dashboard'       => ['AdminController', 'dashboard'],
+    'GET:admin/bookings'               => ['AdminController', 'bookings'],
+    'POST:admin/bookings/{any}'        => ['AdminController', 'updateBooking'],
+    'POST:admin/bookings/{any}/delete' => ['AdminController', 'deleteBooking'],
+    'GET:admin/providers'       => ['AdminController', 'providers'],
+    'POST:admin/providers/{any}'=> ['AdminController', 'updateProvider'],
+    'GET:admin/users'           => ['AdminController', 'users'],
+    'GET:admin/reports'         => ['AdminController', 'reports'],
 ];
 
 // ── Dispatcher ────────────────────────────────────────────────
