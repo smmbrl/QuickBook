@@ -1,0 +1,643 @@
+/* ============================================================
+   QUICKBOOK — Register Screen
+   File: public/assets/css/register.css
+   Theme: Dark ink / gold
+   ============================================================ */
+
+/* ── PAGE LAYOUT ─────────────────────────────────────────── */
+.register-page {
+  display:    flex;
+  min-height: 100vh;
+}
+
+/* ── LEFT PANEL ──────────────────────────────────────────── */
+.register-left {
+  width:           44%;
+  flex-shrink:     0;
+  background:      var(--ink-3);
+  padding:         3.5rem 3.8rem;
+  display:         flex;
+  flex-direction:  column;
+  gap:             1.8rem;
+  color:           var(--white);
+  position:        relative;
+  overflow:        hidden;
+}
+
+.register-left::before {
+  content:      '';
+  position:     absolute;
+  top:          -80px;
+  right:        -80px;
+  width:        360px;
+  height:       360px;
+  background:   conic-gradient(from 135deg, rgba(201,168,76,.2), transparent 55%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.register-left::after {
+  content:      '';
+  position:     absolute;
+  bottom:       -80px;
+  left:         -50px;
+  width:        320px;
+  height:       320px;
+  border-radius: 50%;
+  background:   radial-gradient(circle, rgba(15,31,61,.7) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.register-left-bg {
+  position:   absolute;
+  inset:      0;
+  background:
+    linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px);
+  background-size: 30px 30px;
+  pointer-events:  none;
+}
+
+/* ── LEFT LOGO ───────────────────────────────────────────── */
+.register-left-logo {
+  font-family:     var(--font-display);
+  font-size:       1.45rem;
+  font-weight:     800;
+  color:           var(--white);
+  text-decoration: none;
+  letter-spacing:  -.02em;
+  position:        relative;
+  z-index:         1;
+  animation:       slideRight .5s ease both;
+}
+.register-left-logo span { color: var(--primary); }
+
+/* ── LEFT HEADING ────────────────────────────────────────── */
+.register-left h2 {
+  font-family:    var(--font-display);
+  font-size:      clamp(2rem, 3vw, 2.8rem);
+  font-weight:    800;
+  color:          var(--white);
+  line-height:    1.1;
+  letter-spacing: -.025em;
+  position:       relative;
+  z-index:        1;
+  animation:      slideRight .5s .06s ease both;
+}
+.register-left h2 em {
+  color:      var(--primary);
+  font-style: italic;
+}
+
+/* ── LEFT DESC ───────────────────────────────────────────── */
+.register-left-desc {
+  font-size:   .9rem;
+  color:       rgba(255,255,255,.48);
+  line-height: 1.8;
+  font-weight: 300;
+  position:    relative;
+  z-index:     1;
+  animation:   slideRight .5s .12s ease both;
+}
+
+/* ── FEATURE LIST ────────────────────────────────────────── */
+.feature-list {
+  display:        flex;
+  flex-direction: column;
+  gap:            .75rem;
+  position:       relative;
+  z-index:        1;
+}
+
+.feature-item {
+  display:     flex;
+  align-items: center;
+  gap:         .9rem;
+  font-size:   .87rem;
+  color:       rgba(255,255,255,.68);
+  font-weight: 300;
+  animation:   slideRight .5s ease both;
+}
+.feature-item:nth-child(1) { animation-delay: .18s; }
+.feature-item:nth-child(2) { animation-delay: .24s; }
+.feature-item:nth-child(3) { animation-delay: .30s; }
+.feature-item:nth-child(4) { animation-delay: .36s; }
+.feature-item:nth-child(5) { animation-delay: .42s; }
+
+.feature-check {
+  width:         22px;
+  height:        22px;
+  border-radius: 7px;
+  background:    rgba(201,168,76,.18);
+  border:        1px solid rgba(201,168,76,.32);
+  color:         var(--primary);
+  font-size:     .65rem;
+  font-weight:   700;
+  display:       flex;
+  align-items:   center;
+  justify-content: center;
+  flex-shrink:   0;
+  font-family:   var(--font-display);
+  transition:    all .22s;
+}
+.feature-item:hover .feature-check {
+  background:  var(--primary);
+  color:       var(--ink);
+  transform:   rotate(-5deg) scale(1.1);
+  box-shadow:  0 0 12px rgba(201,168,76,.35);
+}
+
+/* ── STATS ROW ───────────────────────────────────────────── */
+.auth-stats {
+  display:         flex;
+  align-items:     center;
+  gap:             .5rem;
+  margin-top:      auto;
+  padding:         1.6rem 1.8rem;
+  background:      rgba(201,168,76,.07);
+  border:          1px solid rgba(201,168,76,.2);
+  border-radius:   var(--radius-lg);
+  position:        relative;
+  z-index:         1;
+  backdrop-filter: blur(10px);
+  animation:       fadeUp .6s .5s ease both;
+  overflow:        hidden;
+}
+
+.auth-stats::before {
+  content:         '';
+  position:        absolute;
+  inset:           -1px;
+  border-radius:   var(--radius-lg);
+  background:      linear-gradient(90deg, rgba(201,168,76,.1), transparent, rgba(201,168,76,.1));
+  background-size: 200% 100%;
+  animation:       statSweep 4s ease-in-out infinite;
+  pointer-events:  none;
+}
+
+@keyframes statSweep {
+  0%,100% { background-position: 0%   0%; }
+  50%     { background-position: 100% 0%; }
+}
+
+.auth-stat {
+  text-align: center;
+  flex:       1;
+  position:   relative;
+  z-index:    1;
+}
+
+.auth-stat-number {
+  font-family:    var(--font-display);
+  font-size:      1.45rem;
+  font-weight:    800;
+  color:          var(--primary);
+  margin-bottom:  .18rem;
+  line-height:    1;
+  letter-spacing: -.015em;
+}
+
+.auth-stat-label {
+  font-family:    var(--font-mono);
+  font-size:      .6rem;
+  font-weight:    500;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color:          rgba(255,255,255,.35);
+}
+
+.auth-stat-divider {
+  width:      1px;
+  height:     36px;
+  background: rgba(255,255,255,.1);
+  flex-shrink: 0;
+}
+
+/* ── RIGHT PANEL ─────────────────────────────────────────── */
+.register-right {
+  flex:            1;
+  background:      var(--ink-2);
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  padding:         3rem 2rem;
+  overflow-y:      auto;
+  position:        relative;
+}
+
+.register-right::before {
+  content:      '';
+  position:     absolute;
+  top:          0;
+  right:        0;
+  width:        320px;
+  height:       320px;
+  border-radius: 50%;
+  background:   radial-gradient(circle, rgba(201,168,76,.05) 0%, transparent 65%);
+  pointer-events: none;
+}
+
+.register-right::after {
+  content:      '';
+  position:     absolute;
+  bottom:       0;
+  left:         0;
+  width:        280px;
+  height:       280px;
+  border-radius: 50%;
+  background:   radial-gradient(circle, rgba(15,31,61,.5) 0%, transparent 65%);
+  pointer-events: none;
+}
+
+/* ── FORM BOX ────────────────────────────────────────────── */
+.register-form-box {
+  background:      rgba(255,255,255,.04);
+  border:          1px solid rgba(255,255,255,.12);
+  border-radius:   var(--radius-xl);
+  padding:         2.5rem 2.8rem;
+  width:           100%;
+  max-width:       560px;
+  box-shadow:      0 16px 50px rgba(0,0,0,.32);
+  position:        relative;
+  z-index:         1;
+  backdrop-filter: blur(20px);
+  animation:       scaleIn .55s cubic-bezier(.34,1.2,.64,1) both;
+}
+
+.register-form-box::before {
+  content:       '';
+  position:      absolute;
+  top:           0;
+  left:          2.5rem;
+  right:         2.5rem;
+  height:        2px;
+  background:    linear-gradient(90deg, transparent, var(--primary-d), var(--primary), transparent);
+  border-radius: 0 0 99px 99px;
+}
+
+/* ── FORM HEADINGS ───────────────────────────────────────── */
+.form-heading {
+  font-family:    var(--font-display);
+  font-size:      1.6rem;
+  font-weight:    800;
+  color:          var(--white);
+  margin-bottom:  .35rem;
+  letter-spacing: -.02em;
+}
+
+.form-subheading {
+  font-size:    .86rem;
+  color:        rgba(255,255,255,.38);
+  margin-bottom: 1.5rem;
+  font-weight:  300;
+}
+.form-subheading a {
+  color:      var(--primary);
+  font-weight: 600;
+  transition: color .2s;
+}
+.form-subheading a:hover { color: var(--primary-d); }
+
+/* ── PROGRESS INDICATOR ──────────────────────────────────── */
+.register-step-label {
+  font-family:    var(--font-mono);
+  font-size:      .62rem;
+  font-weight:    500;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color:          rgba(255,255,255,.3);
+  margin-bottom:  .5rem;
+}
+
+.register-steps {
+  display:       flex;
+  align-items:   center;
+  gap:           .4rem;
+  margin-bottom: 1.6rem;
+}
+
+.r-step {
+  flex:          1;
+  height:        3px;
+  border-radius: 99px;
+  background:    rgba(255,255,255,.08);
+  transition:    background .3s;
+}
+.r-step.done   { background: var(--success); }
+.r-step.active { background: var(--primary); box-shadow: 0 0 8px rgba(201,168,76,.4); }
+
+/* ── FORM LABELS ─────────────────────────────────────────── */
+.register-right .form-label {
+  color:          rgba(255,255,255,.7);
+  font-family:    var(--font-mono);
+  font-size:      .66rem;
+  font-weight:    500;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  margin-bottom:  .45rem;
+}
+
+/* ── FORM CONTROLS (dark theme) ──────────────────────────── */
+.register-right .form-control {
+  background:    rgba(255,255,255,.06);
+  border:        1.5px solid rgba(255,255,255,.12);
+  color:         var(--white);
+  border-radius: var(--radius-sm);
+}
+.register-right .form-control::placeholder {
+  color: rgba(255,255,255,.25);
+}
+.register-right .form-control:focus {
+  border-color: var(--primary);
+  background:   rgba(255,255,255,.08);
+  box-shadow:   0 0 0 3px rgba(201,168,76,.18);
+}
+
+/* ── AUTOFILL OVERRIDE ───────────────────────────────────── */
+.register-right .form-control:-webkit-autofill,
+.register-right .form-control:-webkit-autofill:hover,
+.register-right .form-control:-webkit-autofill:focus,
+.register-right .form-control:-webkit-autofill:active {
+  -webkit-box-shadow:      0 0 0 1000px #1a1d2e inset !important;
+  box-shadow:              0 0 0 1000px #1a1d2e inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color:             #ffffff !important;
+  border-color:            #ffffff !important;
+  transition:              background-color 9999s ease-in-out 0s !important;
+}
+
+/* ── ROLE SELECTOR ───────────────────────────────────────── */
+.role-selector-label {
+  font-family:    var(--font-mono);
+  font-size:      .62rem;
+  font-weight:    500;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color:          rgba(255,255,255,.38);
+  margin-bottom:  .7rem;
+}
+
+.role-selector {
+  display:       flex;
+  gap:           .75rem;
+  margin-bottom: 1.5rem;
+}
+
+.role-option {
+  flex:            1;
+  display:         flex;
+  flex-direction:  column;
+  align-items:     center;
+  gap:             .35rem;
+  padding:         1.1rem .5rem;
+  border:          1.5px solid var(--border-md);
+  border-radius:   var(--radius);
+  cursor:          pointer;
+  transition:      all .25s cubic-bezier(.4,0,.2,1);
+  text-align:      center;
+  position:        relative;
+  overflow:        hidden;
+  background:      rgba(255,255,255,.03);
+}
+
+.role-option:hover {
+  border-color: var(--border-gold);
+  background:   rgba(201,168,76,.06);
+  transform:    translateY(-2px);
+}
+
+.role-option.selected {
+  border-color: var(--primary);
+  background:   rgba(201,168,76,.1);
+  box-shadow:   0 0 0 3px var(--primary-glow), var(--shadow-sm);
+}
+
+.role-option.selected::after {
+  content:         '✓';
+  position:        absolute;
+  top:             7px;
+  right:           9px;
+  font-family:     var(--font-display);
+  font-size:       .6rem;
+  font-weight:     800;
+  color:           var(--ink);
+  width:           16px;
+  height:          16px;
+  border-radius:   50%;
+  background:      var(--primary);
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  animation:       checkPop .2s cubic-bezier(.34,1.56,.64,1);
+  line-height:     16px;
+  text-align:      center;
+}
+
+.role-icon {
+  font-size:  1.5rem;
+  transition: transform .25s;
+}
+.role-option:hover .role-icon    { transform: scale(1.12) rotate(-5deg); }
+.role-option.selected .role-icon { transform: scale(1.08); }
+
+.role-label {
+  font-family:  var(--font-display);
+  font-size:    .82rem;
+  font-weight:  700;
+  color:        var(--white);
+}
+.role-sub {
+  font-family:    var(--font-mono);
+  font-size:      .62rem;
+  color:          rgba(255,255,255,.35);
+  letter-spacing: .03em;
+}
+
+/* ── FORM ROW ────────────────────────────────────────────── */
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap:     .85rem;
+}
+
+/* ── PASSWORD WRAPPER ────────────────────────────────────── */
+.pw-wrap {
+  position: relative;
+}
+.pw-wrap .form-control {
+  padding-right: 3rem;
+}
+
+.pw-toggle {
+  position:        absolute;
+  right:           .9rem;
+  top:             50%;
+  transform:       translateY(-50%);
+  cursor:          pointer;
+  color:           rgba(255,255,255,.35);
+  user-select:     none;
+  transition:      color .2s, transform .15s;
+  line-height:     1;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  background:      none;
+  border:          none;
+  padding:         0;
+}
+.pw-toggle:hover {
+  color:     var(--primary);
+  transform: translateY(-50%) scale(1.12);
+}
+.pw-toggle svg {
+  width:          18px;
+  height:         18px;
+  pointer-events: none;
+}
+
+/* Remove browser's native password eye icon */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+input[type="password"]::-webkit-credentials-auto-fill-button,
+input[type="password"]::-webkit-strong-password-auto-fill-button {
+  display: none;
+}
+
+/* ── FIELD ERROR ─────────────────────────────────────────── */
+.field-error {
+  font-family:    var(--font-mono);
+  font-size:      .65rem;
+  color:          #FCA5A5;
+  margin-top:     .3rem;
+  display:        none;
+  letter-spacing: .03em;
+  animation:      slideRight .2s ease;
+}
+.field-error.visible { display: block; }
+
+/* ── STRENGTH BAR ────────────────────────────────────────── */
+.strength-bar {
+  display:    flex;
+  gap:        .3rem;
+  margin-top: .55rem;
+}
+
+.strength-segment {
+  flex:          1;
+  height:        3px;
+  border-radius: 99px;
+  background:    rgba(255,255,255,.08);
+  transition:    background .3s, transform .3s;
+}
+.strength-segment.weak   { background: var(--danger);  transform: scaleY(1.5); }
+.strength-segment.fair   { background: var(--warning); transform: scaleY(1.5); }
+.strength-segment.strong { background: var(--success); transform: scaleY(1.5); }
+
+.strength-label {
+  font-family:    var(--font-mono);
+  font-size:      .62rem;
+  font-weight:    500;
+  letter-spacing: .04em;
+  color:          rgba(255,255,255,.38);
+  margin-top:     .4rem;
+  min-height:     1em;
+}
+
+/* ── TERMS ROW ───────────────────────────────────────────── */
+.terms-row {
+  display:       flex;
+  align-items:   flex-start;
+  gap:           .6rem;
+  font-size:     .82rem;
+  color:         rgba(255,255,255,.42);
+  margin-bottom: 1.4rem;
+  line-height:   1.6;
+  font-weight:   300;
+}
+.terms-row input[type="checkbox"] {
+  width:        15px;
+  height:       15px;
+  accent-color: var(--primary);
+  cursor:       pointer;
+  margin-top:   2px;
+  flex-shrink:  0;
+}
+.terms-row a {
+  color:      var(--primary);
+  font-weight: 600;
+  transition: color .2s;
+}
+.terms-row a:hover { color: var(--primary-d); text-decoration: underline; }
+
+/* ── SUBMIT BUTTON ───────────────────────────────────────── */
+.btn-submit {
+  width:           100%;
+  justify-content: center;
+  padding:         .9rem;
+  font-size:       .8rem;
+  border-radius:   var(--radius-sm);
+  margin-bottom:   .5rem;
+  font-family:     var(--font-display);
+  position:        relative;
+  overflow:        hidden;
+}
+
+/* ── DIVIDER ─────────────────────────────────────────────── */
+.register-form-box .divider {
+  color: rgba(255,255,255,.25);
+}
+.register-form-box .divider::before,
+.register-form-box .divider::after {
+  background: rgba(255,255,255,.08);
+}
+
+/* ── SOCIAL BUTTONS ──────────────────────────────────────── */
+.social-btn {
+  width:           100%;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  gap:             .75rem;
+  padding:         .75rem 1rem;
+  background:      rgba(255,255,255,.04);
+  border:          1.5px solid rgba(255,255,255,.12);
+  border-radius:   var(--radius-sm);
+  font-family:     var(--font-ui);
+  font-size:       .84rem;
+  font-weight:     500;
+  color:           rgba(255,255,255,.72);
+  cursor:          pointer;
+  margin-bottom:   .65rem;
+  transition:      all .22s;
+  letter-spacing:  .01em;
+  backdrop-filter: blur(8px);
+}
+.social-btn:hover {
+  background:   rgba(255,255,255,.08);
+  border-color: var(--primary);
+  color:        var(--white);
+  transform:    translateY(-1px);
+  box-shadow:   0 4px 16px rgba(0,0,0,.3);
+}
+.social-icon {
+  width:       18px;
+  height:      18px;
+  flex-shrink: 0;
+}
+
+/* ── RESPONSIVE ──────────────────────────────────────────── */
+@media (max-width: 960px) {
+  .register-page      { flex-direction: column; }
+  .register-left      { width: 100%; padding: 2.5rem 2rem; gap: 1.2rem; }
+  .auth-stats         { margin-top: 0; }
+  .register-right     { padding: 2rem 1.2rem; }
+  .register-form-box  { padding: 2.2rem 1.8rem; max-width: 100%; }
+}
+
+@media (max-width: 480px) {
+  .form-row           { grid-template-columns: 1fr; }
+  .role-selector      { flex-direction: row; }
+  .register-form-box  { padding: 2rem 1.4rem; border-radius: var(--radius-lg); }
+}
