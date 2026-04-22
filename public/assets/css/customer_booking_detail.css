@@ -65,7 +65,6 @@
   grid-template-columns: 1fr 1fr;
   gap: .9rem 1.5rem;
 }
-
 .bd-detail-label {
   font-family: var(--font-m);
   font-size: .62rem;
