@@ -1,0 +1,149 @@
+/* ============================================================
+   QUICKBOOK — Admin Reports Page
+   public/assets/css/admin_reports.css
+   ============================================================ */
+
+/* ── Summary strip ─────────────────────────────────────────── */
+.summary-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: .85rem;
+  margin-bottom: 1.75rem;
+}
+
+.summary-card {
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+}
+
+.sc-val {
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.sc-lbl {
+  font-family: var(--font-mono);
+  font-size: .56rem;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.3);
+  margin-top: .2rem;
+}
+
+.sc-sub {
+  font-size: .7rem;
+  margin-top: .5rem;
+}
+
+/* ── Report grid ───────────────────────────────────────────── */
+.report-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.1rem;
+  margin-top: 1rem;
+}
+.report-grid .span2 { grid-column: 1 / -1; }
+
+/* ── Column chart (monthly revenue) ───────────────────────── */
+.col-chart { padding: 1.25rem 1.5rem 1rem; }
+.col-row {
+  display: flex; align-items: flex-end; gap: .4rem; height: 130px;
+}
+.col-item {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; gap: .3rem; height: 100%; justify-content: flex-end;
+}
+.col-bar {
+  width: 100%; border-radius: 5px 5px 0 0;
+  background: linear-gradient(180deg, rgba(201,168,76,.5), rgba(201,168,76,.2));
+  border: 1px solid var(--gold-border);
+  transition: height .8s cubic-bezier(.4,0,.2,1), background .2s;
+  position: relative;
+}
+.col-bar:hover { background: linear-gradient(180deg, rgba(201,168,76,.8), rgba(201,168,76,.4)); }
+ 
+.col-bar-tip {
+  display: none; position: absolute;
+  bottom: 100%; left: 50%; transform: translateX(-50%);
+  background: #1A1D26; border: 1px solid var(--gold-border);
+  color: var(--gold-bright); font-family: var(--font-mono);
+  font-size: .58rem; padding: .25rem .6rem;
+  border-radius: var(--r-sm); white-space: nowrap;
+  margin-bottom: 5px; z-index: 5; line-height: 1.5;
+  box-shadow: 0 4px 16px rgba(0,0,0,.4);
+}
+.col-bar:hover .col-bar-tip { display: block; }
+.col-lbl {
+  font-family: var(--font-mono); font-size: .52rem;
+  color: var(--faint); text-align: center;
+}
+
+
+/* ── Horizontal bar chart (top services) ──────────────────── */
+.bar-chart { padding: 1.1rem 1.5rem; }
+.bar-group { display: flex; align-items: center; gap: .55rem; margin-bottom: .7rem; }
+.bar-label {
+  font-family: var(--font-mono); font-size: .57rem;
+  color: var(--faint); width: 58px; flex-shrink: 0;
+  text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.bar-track {
+  flex: 1; height: 22px;
+  background: rgba(255,255,255,.04);
+  border-radius: var(--r-xs); overflow: hidden;
+}
+.bar-fill {
+  height: 100%; border-radius: var(--r-xs);
+  background: linear-gradient(90deg, rgba(201,168,76,.65), rgba(201,168,76,.3));
+  display: flex; align-items: center; padding-left: .5rem;
+  font-family: var(--font-mono); font-size: .6rem;
+  font-weight: 700; color: rgba(0,0,0,.55); min-width: 30px;
+  transition: width .8s cubic-bezier(.4,0,.2,1);
+}
+.bar-end {
+  font-family: var(--font-mono); font-size: .6rem;
+  color: var(--faint); flex-shrink: 0; min-width: 72px; text-align: right;
+}
+
+/* ── Status breakdown ──────────────────────────────────────── */
+.status-breakdown { padding: 1rem 1.5rem; display: flex; flex-direction: column; gap: .6rem; }
+.sb-row { display: flex; align-items: center; gap: .65rem; }
+.sb-name { font-size: .8rem; color: var(--muted); flex: 1; text-transform: capitalize; }
+.sb-bar-wrap {
+  flex: 2; height: 6px;
+  background: rgba(255,255,255,.05);
+  border-radius: 99px; overflow: hidden;
+}
+.sb-bar-fill { height: 100%; border-radius: 99px; }
+.sb-cnt { font-family: var(--font-mono); font-size: .62rem; color: var(--muted); min-width: 28px; text-align: right; }
+.sb-pct { font-family: var(--font-mono); font-size: .58rem; color: var(--faint); min-width: 34px; text-align: right; }
+
+/* ── Top providers leaderboard ─────────────────────────────── */
+.prov-leaderboard-row {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .75rem 1.5rem;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  transition: background .15s;
+}
+.prov-leaderboard-row:last-child { border-bottom: none; }
+.prov-leaderboard-row:hover { background: rgba(255,255,255,.025); }
+.plr-rank {
+  font-family: var(--font-mono); font-size: .65rem;
+  color: var(--faint); width: 20px; text-align: center; flex-shrink: 0;
+}
+.plr-info { flex: 1; min-width: 0; }
+.plr-name { font-size: .82rem; font-weight: 600; color: var(--off); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plr-biz  { font-family: var(--font-mono); font-size: .58rem; color: var(--gold); margin-top: .04rem; }
+.plr-stats { text-align: right; }
+.plr-rev  { font-family: var(--font-mono); font-size: .78rem; font-weight: 700; color: var(--gold); }
+.plr-bkn  { font-family: var(--font-mono); font-size: .6rem; color: var(--faint); margin-top: .04rem; }
+
+/* ── Responsive ────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .summary-row { grid-template-columns: repeat(2, 1fr); }
+  .report-grid { grid-template-columns: 1fr; }
+  .report-grid .span2 { grid-column: 1; }
+}
