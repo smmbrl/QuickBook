@@ -1,4 +1,6 @@
 <?php
+// app/controllers/CustomerController.php
+
 class CustomerController
 {
     public function __construct()
@@ -21,11 +23,60 @@ class CustomerController
 
     public function bookingDetail(string $id): void
     {
+        $db         = Database::getInstance();
+        $customerId = (int)$_SESSION['user_id'];
+
+        $stmt = $db->prepare("
+            SELECT b.*,
+                   s.name            AS service_name,
+                   s.price,
+                   s.duration_minutes,
+                   s.description     AS service_description,
+                   pp.business_name,
+                   pp.offers_home_service,
+                   pp.id             AS profile_id,
+                   c.name            AS category_name,
+                   c.slug            AS category_slug,
+                   (SELECT COUNT(*) FROM tbl_reviews r WHERE r.booking_id = b.id) AS has_review
+            FROM tbl_bookings b
+            JOIN tbl_services          s  ON b.service_id  = s.id
+            JOIN tbl_provider_profiles pp ON b.provider_id = pp.id
+            LEFT JOIN tbl_categories   c  ON pp.category_id = c.id
+            WHERE b.id = ? AND b.customer_id = ?
+        ");
+        $stmt->execute([(int)$id, $customerId]);
+        $booking = $stmt->fetch();
+
+        if (!$booking) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Booking not found.'];
+            header('Location: ' . BASE_URL . 'bookings'); exit;
+        }
+
         require_once __DIR__ . '/../views/customer/booking-detail.php';
     }
 
     public function cancelBooking(string $id): void
     {
+        $db         = Database::getInstance();
+        $customerId = (int)$_SESSION['user_id'];
+
+        // Verify booking belongs to this customer and is cancellable
+        $stmt = $db->prepare("
+            SELECT id, status FROM tbl_bookings
+            WHERE id = ? AND customer_id = ? AND status IN ('pending','confirmed')
+        ");
+        $stmt->execute([$id, $customerId]);
+        $booking = $stmt->fetch();
+
+        if (!$booking) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Booking not found or cannot be cancelled.'];
+            header('Location: ' . BASE_URL . 'bookings'); exit;
+        }
+
+        $upd = $db->prepare("UPDATE tbl_bookings SET status = 'cancelled' WHERE id = ?");
+        $upd->execute([$id]);
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Booking cancelled successfully.'];
         header('Location: ' . BASE_URL . 'bookings'); exit;
     }
 
