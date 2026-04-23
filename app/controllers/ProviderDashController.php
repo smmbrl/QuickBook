@@ -173,31 +173,31 @@ class ProviderDashController
         exit;
     }
 
-    public function deleteService(string $id): void
-    {
-        $db     = Database::getInstance();
-        $userId = $_SESSION['user_id'] ?? 0;
+   public function deleteService(string $id): void
+{
+    $db     = Database::getInstance();
+    $userId = $_SESSION['user_id'] ?? 0;
 
-        $stmt = $db->prepare("
-            SELECT s.id FROM tbl_services s
-            JOIN tbl_provider_profiles pp ON pp.id = s.provider_id
-            WHERE s.id = ? AND pp.user_id = ?
-        ");
-        $stmt->execute([$id, $userId]);
+    $stmt = $db->prepare("
+        SELECT s.id FROM tbl_services s
+        JOIN tbl_provider_profiles pp ON pp.id = s.provider_id
+        WHERE s.id = ? AND pp.user_id = ?
+    ");
+    $stmt->execute([$id, $userId]);
 
-        if (!$stmt->fetch()) {
-            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Service not found or access denied.'];
-            header('Location: ' . BASE_URL . 'provider/services');
-            exit;
-        }
-
-        $del = $db->prepare("DELETE FROM tbl_services WHERE id = ?");
-        $del->execute([$id]);
-
-        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Service deleted successfully.'];
+    if (!$stmt->fetch()) {
+        $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Service not found or access denied.'];
         header('Location: ' . BASE_URL . 'provider/services');
         exit;
     }
+
+    $del = $db->prepare("DELETE FROM tbl_services WHERE id = ?");
+    $del->execute([$id]);
+
+    $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Service deleted successfully.'];
+    header('Location: ' . BASE_URL . 'provider/services');
+    exit;
+}
 
     public function toggleService(string $id): void
     {
