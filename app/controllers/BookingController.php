@@ -61,6 +61,32 @@ class BookingController
             header('Location: ' . BASE_URL . 'providers/' . $providerId); exit;
         }
 
+        // ── Validate booking date falls on an available day ────
+        $dayOfWeek = date('l', strtotime($bookingDate)); // e.g. "Monday"
+        $avCheck = $db->prepare("
+            SELECT * FROM tbl_provider_availability
+            WHERE provider_id = ? AND day_of_week = ? AND is_available = 1
+        ");
+        $avCheck->execute([$providerId, $dayOfWeek]);
+        $avRow = $avCheck->fetch();
+
+        if (!$avRow) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => ucfirst($dayOfWeek) . ' is not an available day for this provider. Please choose a different date.'];
+            header('Location: ' . BASE_URL . 'providers/' . $providerId); exit;
+        }
+
+        // ── Validate booking time is within provider hours ────
+        if ($bookingTime) {
+            $reqTime   = strtotime($bookingDate . ' ' . $bookingTime);
+            $startTime = strtotime($bookingDate . ' ' . $avRow['start_time']);
+            $endTime   = strtotime($bookingDate . ' ' . $avRow['end_time']);
+            if ($reqTime < $startTime || $reqTime > $endTime) {
+                $fmt = fn($t) => date('g:i A', strtotime($bookingDate . ' ' . $t));
+                $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Please choose a time between ' . $fmt($avRow['start_time']) . ' and ' . $fmt($avRow['end_time']) . ' on ' . $dayOfWeek . '.'];
+                header('Location: ' . BASE_URL . 'providers/' . $providerId); exit;
+            }
+        }
+
         // ── Prevent duplicate pending/confirmed booking ───────
         $dup = $db->prepare("
             SELECT id FROM tbl_bookings

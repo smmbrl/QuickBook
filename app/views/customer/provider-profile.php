@@ -343,7 +343,7 @@ $dayAbbr = ['Monday'=>'Mon','Tuesday'=>'Tue','Wednesday'=>'Wed',
         <div class="pv-avail-list">
           <?php foreach ($availability as $av): ?>
           <div class="pv-avail-item">
-            <span class="pv-avail-day"><?= $dayAbbr[$av['day_of_week']] ?? $av['day_of_week'] ?></span>
+            <span class="pv-avail-day"><?= htmlspecialchars($av['day_of_week']) ?></span>
             <span class="pv-avail-time">
               <?= date('g:i A', strtotime($av['start_time'])) ?> – <?= date('g:i A', strtotime($av['end_time'])) ?>
             </span>
@@ -498,8 +498,175 @@ $dayAbbr = ['Monday'=>'Mon','Tuesday'=>'Tue','Wednesday'=>'Wed',
   </div>
 </div>
 
+<style>
+/* ── Availability schedule strip (inside modal) ─────────────── */
+.av-strip {
+  display: flex; gap: .3rem; flex-wrap: wrap;
+  margin-bottom: 1.1rem;
+}
+.av-strip-pill {
+  display: flex; flex-direction: column; align-items: center;
+  padding: .3rem .5rem; border-radius: 8px; font-size: .65rem;
+  font-family: var(--font-m, monospace); font-weight: 600;
+  border: 1px solid transparent; transition: all .2s; min-width: 44px;
+  cursor: default; user-select: none;
+}
+.av-strip-pill.is-open {
+  background: rgba(201,168,76,.10); border-color: rgba(201,168,76,.28);
+  color: #C9A84C;
+}
+.av-strip-pill.is-closed {
+  background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.07);
+  color: rgba(255,255,255,.22);
+}
+.av-strip-pill.is-selected {
+  background: rgba(201,168,76,.22); border-color: rgba(201,168,76,.6);
+  color: #E8C96A; box-shadow: 0 0 0 2px rgba(201,168,76,.2);
+  transform: translateY(-2px);
+}
+.av-strip-pill.is-selected.is-closed {
+  background: rgba(244,63,94,.12); border-color: rgba(244,63,94,.4);
+  color: #F43F5E; box-shadow: 0 0 0 2px rgba(244,63,94,.15);
+}
+.av-strip-pill-day  { font-size: .62rem; letter-spacing: .04em; margin-bottom: .15rem; }
+.av-strip-pill-dot  { width: 5px; height: 5px; border-radius: 99px; background: currentColor; opacity: .7; }
+
+/* ── Date status banner (replaces raw text error) ────────────── */
+.av-date-status {
+  display: flex; align-items: flex-start; gap: .6rem;
+  padding: .65rem .85rem; border-radius: 10px; margin-top: .5rem;
+  font-size: .78rem; line-height: 1.45; font-weight: 500;
+  border: 1px solid transparent;
+  animation: av-fadein .18s ease;
+}
+@keyframes av-fadein { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+.av-date-status.is-ok {
+  background: rgba(34,197,94,.08); border-color: rgba(34,197,94,.22); color: #4ade80;
+}
+.av-date-status.is-err {
+  background: rgba(244,63,94,.08); border-color: rgba(244,63,94,.22); color: #F43F5E;
+}
+.av-date-status.is-warn {
+  background: rgba(251,191,36,.08); border-color: rgba(251,191,36,.22); color: #fbbf24;
+}
+.av-date-status-icon { font-size: 1rem; flex-shrink: 0; line-height: 1; }
+.av-date-status-body {}
+.av-date-status-title { font-weight: 700; margin-bottom: .1rem; }
+.av-date-status-sub   { opacity: .8; font-size: .72rem; }
+
+/* ── Toast container ─────────────────────────────────────────── */
+#qb-toast-rack {
+  position: fixed; bottom: 1.5rem; right: 1.5rem;
+  display: flex; flex-direction: column-reverse; gap: .55rem;
+  z-index: 9999; pointer-events: none;
+  width: min(340px, calc(100vw - 3rem));
+}
+.qb-toast {
+  display: flex; align-items: flex-start; gap: .75rem;
+  padding: .85rem 1rem; border-radius: 12px;
+  backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid transparent;
+  pointer-events: auto; cursor: pointer;
+  font-size: .8rem; font-weight: 500; line-height: 1.45;
+  animation: toast-in .28s cubic-bezier(.34,1.56,.64,1) both;
+  transition: opacity .22s, transform .22s;
+  box-shadow: 0 8px 32px rgba(0,0,0,.45);
+}
+.qb-toast.is-hiding {
+  opacity: 0; transform: translateX(16px);
+  pointer-events: none;
+}
+@keyframes toast-in {
+  from { opacity:0; transform: translateX(24px) scale(.95); }
+  to   { opacity:1; transform: translateX(0) scale(1); }
+}
+.qb-toast--error {
+  background: rgba(20,5,8,.88); border-color: rgba(244,63,94,.35); color: #fca5a5;
+}
+.qb-toast--warn {
+  background: rgba(15,12,3,.88); border-color: rgba(251,191,36,.3); color: #fde68a;
+}
+.qb-toast--ok {
+  background: rgba(3,13,8,.88); border-color: rgba(34,197,94,.28); color: #86efac;
+}
+.qb-toast-icon { font-size: 1.1rem; flex-shrink: 0; line-height: 1; }
+.qb-toast-body {}
+.qb-toast-title { font-weight: 700; font-size: .82rem; margin-bottom: .12rem; }
+.qb-toast-msg   { opacity: .85; }
+.qb-toast-bar {
+  position: absolute; bottom: 0; left: 0; height: 3px; border-radius: 0 0 12px 12px;
+  transition: width linear;
+}
+.qb-toast { position: relative; overflow: hidden; }
+.qb-toast--error .qb-toast-bar { background: #F43F5E; }
+.qb-toast--warn  .qb-toast-bar { background: #fbbf24; }
+.qb-toast--ok    .qb-toast-bar { background: #4ade80; }
+</style>
+
+<!-- Toast rack (appended to body, shared) -->
+<div id="qb-toast-rack" aria-live="polite" aria-label="Notifications"></div>
+
 <script>
 (function () {
+  /* ═══════════════════════════════════════════════════════════
+     TOAST SYSTEM
+  ═══════════════════════════════════════════════════════════ */
+  const rack = document.getElementById('qb-toast-rack');
+
+  function showToast({ type = 'error', title, msg, duration = 4500 }) {
+    const icons = { error: '🚫', warn: '⚠️', ok: '✅' };
+    const toast = document.createElement('div');
+    toast.className = `qb-toast qb-toast--${type}`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+      <span class="qb-toast-icon">${icons[type]}</span>
+      <div class="qb-toast-body">
+        <div class="qb-toast-title">${title}</div>
+        <div class="qb-toast-msg">${msg}</div>
+      </div>
+      <div class="qb-toast-bar" id="tbar-${Date.now()}"></div>`;
+    rack.appendChild(toast);
+
+    // Progress bar
+    const bar = toast.querySelector('.qb-toast-bar');
+    bar.style.width = '100%';
+    requestAnimationFrame(() => {
+      bar.style.transition = `width ${duration}ms linear`;
+      bar.style.width = '0%';
+    });
+
+    // Auto-dismiss
+    const timer = setTimeout(() => dismissToast(toast), duration);
+    toast.addEventListener('click', () => { clearTimeout(timer); dismissToast(toast); });
+  }
+
+  function dismissToast(toast) {
+    toast.classList.add('is-hiding');
+    toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     AVAILABILITY DATA (PHP-injected)
+  ═══════════════════════════════════════════════════════════ */
+  const providerAvailability = <?php
+    $avMap = [];
+    foreach ($availability as $av) {
+        $avMap[$av['day_of_week']] = [
+            'start' => substr($av['start_time'], 0, 5),
+            'end'   => substr($av['end_time'],   0, 5),
+        ];
+    }
+    echo json_encode($avMap, JSON_UNESCAPED_UNICODE);
+  ?>;
+
+  const DAY_NAMES    = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const DAY_ABBR     = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const ORDERED_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  const availableDays = new Set(Object.keys(providerAvailability));
+
+  /* ═══════════════════════════════════════════════════════════
+     ELEMENTS
+  ═══════════════════════════════════════════════════════════ */
   const modal        = document.getElementById('bookingModal');
   const formSvcId    = document.getElementById('formServiceId');
   const modalSvcName = document.getElementById('modalServiceName');
@@ -507,22 +674,178 @@ $dayAbbr = ['Monday'=>'Mon','Tuesday'=>'Tue','Wednesday'=>'Wed',
   const modalDur     = document.getElementById('modalDuration');
   const modalLoc     = document.getElementById('modalLocation');
   const svcSelect    = document.getElementById('formServiceSelect');
+  const dateInput    = document.getElementById('formDate');
+  const timeInput    = document.getElementById('formTime');
+  const submitBtn    = document.getElementById('submitBtn');
 
+  /* ═══════════════════════════════════════════════════════════
+     HELPERS
+  ═══════════════════════════════════════════════════════════ */
+  function dayNameFromDateStr(s) {
+    if (!s) return null;
+    const [y, m, d] = s.split('-').map(Number);
+    return DAY_NAMES[new Date(y, m - 1, d).getDay()];
+  }
+
+  function fmtTime(t) {
+    const [h, m] = t.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    return (h % 12 || 12) + ':' + String(m).padStart(2, '0') + ' ' + ampm;
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     AVAILABILITY STRIP (day pills inside the modal)
+  ═══════════════════════════════════════════════════════════ */
+  let stripEl = null;
+
+  function buildStrip() {
+    stripEl = document.createElement('div');
+    stripEl.className = 'av-strip';
+    stripEl.id = 'avStrip';
+    ORDERED_DAYS.forEach(day => {
+      const abbr = DAY_ABBR[DAY_NAMES.indexOf(day)];
+      const open = availableDays.has(day);
+      const pill = document.createElement('div');
+      pill.className = `av-strip-pill ${open ? 'is-open' : 'is-closed'}`;
+      pill.id = `avpill-${day}`;
+      pill.title = open
+        ? `${day}: ${fmtTime(providerAvailability[day].start)} – ${fmtTime(providerAvailability[day].end)}`
+        : `${day}: Unavailable`;
+      pill.innerHTML = `<span class="av-strip-pill-day">${abbr}</span><span class="av-strip-pill-dot"></span>`;
+      stripEl.appendChild(pill);
+    });
+    // Insert before the date/time row
+    const formRow = document.querySelector('.pv-form-row');
+    formRow.parentNode.insertBefore(stripEl, formRow);
+  }
+
+  function updateStrip(selectedDay) {
+    ORDERED_DAYS.forEach(day => {
+      const pill = document.getElementById(`avpill-${day}`);
+      if (!pill) return;
+      pill.classList.toggle('is-selected', day === selectedDay);
+    });
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     DATE STATUS BANNER
+  ═══════════════════════════════════════════════════════════ */
+  let statusEl = null;
+
+  function ensureStatusEl() {
+    if (statusEl) return;
+    statusEl = document.createElement('div');
+    statusEl.id = 'avDateStatus';
+    const formRow = document.querySelector('.pv-form-row');
+    formRow.parentNode.insertBefore(statusEl, formRow.nextSibling);
+  }
+
+  function setDateStatus(type, icon, title, sub) {
+    ensureStatusEl();
+    statusEl.className = `av-date-status is-${type}`;
+    statusEl.innerHTML = `
+      <span class="av-date-status-icon">${icon}</span>
+      <div class="av-date-status-body">
+        <div class="av-date-status-title">${title}</div>
+        ${sub ? `<div class="av-date-status-sub">${sub}</div>` : ''}
+      </div>`;
+  }
+
+  function clearDateStatus() {
+    if (statusEl) { statusEl.className = ''; statusEl.innerHTML = ''; }
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     TIME CONSTRAINTS
+  ═══════════════════════════════════════════════════════════ */
+  function updateTimeConstraints(dayName) {
+    const avail = dayName ? providerAvailability[dayName] : null;
+    if (avail) {
+      timeInput.min = avail.start;
+      timeInput.max = avail.end;
+      timeInput.disabled = false;
+      if (timeInput.value && (timeInput.value < avail.start || timeInput.value > avail.end)) {
+        timeInput.value = avail.start;
+      }
+    } else {
+      timeInput.min = '';
+      timeInput.max = '';
+      timeInput.value = '';
+      timeInput.disabled = !dateInput.value ? false : true;
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     DATE CHANGE HANDLER
+  ═══════════════════════════════════════════════════════════ */
+  function onDateChange() {
+    const dayName = dayNameFromDateStr(dateInput.value);
+    if (!dayName) { clearDateStatus(); updateStrip(null); return; }
+
+    updateStrip(dayName);
+
+    if (availableDays.has(dayName)) {
+      const av = providerAvailability[dayName];
+      setDateStatus(
+        'ok', '✅',
+        `${dayName} is available!`,
+        `Hours: ${fmtTime(av.start)} – ${fmtTime(av.end)}`
+      );
+      dateInput.setCustomValidity('');
+      updateTimeConstraints(dayName);
+    } else {
+      // Find nearest available date suggestion
+      const suggestion = findNextAvailableDate(dateInput.value);
+      setDateStatus(
+        'err', '🚫',
+        `${dayName}s are not available`,
+        suggestion
+          ? `Try <strong>${suggestion.label}</strong> instead — it's a ${suggestion.day}.`
+          : 'Please pick a different date.'
+      );
+      dateInput.setCustomValidity('Not an available day.');
+      updateTimeConstraints(null);
+    }
+  }
+
+  function findNextAvailableDate(fromDateStr) {
+    if (!availableDays.size) return null;
+    const [y, m, d] = fromDateStr.split('-').map(Number);
+    const base = new Date(y, m - 1, d);
+    for (let i = 1; i <= 14; i++) {
+      const candidate = new Date(base);
+      candidate.setDate(base.getDate() + i);
+      const name = DAY_NAMES[candidate.getDay()];
+      if (availableDays.has(name)) {
+        const label = candidate.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', weekday: 'short' });
+        return { label, day: name };
+      }
+    }
+    return null;
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     OPEN / CLOSE
+  ═══════════════════════════════════════════════════════════ */
   window.openBookingModal = function (svcId, svcName, price, duration, location) {
-    formSvcId.value       = svcId;
+    formSvcId.value          = svcId;
     modalSvcName.textContent = svcName;
     modalPrice.textContent   = '₱' + price;
     modalDur.textContent     = duration + ' min';
     modalLoc.textContent     = location;
 
-    // Sync select if present
-    if (svcSelect) {
-      svcSelect.value = svcId;
-    }
+    if (svcSelect) svcSelect.value = svcId;
 
-    // Set min date to today
-    const dateInput = document.getElementById('formDate');
-    dateInput.min = new Date().toISOString().split('T')[0];
+    dateInput.value = '';
+    timeInput.value = '';
+    timeInput.disabled = false;
+    dateInput.min   = new Date().toISOString().split('T')[0];
+    dateInput.setCustomValidity('');
+    clearDateStatus();
+
+    // Build strip once
+    if (!document.getElementById('avStrip')) buildStrip();
+    updateStrip(null);
 
     modal.hidden = false;
     document.body.style.overflow = 'hidden';
@@ -536,29 +859,56 @@ $dayAbbr = ['Monday'=>'Mon','Tuesday'=>'Tue','Wednesday'=>'Wed',
 
   window.onServiceChange = function (sel) {
     const opt = sel.options[sel.selectedIndex];
-    formSvcId.value           = opt.value;
-    modalSvcName.textContent  = opt.dataset.name;
-    modalPrice.textContent    = '₱' + opt.dataset.price;
-    modalDur.textContent      = opt.dataset.duration + ' min';
-    modalLoc.textContent      = opt.dataset.location;
+    formSvcId.value          = opt.value;
+    modalSvcName.textContent = opt.dataset.name;
+    modalPrice.textContent   = '₱' + opt.dataset.price;
+    modalDur.textContent     = opt.dataset.duration + ' min';
+    modalLoc.textContent     = opt.dataset.location;
   };
 
-  // Close on overlay click
-  modal.addEventListener('click', function (e) {
-    if (e.target === modal) closeBookingModal();
+  /* ═══════════════════════════════════════════════════════════
+     LISTENERS
+  ═══════════════════════════════════════════════════════════ */
+  dateInput.addEventListener('change', onDateChange);
+
+  document.getElementById('bookingForm').addEventListener('submit', function (e) {
+    const dayName = dayNameFromDateStr(dateInput.value);
+
+    // Day not available
+    if (dateInput.value && !availableDays.has(dayName)) {
+      e.preventDefault();
+      const suggestion = findNextAvailableDate(dateInput.value);
+      showToast({
+        type: 'error',
+        title: `${dayName}s are not available`,
+        msg: suggestion
+          ? `Nearest open date: ${suggestion.label} (${suggestion.day})`
+          : 'Please pick an available day.',
+      });
+      return;
+    }
+
+    // Time out of range
+    if (dateInput.value && timeInput.value) {
+      const avail = providerAvailability[dayName];
+      if (avail && (timeInput.value < avail.start || timeInput.value > avail.end)) {
+        e.preventDefault();
+        showToast({
+          type: 'warn',
+          title: 'Time is outside working hours',
+          msg: `${dayName} hours are ${fmtTime(avail.start)} – ${fmtTime(avail.end)}. Please pick a time within that window.`,
+        });
+        return;
+      }
+    }
+
+    submitBtn.disabled    = true;
+    submitBtn.textContent = 'Submitting…';
   });
 
-  // Close on Escape
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && !modal.hidden) closeBookingModal();
-  });
+  modal.addEventListener('click', e => { if (e.target === modal) closeBookingModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) closeBookingModal(); });
 
-  // Prevent double submit
-  document.getElementById('bookingForm').addEventListener('submit', function () {
-    const btn = document.getElementById('submitBtn');
-    btn.disabled = true;
-    btn.textContent = 'Submitting…';
-  });
 })();
 </script>
 
