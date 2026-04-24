@@ -21,9 +21,9 @@ $loyaltyTier = match(true) {
 };
 
 $tierConfig = [
-    'Bronze' => ['icon' => '🥉', 'color' => 'bronze', 'next' => 'Silver',  'threshold' => 1000, 'perks' => ['5% discount on first monthly booking', 'Priority booking for select services', 'Birthday bonus: +50 pts']],
-    'Silver' => ['icon' => '🥈', 'color' => 'silver', 'next' => 'Gold',    'threshold' => 2000, 'perks' => ['10% discount on all bookings', 'Free cancellation up to 2 hrs', 'Birthday bonus: +150 pts', 'Early access to new providers']],
-    'Gold'   => ['icon' => '🥇', 'color' => 'gold',   'next' => null,      'threshold' => null, 'perks' => ['15% discount on all bookings', 'Free cancellation anytime', 'Birthday bonus: +500 pts', 'Dedicated support line', 'Exclusive Gold-only services']],
+    'Bronze' => ['icon' => '<i class="fa-solid fa-medal" style="color:#cd7f32"></i>', 'color' => 'bronze', 'next' => 'Silver',  'threshold' => 1000, 'perks' => ['5% discount on first monthly booking', 'Priority booking for select services', 'Birthday bonus: +50 pts']],
+    'Silver' => ['icon' => '<i class="fa-solid fa-medal" style="color:#C0C0C0"></i>', 'color' => 'silver', 'next' => 'Gold',    'threshold' => 2000, 'perks' => ['10% discount on all bookings', 'Free cancellation up to 2 hrs', 'Birthday bonus: +150 pts', 'Early access to new providers']],
+    'Gold'   => ['icon' => '<i class="fa-solid fa-medal" style="color:#FFD700"></i>', 'color' => 'gold',   'next' => null,      'threshold' => null, 'perks' => ['15% discount on all bookings', 'Free cancellation anytime', 'Birthday bonus: +500 pts', 'Dedicated support line', 'Exclusive Gold-only services']],
 ];
 $tier        = $tierConfig[$loyaltyTier];
 $nextTier    = $tier['next'];
@@ -61,12 +61,12 @@ $totalRedeemed = (int)$stRedeemed->fetchColumn();
 
 /* ── Redeemable rewards catalog ── */
 $rewards = [
-    ['id' => 1, 'title' => '₱50 Booking Credit',      'cost' => 200,  'icon' => '💳', 'desc' => 'Applied on your next booking'],
-    ['id' => 2, 'title' => '₱150 Booking Credit',     'cost' => 500,  'icon' => '💳', 'desc' => 'Applied on your next booking'],
-    ['id' => 3, 'title' => 'Free Service Upgrade',     'cost' => 750,  'icon' => '⬆️',  'desc' => 'Upgrade any standard service'],
-    ['id' => 4, 'title' => '20% Off Next Booking',    'cost' => 1000, 'icon' => '🏷️',  'desc' => 'One-time use discount code'],
-    ['id' => 5, 'title' => 'Priority Scheduling',     'cost' => 400,  'icon' => '⚡',  'desc' => 'Jump the queue for 30 days'],
-    ['id' => 6, 'title' => 'Free Home Visit Add-on',  'cost' => 600,  'icon' => '🏠',  'desc' => 'Free transport for one booking'],
+    ['id' => 1, 'title' => '₱50 Booking Credit',      'cost' => 200,  'icon' => '<i class="fa-solid fa-credit-card"></i>', 'desc' => 'Applied on your next booking'],
+    ['id' => 2, 'title' => '₱150 Booking Credit',     'cost' => 500,  'icon' => '<i class="fa-solid fa-credit-card"></i>', 'desc' => 'Applied on your next booking'],
+    ['id' => 3, 'title' => 'Free Service Upgrade',     'cost' => 750,  'icon' => '<i class="fa-solid fa-arrow-up"></i>',   'desc' => 'Upgrade any standard service'],
+    ['id' => 4, 'title' => '20% Off Next Booking',    'cost' => 1000, 'icon' => '<i class="fa-solid fa-tag"></i>',         'desc' => 'One-time use discount code'],
+    ['id' => 5, 'title' => 'Priority Scheduling',     'cost' => 400,  'icon' => '⚡',                                      'desc' => 'Jump the queue for 30 days'],
+    ['id' => 6, 'title' => 'Free Home Visit Add-on',  'cost' => 600,  'icon' => '<i class="fa-solid fa-house"></i>',       'desc' => 'Free transport for one booking'],
 ];
 
 /* ── Upcoming bookings count (for nav badge) ── */
@@ -86,6 +86,7 @@ unset($_SESSION['flash']);
   <title>QuickBook — Loyalty</title>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_loyalty.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
@@ -113,7 +114,7 @@ unset($_SESSION['flash']);
     <div class="pv-nav-end">
       <div class="pv-points-badge">⭐ <?= number_format($loyaltyPoints) ?> pts</div>
       <button class="pv-notif-btn" aria-label="Notifications">
-        🔔
+        <i class="fa-solid fa-bell"></i>
         <span class="pv-notif-dot" aria-hidden="true"></span>
       </button>
       <div class="pv-nav-av" aria-hidden="true"><?= $initials ?></div>
@@ -176,7 +177,7 @@ unset($_SESSION['flash']);
     </div>
 
     <div class="ly-stat-card">
-      <div class="ly-stat-icon" style="background:var(--green-soft); color:var(--green);">📈</div>
+      <div class="ly-stat-icon" style="background:var(--green-soft); color:var(--green);"><i class="fa-solid fa-chart-line"></i></div>
       <div>
         <div class="ly-stat-val"><?= number_format($totalEarned) ?></div>
         <div class="ly-stat-label">Total Earned</div>
@@ -184,17 +185,17 @@ unset($_SESSION['flash']);
     </div>
 
     <div class="ly-stat-card">
-      <div class="ly-stat-icon" style="background:var(--indigo-soft); color:var(--indigo);">🎁</div>
+      <div class="ly-stat-icon" style="background:var(--indigo-soft); color:var(--indigo);"><i class="fa-solid fa-gift"></i></div>
       <div>
         <div class="ly-stat-val"><?= number_format($totalRedeemed) ?></div>
         <div class="ly-stat-label">Total Redeemed</div>
       </div>
     </div>
 
-    <!-- Tier progress card (wider) -->
+    <!-- Tier progress card -->
     <div class="ly-tier-progress-card">
-      <div class="ly-tier-prog-header">
-        <span class="ly-tier-prog-label">Tier Progress</span>
+      <div class="ly-tier-progress-head">
+        <span class="ly-tier-progress-label">Tier Progress</span>
         <span class="ly-tier-badge tier-<?= strtolower($loyaltyTier) ?>"><?= $tier['icon'] ?> <?= $loyaltyTier ?></span>
       </div>
       <?php if ($nextTier): ?>
@@ -212,7 +213,7 @@ unset($_SESSION['flash']);
       <div class="ly-tier-bar-wrap" role="progressbar" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
         <div class="ly-tier-bar-fill" style="width:100%"></div>
       </div>
-      <p class="ly-tier-hint">🏆 You're at the highest tier! Enjoy your Gold benefits.</p>
+      <p class="ly-tier-hint"><i class="fa-solid fa-trophy"></i> You're at the highest tier! Enjoy your Gold benefits.</p>
       <?php endif; ?>
     </div>
 
@@ -289,7 +290,7 @@ unset($_SESSION['flash']);
 
     <?php if (empty($history)): ?>
     <div class="ly-empty">
-      <div class="ly-empty-icon">📭</div>
+      <div class="ly-empty-icon"><i class="fa-solid fa-envelope-open"></i></div>
       <p>No points activity yet.</p>
       <a href="<?= BASE_URL ?>browse" class="ly-empty-cta">Book a Service →</a>
     </div>
@@ -340,19 +341,19 @@ unset($_SESSION['flash']);
     <h2 class="ly-section-title">How It Works</h2>
     <div class="ly-how-grid">
       <div class="ly-how-card">
-        <div class="ly-how-icon">📅</div>
+        <div class="ly-how-icon"><i class="fa-solid fa-calendar-days"></i></div>
         <div class="ly-how-title">Book a Service</div>
         <div class="ly-how-body">Browse and book from any provider in the QuickBook network.</div>
       </div>
       <div class="ly-how-arrow" aria-hidden="true">→</div>
       <div class="ly-how-card">
-        <div class="ly-how-icon">✅</div>
+        <div class="ly-how-icon"><i class="fa-solid fa-circle-check"></i></div>
         <div class="ly-how-title">Complete &amp; Earn</div>
         <div class="ly-how-body">Earn 10 pts per ₱100 spent on every completed booking.</div>
       </div>
       <div class="ly-how-arrow" aria-hidden="true">→</div>
       <div class="ly-how-card">
-        <div class="ly-how-icon">🎁</div>
+        <div class="ly-how-icon"><i class="fa-solid fa-gift"></i></div>
         <div class="ly-how-title">Redeem Rewards</div>
         <div class="ly-how-body">Use points for booking credits, discounts, and exclusive perks.</div>
       </div>
