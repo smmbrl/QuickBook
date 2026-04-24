@@ -31,7 +31,11 @@ $loyaltyTier   = match(true) {
     $loyaltyPoints >= 1000 => 'Silver',
     default                => 'Bronze',
 };
-$tierIcon = match($loyaltyTier) { 'Gold' => '&#x1F947;', 'Silver' => '&#x1F948;', default => '&#x1F949;' };
+$tierIcon = match($loyaltyTier) {
+    'Gold'   => '<i class="fa-solid fa-medal" style="color:#FFD700"></i>',
+    'Silver' => '<i class="fa-solid fa-medal" style="color:#C0C0C0"></i>',
+    default  => '<i class="fa-solid fa-medal" style="color:#cd7f32"></i>',
+};
 
 /* -- Booking stats -- */
 $stStats = $db->prepare("
@@ -151,6 +155,7 @@ function fmtMoney(float $v): string {
   <title>QuickBook &mdash; My Profile</title>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_profile.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
@@ -175,7 +180,7 @@ function fmtMoney(float $v): string {
     <div class="pv-nav-end">
       <div class="pv-points-badge">&#9733; <?= number_format($loyaltyPoints) ?> pts</div>
       <button class="pv-notif-btn" aria-label="Notifications">
-        &#x1F514;<span class="pv-notif-dot" aria-hidden="true"></span>
+        <i class="fa-solid fa-bell"></i><span class="pv-notif-dot" aria-hidden="true"></span>
       </button>
       <div class="pv-nav-av" aria-hidden="true"><?= $initials ?></div>
       <div class="pv-nav-user">
@@ -204,7 +209,7 @@ function fmtMoney(float $v): string {
         <div class="pr-hero-badges">
           <span class="pr-tier-badge tier-<?= strtolower($loyaltyTier) ?>"><?= $tierIcon ?> <?= $loyaltyTier ?> Tier</span>
           <?php if ($user['is_verified'] ?? false): ?>
-          <span class="pr-verified-badge">&#x2713; Verified</span>
+          <span class="pr-verified-badge"><i class="fa-solid fa-circle-check"></i> Verified</span>
           <?php endif; ?>
         </div>
       </div>
@@ -266,7 +271,7 @@ function fmtMoney(float $v): string {
           <h2 class="pr-card-title">Personal Information</h2>
           <p class="pr-card-sub">Update your name, email, and contact number.</p>
         </div>
-        <span class="pr-card-icon">&#x1F464;</span>
+        <span class="pr-card-icon"><i class="fa-solid fa-user"></i></span>
       </div>
       <form method="POST" action="<?= BASE_URL ?>profile" class="pr-form" novalidate>
         <input type="hidden" name="action" value="update_profile">
@@ -305,7 +310,7 @@ function fmtMoney(float $v): string {
           <h2 class="pr-card-title">Change Password</h2>
           <p class="pr-card-sub">Use a strong password of at least 8 characters.</p>
         </div>
-        <span class="pr-card-icon">&#x1F512;</span>
+        <span class="pr-card-icon"><i class="fa-solid fa-lock"></i></span>
       </div>
       <form method="POST" action="<?= BASE_URL ?>profile" class="pr-form" novalidate>
         <input type="hidden" name="action" value="change_password">
@@ -315,7 +320,7 @@ function fmtMoney(float $v): string {
             <input type="password" id="current_password" name="current_password" class="pr-input"
               placeholder="Enter current password" autocomplete="current-password">
             <button type="button" class="pr-pw-toggle" aria-label="Toggle visibility"
-              onclick="togglePw('current_password', this)">&#x1F441;</button>
+              onclick="togglePw('current_password', this)"><i class="fa-solid fa-eye"></i></button>
           </div>
         </div>
         <div class="pr-form-row">
@@ -326,7 +331,7 @@ function fmtMoney(float $v): string {
                 placeholder="Min. 8 characters" autocomplete="new-password"
                 oninput="checkStrength(this.value)">
               <button type="button" class="pr-pw-toggle" aria-label="Toggle visibility"
-                onclick="togglePw('new_password', this)">&#x1F441;</button>
+                onclick="togglePw('new_password', this)"><i class="fa-solid fa-eye"></i></button>
             </div>
             <div class="pr-strength-wrap" id="strength-wrap" aria-live="polite">
               <div class="pr-strength-bar">
@@ -341,7 +346,7 @@ function fmtMoney(float $v): string {
               <input type="password" id="confirm_password" name="confirm_password" class="pr-input"
                 placeholder="Repeat new password" autocomplete="new-password">
               <button type="button" class="pr-pw-toggle" aria-label="Toggle visibility"
-                onclick="togglePw('confirm_password', this)">&#x1F441;</button>
+                onclick="togglePw('confirm_password', this)"><i class="fa-solid fa-eye"></i></button>
             </div>
           </div>
         </div>
@@ -358,7 +363,7 @@ function fmtMoney(float $v): string {
           <h2 class="pr-card-title">Account</h2>
           <p class="pr-card-sub">Manage your session and account access.</p>
         </div>
-        <span class="pr-card-icon">&#x26A0;&#xFE0F;</span>
+        <span class="pr-card-icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
       </div>
       <div class="pr-danger-actions">
         <div class="pr-danger-item">
@@ -519,7 +524,9 @@ function togglePw(id, btn) {
   const el = document.getElementById(id);
   const hidden = el.type === 'password';
   el.type = hidden ? 'text' : 'password';
-  btn.textContent = hidden ? '\u{1F648}' : '\u{1F441}';
+  btn.innerHTML = hidden
+    ? '<i class="fa-solid fa-eye-slash"></i>'
+    : '<i class="fa-solid fa-eye"></i>';
 }
 
 function checkStrength(val) {

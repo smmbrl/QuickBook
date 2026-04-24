@@ -21,7 +21,7 @@ $loyaltyTier   = match(true) {
 };
 
 // ── Upcoming bookings count (for nav badge) ───────────
-$stUpcoming = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE customer_id = ? AND status IN ('pending','confirmed') AND booking_date >= CURDATE()");
+$stUpcoming = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE customer_id = ? AND status IN ('pending','confirmed') AND booking_date >= CURDATE() AND deleted_at IS NULL");
 $stUpcoming->execute([$userId]);
 $upcomingCount = (int)$stUpcoming->fetchColumn();
 
@@ -34,8 +34,8 @@ $search      = trim($_GET['search'] ?? '');
 $homeService = isset($_GET['home']) ? 1 : 0;
 $sortBy      = $_GET['sort'] ?? 'rating';
 
-// ── Build providers query ─────────────────────────────
-$where  = ["pp.is_approved = 1", "u.is_active = 1"];
+// ── Build SERVICES query ──────────────────────────────
+$where  = ["s.is_active = 1", "pp.is_approved = 1", "u.is_active = 1"];
 $params = [];
 
 if ($selectedCat) {
@@ -43,7 +43,7 @@ if ($selectedCat) {
     $params[] = $selectedCat;
 }
 if ($search !== '') {
-    $where[]  = "(pp.business_name LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ? OR c.name LIKE ?)";
+    $where[]  = "(s.name LIKE ? OR pp.business_name LIKE ? OR c.name LIKE ? OR s.description LIKE ?)";
     $params[] = "%$search%";
     $params[] = "%$search%";
     $params[] = "%$search%";
@@ -56,32 +56,41 @@ if ($homeService) {
 $orderMap = [
     'rating'   => 'pp.avg_rating DESC',
     'reviews'  => 'pp.total_reviews DESC',
-    'price'    => 'min_price ASC',
-    'name'     => 'pp.business_name ASC',
+    'price_lo' => 's.price ASC',
+    'price_hi' => 's.price DESC',
+    'name'     => 's.name ASC',
 ];
 $order = $orderMap[$sortBy] ?? $orderMap['rating'];
 
 $sql = "
-    SELECT pp.*, u.first_name, u.last_name, u.avatar_url,
-           c.name as category_name, c.slug as category_slug,
-           (SELECT COUNT(*) FROM tbl_services s WHERE s.provider_id = pp.id AND s.is_active = 1) as service_count,
-           (SELECT MIN(s.price) FROM tbl_services s WHERE s.provider_id = pp.id AND s.is_active = 1) as min_price
-    FROM tbl_provider_profiles pp
-    JOIN tbl_users u ON pp.user_id = u.id
-    LEFT JOIN tbl_categories c ON pp.category_id = c.id
+    SELECT s.*,
+           pp.id             AS profile_id,
+           pp.business_name,
+           pp.offers_home_service,
+           pp.avg_rating,
+           pp.total_reviews,
+           pp.city,
+           pp.barangay,
+           c.name            AS category_name,
+           c.slug            AS category_slug,
+           u.first_name, u.last_name
+    FROM tbl_services s
+    JOIN tbl_provider_profiles pp ON s.provider_id = pp.id
+    JOIN tbl_users u              ON pp.user_id = u.id
+    LEFT JOIN tbl_categories c    ON pp.category_id = c.id
     WHERE " . implode(' AND ', $where) . "
     ORDER BY $order
 ";
 
 $stmt = $db->prepare($sql);
 $stmt->execute($params);
-$providers = $stmt->fetchAll();
+$services = $stmt->fetchAll();
 
-// ── Stats for hero strip ──────────────────────────────
-$totalProviders  = count($providers);
-$homeProviders   = count(array_filter($providers, fn($p) => $p['offers_home_service']));
-$avgRating       = $totalProviders > 0
-    ? round(array_sum(array_column($providers, 'avg_rating')) / $totalProviders, 1)
+// ── Hero stats ────────────────────────────────────────
+$totalServices   = count($services);
+$homeServices    = count(array_filter($services, fn($s) => $s['offers_home_service']));
+$avgRating       = $totalServices > 0
+    ? round(array_sum(array_column($services, 'avg_rating')) / $totalServices, 1)
     : 0;
 $totalCategories = count($cats);
 
@@ -123,17 +132,13 @@ function renderStars(float $rating): string {
 <div class="bg-orb bg-orb-1" aria-hidden="true"></div>
 <div class="bg-orb bg-orb-2" aria-hidden="true"></div>
 
-<!-- ══════════════════════════════════════
-     NAV — identical to dashboard & bookings
-══════════════════════════════════════ -->
+<!-- ══ NAV ══ -->
 <nav class="pv-nav" role="navigation" aria-label="Customer navigation">
   <div class="pv-nav-inner">
-
     <a href="<?= BASE_URL ?>home" class="pv-logo">
       Quick<span>Book</span>
       <span class="pv-logo-badge">Customer</span>
     </a>
-
     <div class="pv-nav-links">
       <a href="<?= BASE_URL ?>dashboard"  class="pv-nav-link">Dashboard</a>
       <a href="<?= BASE_URL ?>bookings"   class="pv-nav-link">
@@ -144,7 +149,6 @@ function renderStars(float $rating): string {
       <a href="<?= BASE_URL ?>loyalty"    class="pv-nav-link">Loyalty</a>
       <a href="<?= BASE_URL ?>profile"    class="pv-nav-link">Profile</a>
     </div>
-
     <div class="pv-nav-end">
       <div class="pv-points-badge">⭐ <?= number_format($loyaltyPoints) ?> pts</div>
       <button class="pv-notif-btn" aria-label="Notifications">
@@ -158,13 +162,10 @@ function renderStars(float $rating): string {
       </div>
       <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout">Sign out</a>
     </div>
-
   </div>
 </nav>
 
-<!-- ══════════════════════════════════════
-     HERO — matches dashboard / bookings hero
-══════════════════════════════════════ -->
+<!-- ══ HERO ══ -->
 <header class="pv-hero" role="banner">
   <div class="pv-hero-overlay" aria-hidden="true"></div>
 
@@ -174,11 +175,10 @@ function renderStars(float $rating): string {
         <span class="pv-dot-pulse" aria-hidden="true"></span>
         Browse Services
       </p>
-      <h1 class="pv-hero-name">Find trusted <em>local experts</em></h1>
-      <p class="pv-hero-sub">Browse verified service providers — from barbers to massage therapists.</p>
+      <h1 class="pv-hero-name">Find the perfect <em>service</em> for you</h1>
+      <p class="pv-hero-sub">Compare services, prices, and providers — then book in seconds.</p>
     </div>
 
-    <!-- Hero search bar -->
     <form method="GET" action="<?= BASE_URL ?>browse" class="pv-hero-search" role="search">
       <?php if ($selectedCat): ?>
         <input type="hidden" name="category" value="<?= $selectedCat ?>">
@@ -190,9 +190,9 @@ function renderStars(float $rating): string {
       <div class="pv-search-wrap">
         <span class="pv-search-icon" aria-hidden="true">🔍</span>
         <input type="text" name="search"
-               placeholder="Search providers or services…"
+               placeholder="Search services or providers…"
                value="<?= htmlspecialchars($search) ?>"
-               aria-label="Search providers or services"
+               aria-label="Search services or providers"
                class="pv-search-input">
         <?php if ($search): ?>
           <a href="<?= BASE_URL ?>browse<?= $selectedCat ? '?category='.$selectedCat : '' ?>"
@@ -206,50 +206,43 @@ function renderStars(float $rating): string {
   <!-- Stat strip -->
   <div class="pv-hero-stats" role="region" aria-label="Directory statistics">
     <div class="pv-hero-stats-inner">
-
       <div class="pv-hs-item hs-gold">
         <div class="pv-hs-text">
-          <span class="pv-hs-val"><?= $totalProviders ?></span>
-          <span class="pv-hs-label">Providers Found</span>
+          <span class="pv-hs-val"><?= $totalServices ?></span>
+          <span class="pv-hs-label">Services Available</span>
         </div>
       </div>
-
       <div class="pv-hs-item hs-white">
         <div class="pv-hs-text">
           <span class="pv-hs-val"><?= $totalCategories ?></span>
           <span class="pv-hs-label">Categories</span>
         </div>
       </div>
-
       <div class="pv-hs-item hs-green">
         <div class="pv-hs-text">
-          <span class="pv-hs-val"><?= $homeProviders ?></span>
+          <span class="pv-hs-val"><?= $homeServices ?></span>
           <span class="pv-hs-label">Home Service</span>
         </div>
       </div>
-
       <div class="pv-hs-item hs-yellow">
         <div class="pv-hs-text">
           <span class="pv-hs-val"><?= $avgRating > 0 ? number_format($avgRating, 1) : '—' ?></span>
           <span class="pv-hs-label">Avg Rating</span>
         </div>
       </div>
-
     </div>
   </div>
 </header>
 
-<!-- ══════════════════════════════════════
-     MAIN CONTENT
-══════════════════════════════════════ -->
+<!-- ══ MAIN ══ -->
 <main class="pv-page" role="main">
 
-  <!-- ── Category pills ── -->
+  <!-- Category pills -->
   <div class="pv-cat-section" role="region" aria-label="Filter by category">
     <div class="pv-cat-row">
       <a href="<?= BASE_URL ?>browse<?= $search ? '?search='.urlencode($search) : '' ?>"
          class="pv-cat-pill <?= !$selectedCat ? 'active' : '' ?>">
-        All Categories
+        All Services
       </a>
       <?php foreach ($cats as $cat): ?>
       <a href="<?= BASE_URL ?>browse?category=<?= $cat['id'] ?><?= $search ? '&search='.urlencode($search) : '' ?>"
@@ -260,20 +253,20 @@ function renderStars(float $rating): string {
     </div>
   </div>
 
-  <!-- ── Toolbar ── -->
+  <!-- Toolbar -->
   <div class="pv-toolbar">
     <div class="pv-result-count">
-      <span class="pv-result-num"><?= count($providers) ?></span>
-      provider<?= count($providers) !== 1 ? 's' : '' ?> found
+      <span class="pv-result-num"><?= count($services) ?></span>
+      service<?= count($services) !== 1 ? 's' : '' ?> found
       <?php if ($search): ?>
         for "<strong><?= htmlspecialchars($search) ?></strong>"
       <?php endif; ?>
-      <?php if ($selectedCat): ?>
-        <?php $activeCat = array_filter($cats, fn($c) => $c['id'] == $selectedCat); ?>
-        <?php if ($activeCat): ?>
+      <?php if ($selectedCat):
+        $activeCat = array_filter($cats, fn($c) => $c['id'] == $selectedCat);
+        if ($activeCat): ?>
           in <strong><?= htmlspecialchars(reset($activeCat)['name']) ?></strong>
-        <?php endif; ?>
-      <?php endif; ?>
+        <?php endif;
+      endif; ?>
     </div>
 
     <div class="pv-toolbar-right">
@@ -293,11 +286,12 @@ function renderStars(float $rating): string {
         <?php if ($selectedCat): ?><input type="hidden" name="category" value="<?= $selectedCat ?>"><?php endif; ?>
         <?php if ($search):       ?><input type="hidden" name="search"   value="<?= htmlspecialchars($search) ?>"><?php endif; ?>
         <?php if ($homeService):  ?><input type="hidden" name="home"     value="1"><?php endif; ?>
-        <select name="sort" class="pv-sort-select" onchange="this.form.submit()" aria-label="Sort providers">
-          <option value="rating"  <?= $sortBy === 'rating'  ? 'selected' : '' ?>>⭐ Top Rated</option>
-          <option value="reviews" <?= $sortBy === 'reviews' ? 'selected' : '' ?>>💬 Most Reviews</option>
-          <option value="price"   <?= $sortBy === 'price'   ? 'selected' : '' ?>>💰 Lowest Price</option>
-          <option value="name"    <?= $sortBy === 'name'    ? 'selected' : '' ?>>🔤 A – Z</option>
+        <select name="sort" class="pv-sort-select" onchange="this.form.submit()" aria-label="Sort services">
+          <option value="rating"   <?= $sortBy === 'rating'   ? 'selected' : '' ?>>⭐ Top Rated</option>
+          <option value="reviews"  <?= $sortBy === 'reviews'  ? 'selected' : '' ?>>💬 Most Reviews</option>
+          <option value="price_lo" <?= $sortBy === 'price_lo' ? 'selected' : '' ?>>💰 Price: Low to High</option>
+          <option value="price_hi" <?= $sortBy === 'price_hi' ? 'selected' : '' ?>>💸 Price: High to Low</option>
+          <option value="name"     <?= $sortBy === 'name'     ? 'selected' : '' ?>>🔤 A – Z</option>
         </select>
       </form>
 
@@ -307,76 +301,74 @@ function renderStars(float $rating): string {
     </div>
   </div>
 
-  <!-- ── Provider grid ── -->
-  <?php if (empty($providers)): ?>
+  <!-- Service grid -->
+  <?php if (empty($services)): ?>
   <div class="pv-empty-state">
     <div class="pv-empty-icon" aria-hidden="true">🔍</div>
-    <p>No providers found. Try adjusting your filters or search term.</p>
+    <p>No services found. Try adjusting your filters or search term.</p>
     <a href="<?= BASE_URL ?>browse" class="pv-empty-cta">Clear All Filters →</a>
   </div>
 
   <?php else: ?>
-  <div class="pv-provider-grid" role="list">
-    <?php foreach ($providers as $p):
-      $slug    = $p['category_slug'] ?? '';
+  <div class="pv-service-grid" role="list">
+    <?php foreach ($services as $s):
+      $slug    = $s['category_slug'] ?? '';
       $emoji   = catEmoji($slug, $catEmojiMap);
-      $rating  = (float)$p['avg_rating'];
-      $reviews = (int)$p['total_reviews'];
+      $rating  = (float)$s['avg_rating'];
+      $reviews = (int)$s['total_reviews'];
+      $duration = !empty($s['duration_minutes']) ? $s['duration_minutes'] . ' min' : null;
     ?>
-    <a href="<?= BASE_URL ?>providers/<?= (int)$p['id'] ?>"
-       class="pv-provider-card"
+    <a href="<?= BASE_URL ?>providers/<?= (int)$s['profile_id'] ?>"
+       class="pv-service-card"
        role="listitem"
-       aria-label="<?= htmlspecialchars($p['business_name']) ?>">
+       aria-label="<?= htmlspecialchars($s['name']) ?> by <?= htmlspecialchars($s['business_name']) ?>">
 
-      <!-- Card cover -->
-      <div class="pv-card-cover">
-        <div class="pv-card-cover-emoji" aria-hidden="true"><?= $emoji ?></div>
+      <!-- Card top accent -->
+      <div class="pv-svc-accent" aria-hidden="true"></div>
 
-        <!-- Glow orb behind emoji -->
-        <div class="pv-card-cover-glow" aria-hidden="true"></div>
-
-        <!-- Badges -->
-        <?php if ($rating > 0): ?>
-        <div class="pv-card-badge pv-card-badge--rating">
-          ⭐ <?= number_format($rating, 1) ?>
-        </div>
-        <?php endif; ?>
-
-        <?php if ($p['offers_home_service']): ?>
-        <div class="pv-card-badge pv-card-badge--home">
-          🏠 Home Service
-        </div>
-        <?php endif; ?>
-      </div>
-
-      <!-- Card body -->
-      <div class="pv-card-body">
-        <div class="pv-card-category"><?= htmlspecialchars($p['category_name'] ?? 'Services') ?></div>
-        <div class="pv-card-name"><?= htmlspecialchars($p['business_name']) ?></div>
-        <div class="pv-card-location">
-          📍 <?= htmlspecialchars(($p['barangay'] ? $p['barangay'].', ' : '') . $p['city']) ?>
-        </div>
-
-        <div class="pv-card-meta">
-          <div class="pv-card-rating">
-            <span class="pv-card-stars" aria-label="Rating: <?= number_format($rating, 1) ?> out of 5">
-              <?= renderStars($rating) ?>
-            </span>
-            <span class="pv-card-rating-val"><?= $reviews > 0 ? number_format($rating, 1) : '—' ?></span>
-            <span class="pv-card-reviews">(<?= $reviews ?>)</span>
-          </div>
-          <div class="pv-card-price">
-            from <strong>₱<?= $p['min_price'] ? number_format((float)$p['min_price'], 0) : '—' ?></strong>
-          </div>
+      <!-- Header: emoji + category -->
+      <div class="pv-svc-head">
+        <div class="pv-svc-av" aria-hidden="true"><?= $emoji ?></div>
+        <div class="pv-svc-head-right">
+          <div class="pv-svc-category"><?= htmlspecialchars($s['category_name'] ?? 'Service') ?></div>
+          <?php if ($s['offers_home_service']): ?>
+            <span class="pv-svc-home-badge">🏠 Home</span>
+          <?php endif; ?>
         </div>
       </div>
 
-      <!-- Card footer -->
-      <div class="pv-card-footer">
-        <span class="pv-card-services">
-          🛠 <?= (int)$p['service_count'] ?> service<?= (int)$p['service_count'] !== 1 ? 's' : '' ?>
-        </span>
-        <span class="pv-card-cta">View →</span>
+      <!-- Service name & provider -->
+      <div class="pv-svc-body">
+        <div class="pv-svc-name"><?= htmlspecialchars($s['name']) ?></div>
+        <div class="pv-svc-provider">📍 <?= htmlspecialchars($s['business_name']) ?></div>
+        <?php if (!empty($s['description'])): ?>
+          <div class="pv-svc-desc"><?= htmlspecialchars(mb_strimwidth($s['description'], 0, 80, '…')) ?></div>
+        <?php endif; ?>
+      </div>
+
+      <!-- Meta row: duration + rating -->
+      <div class="pv-svc-meta">
+        <?php if ($duration): ?>
+          <span class="pv-svc-dur">⏱ <?= $duration ?></span>
+        <?php endif; ?>
+        <div class="pv-svc-rating">
+          <span class="pv-svc-stars" aria-label="Rating <?= number_format($rating,1) ?> out of 5">
+            <?= renderStars($rating) ?>
+          </span>
+          <span class="pv-svc-rating-val"><?= $reviews > 0 ? number_format($rating,1) : '—' ?></span>
+          <span class="pv-svc-reviews">(<?= $reviews ?>)</span>
+        </div>
+      </div>
+
+      <!-- Footer: price + CTA -->
+      <div class="pv-svc-footer">
+        <div class="pv-svc-price">
+          <span class="pv-svc-price-val">₱<?= number_format((float)$s['price'], 0) ?></span>
+          <?php if ($duration): ?>
+            <span class="pv-svc-price-per">/ <?= $duration ?></span>
+          <?php endif; ?>
+        </div>
+        <span class="pv-svc-cta">Book Now →</span>
       </div>
 
     </a>

@@ -32,28 +32,28 @@ $bookingTime   = !empty($booking['booking_time']) ? date('g:i A', strtotime($boo
 $duration      = !empty($booking['duration_minutes']) ? $booking['duration_minutes'] . ' min' : null;
 
 $catEmojiMap = [
-    'barbershop'       => '✂️',
-    'hair-salon'       => '💇',
-    'nail-care'        => '💅',
-    'massage-therapy'  => '💆',
-    'skincare-facial'  => '🧴',
-    'fitness-training' => '🏋️',
-    'home-cleaning'    => '🧹',
-    'pet-grooming'     => '🐾',
-    'event-styling'    => '🎨',
-    'dental'           => '🦷',
-    'tutoring'         => '📚',
+    'barbershop'       => '<i class="fa-solid fa-scissors"></i>',
+    'hair-salon'       => '<i class="fa-solid fa-scissors"></i>',
+    'nail-care'        => '<i class="fa-solid fa-hand-sparkles"></i>',
+    'massage-therapy'  => '<i class="fa-solid fa-spa"></i>',
+    'skincare-facial'  => '<i class="fa-solid fa-pump-soap"></i>',
+    'fitness-training' => '<i class="fa-solid fa-dumbbell"></i>',
+    'home-cleaning'    => '<i class="fa-solid fa-broom"></i>',
+    'pet-grooming'     => '<i class="fa-solid fa-paw"></i>',
+    'event-styling'    => '<i class="fa-solid fa-palette"></i>',
+    'dental'           => '<i class="fa-solid fa-tooth"></i>',
+    'tutoring'         => '<i class="fa-solid fa-book"></i>',
 ];
-$emoji = $catEmojiMap[$booking['category_slug'] ?? ''] ?? '🛠️';
+$emoji = $catEmojiMap[$booking['category_slug'] ?? ''] ?? '<i class="fa-solid fa-screwdriver-wrench"></i>';
 
 $statusLabels = [
     'pending'   => ['label' => 'Pending Confirmation', 'icon' => '⏳', 'color' => 'yellow'],
-    'confirmed' => ['label' => 'Confirmed',            'icon' => '✅', 'color' => 'green'],
-    'completed' => ['label' => 'Completed',            'icon' => '🏅', 'color' => 'blue'],
+    'confirmed' => ['label' => 'Confirmed',            'icon' => '<i class="fa-solid fa-circle-check"></i>', 'color' => 'green'],
+    'completed' => ['label' => 'Completed',            'icon' => '<i class="fa-solid fa-medal"></i>', 'color' => 'blue'],
     'cancelled' => ['label' => 'Cancelled',            'icon' => '✖',  'color' => 'red'],
     'rejected'  => ['label' => 'Rejected',             'icon' => '✖',  'color' => 'red'],
 ];
-$statusInfo = $statusLabels[$status] ?? ['label' => ucfirst($status), 'icon' => '📋', 'color' => 'white'];
+$statusInfo = $statusLabels[$status] ?? ['label' => ucfirst($status), 'icon' => '<i class="fa-solid fa-clipboard-list"></i>', 'color' => 'white'];
 
 // ── Flash message ─────────────────────────────────────────
 $flash = $_SESSION['flash'] ?? null;
@@ -68,6 +68,7 @@ unset($_SESSION['flash']);
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_bookings.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_booking_detail.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
 
@@ -94,7 +95,7 @@ unset($_SESSION['flash']);
     </div>
     <div class="pv-nav-end">
       <div class="pv-points-badge">⭐ <?= number_format($loyaltyPoints) ?> pts</div>
-      <button class="pv-notif-btn" aria-label="Notifications">🔔<span class="pv-notif-dot" aria-hidden="true"></span></button>
+      <button class="pv-notif-btn" aria-label="Notifications"><i class="fa-solid fa-bell"></i><span class="pv-notif-dot" aria-hidden="true"></span></button>
       <div class="pv-nav-av" aria-hidden="true"><?= $initials ?></div>
       <div class="pv-nav-user">
         <div class="pv-nav-user-name"><?= $userName ?></div>
@@ -118,14 +119,13 @@ unset($_SESSION['flash']);
       <p class="pv-hero-date"><?= date('l, F j, Y', strtotime($booking['booking_date'])) ?><?= $bookingTime ? ' · ' . $bookingTime : '' ?></p>
       <div class="pv-hero-meta">
         <span class="pv-status-badge bd-status-badge--<?= $statusInfo['color'] ?>">
-          <span class="pv-status-dot bd-status-dot--<?= $statusInfo['color'] ?>" aria-hidden="true"></span>
+          <span class="pv-status-dot<?= $statusInfo['color'] ?>" aria-hidden="true"></span>
           <?= $statusInfo['icon'] ?> <?= $statusInfo['label'] ?>
         </span>
-        <span class="pv-tier-badge">📍 <?= htmlspecialchars($booking['business_name']) ?></span>
+        <span class="pv-tier-badge"><i class="fa-solid"></i> <?= htmlspecialchars($booking['business_name']) ?></span>
       </div>
     </div>
     <a href="<?= BASE_URL ?>bookings" class="pv-points-chip">
-      <span class="pv-points-chip-dot" aria-hidden="true"></span>
       ← Back to Bookings
     </a>
   </div>
@@ -136,7 +136,7 @@ unset($_SESSION['flash']);
 
   <?php if ($flash): ?>
   <div class="bd-flash bd-flash--<?= htmlspecialchars($flash['type']) ?>">
-    <?= $flash['type'] === 'success' ? '✅' : '⚠️' ?> <?= htmlspecialchars($flash['msg']) ?>
+    <?= $flash['type'] === 'success' ? '<i class="fa-solid fa-circle-check"></i>' : '<i class="fa-solid fa-triangle-exclamation"></i>' ?> <?= htmlspecialchars($flash['msg']) ?>
   </div>
   <?php endif; ?>
 
@@ -164,7 +164,7 @@ unset($_SESSION['flash']);
 
       <!-- Date / time / location card -->
       <div class="pv-card bd-card">
-        <div class="bd-section-title">📅 Appointment Details</div>
+        <div class="bd-section-title"><i class="fa-solid fa-calendar-days"></i> Appointment Details</div>
         <div class="bd-detail-grid">
           <div class="bd-detail-item">
             <div class="bd-detail-label">Date</div>
@@ -184,7 +184,7 @@ unset($_SESSION['flash']);
           <div class="bd-detail-item">
             <div class="bd-detail-label">Location Type</div>
             <div class="bd-detail-val">
-              <?= $booking['location_type'] === 'Home' ? '🏠 Home Service' : '🏪 ' . htmlspecialchars($booking['location_type']) ?>
+              <?= $booking['location_type'] === 'Home' ? '<i class="fa-solid fa-house"></i> Home Service' : '<i class="fa-solid fa-store"></i> ' . htmlspecialchars($booking['location_type']) ?>
             </div>
           </div>
           <?php endif; ?>
@@ -202,7 +202,7 @@ unset($_SESSION['flash']);
       <!-- Notes card -->
       <?php if (!empty($booking['notes'])): ?>
       <div class="pv-card bd-card">
-        <div class="bd-section-title">📝 Your Notes</div>
+        <div class="bd-section-title"><i class="fa-solid fa-pen-to-square"></i> Your Notes</div>
         <p class="bd-notes"><?= nl2br(htmlspecialchars($booking['notes'])) ?></p>
       </div>
       <?php endif; ?>
@@ -214,7 +214,7 @@ unset($_SESSION['flash']);
 
       <!-- Price summary -->
       <div class="pv-card bd-card">
-        <div class="bd-section-title">💳 Payment Summary</div>
+        <div class="bd-section-title"><i class="fa-solid fa-credit-card"></i> Payment Summary</div>
         <div class="bd-price-row">
           <span>Service fee</span>
           <span class="bd-price-val">₱<?= number_format($booking['price'], 2) ?></span>
@@ -229,13 +229,13 @@ unset($_SESSION['flash']);
 
       <!-- Status timeline -->
       <div class="pv-card bd-card">
-        <div class="bd-section-title">🔄 Status Timeline</div>
+        <div class="bd-section-title"><i class="fa-solid fa-rotate"></i> Status Timeline</div>
         <div class="bd-timeline">
           <?php
           $steps = [
-              'pending'   => ['icon' => '📋', 'label' => 'Booking Submitted'],
-              'confirmed' => ['icon' => '✅', 'label' => 'Confirmed by Provider'],
-              'completed' => ['icon' => '🏅', 'label' => 'Service Completed'],
+              'pending'   => ['icon' => '<i class="fa-solid fa-clipboard-list"></i>', 'label' => 'Booking Submitted'],
+              'confirmed' => ['icon' => '<i class="fa-solid fa-circle-check"></i>', 'label' => 'Confirmed by Provider'],
+              'completed' => ['icon' => '<i class="fa-solid fa-medal"></i>', 'label' => 'Service Completed'],
           ];
           $cancelSteps = ['cancelled' => ['icon' => '✖', 'label' => 'Booking Cancelled'], 'rejected' => ['icon' => '✖', 'label' => 'Booking Rejected']];
           $order = ['pending','confirmed','completed'];
@@ -290,7 +290,7 @@ unset($_SESSION['flash']);
         <?php endif; ?>
         <a href="<?= BASE_URL ?>bookings" class="pv-btn pv-btn--ghost bd-btn-full">← All Bookings</a>
         <a href="<?= BASE_URL ?>providers/<?= (int)$booking['profile_id'] ?>" class="pv-btn pv-btn--ghost bd-btn-full">
-          📍 View Provider
+          <i class="fa-solid fa-location-dot"></i> View Provider
         </a>
       </div>
 
