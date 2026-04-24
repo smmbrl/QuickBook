@@ -66,10 +66,11 @@ $routes = [
     'POST:profile'                   => ['CustomerController', 'updateProfile'],
 
     // ── Browse & booking flow ─────────────────────────────────
-    'GET:browse'                     => ['BrowseController',    'index'],
-    'GET:browse/{any}'               => ['BrowseController',    'category'],
-    'GET:providers/{any}'            => ['ProviderController',  'show'],
-    'POST:book'                      => ['BookingController',   'store'],
+'GET:browse'                     => ['BrowseController',    'index'],
+'GET:browse/{any}'               => ['BrowseController',    'category'],
+'GET:services/{any}'             => ['CustomerController',  'serviceDetail'],  // ← ADD THIS
+'GET:providers/{any}'            => ['ProviderController',  'show'],
+'POST:book'                      => ['BookingController',   'store'],
 
     // ── Provider dashboard ────────────────────────────────────
     'GET:provider/dashboard'                  => ['ProviderDashController', 'index'],

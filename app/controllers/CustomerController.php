@@ -42,7 +42,7 @@ class CustomerController
             JOIN tbl_services          s  ON b.service_id  = s.id
             JOIN tbl_provider_profiles pp ON b.provider_id = pp.id
             LEFT JOIN tbl_categories   c  ON pp.category_id = c.id
-            WHERE b.id = ? AND b.customer_id = ?
+            WHERE b.id = ? AND b.customer_id = ? AND b.deleted_at IS NULL
         ");
         $stmt->execute([(int)$id, $customerId]);
         $booking = $stmt->fetch();
@@ -60,10 +60,12 @@ class CustomerController
         $db         = Database::getInstance();
         $customerId = (int)$_SESSION['user_id'];
 
-        // Verify booking belongs to this customer and is cancellable
+        // Verify booking belongs to this customer, is cancellable, and not deleted
         $stmt = $db->prepare("
             SELECT id, status FROM tbl_bookings
-            WHERE id = ? AND customer_id = ? AND status IN ('pending','confirmed')
+            WHERE id = ? AND customer_id = ?
+              AND status IN ('pending','confirmed')
+              AND deleted_at IS NULL
         ");
         $stmt->execute([$id, $customerId]);
         $booking = $stmt->fetch();
@@ -73,7 +75,12 @@ class CustomerController
             header('Location: ' . BASE_URL . 'bookings'); exit;
         }
 
-        $upd = $db->prepare("UPDATE tbl_bookings SET status = 'cancelled' WHERE id = ?");
+        // Soft-delete the booking after cancelling
+        $upd = $db->prepare("
+            UPDATE tbl_bookings
+            SET status = 'cancelled', deleted_at = NOW()
+            WHERE id = ?
+        ");
         $upd->execute([$id]);
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Booking cancelled successfully.'];
