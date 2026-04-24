@@ -1,0 +1,312 @@
+/* ============================================================
+   QUICKBOOK — Service Detail Page
+   customer_service_detail.css
+   Drop into: assets/css/customer_service_detail.css
+   Depends on: customer_browse.css (shares nav, grain, orbs, pv-* vars)
+   ============================================================ */
+
+/* ── Hero overrides for detail page ── */
+.sd-hero { min-height: 220px; }
+.sd-hero-inner {
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-bottom: 2rem;
+}
+.sd-hero-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .5rem;
+  margin-top: .65rem;
+}
+.sd-provider-chip {
+  font-size: .82rem; font-weight: 600; color: var(--off);
+  background: rgba(255,255,255,.07);
+  border: 1px solid var(--border-md);
+  padding: .28rem .85rem; border-radius: 99px;
+}
+.sd-chip {
+  font-size: .74rem; font-weight: 500; color: var(--muted);
+  background: var(--surface-md); border: 1px solid var(--border);
+  padding: .22rem .75rem; border-radius: 99px;
+}
+.sd-chip--green {
+  color: #4ADE80;
+  background: var(--green-soft);
+  border-color: var(--green-border);
+}
+.sd-back-btn {
+  display: inline-flex; align-items: center; gap: .4rem;
+  font-size: .78rem; font-weight: 500; color: var(--muted);
+  padding: .38rem .85rem; border-radius: var(--r-sm);
+  border: 1px solid var(--border-md);
+  background: rgba(255,255,255,.04);
+  transition: color .2s, background .2s, border-color .2s;
+  white-space: nowrap; flex-shrink: 0;
+}
+.sd-back-btn:hover { color: var(--white); background: var(--surface-md); border-color: var(--border-hi); }
+
+/* ── Breadcrumb ── */
+.sd-breadcrumb-wrap {
+  background: rgba(10,11,13,.6);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  position: relative; z-index: 5;
+}
+.sd-breadcrumb {
+  max-width: 1380px; margin: 0 auto; padding: .55rem 1.75rem;
+  display: flex; align-items: center; gap: .45rem;
+  font-size: .74rem; color: var(--faint);
+}
+.sd-breadcrumb a { transition: color .15s; }
+.sd-breadcrumb a:hover { color: var(--gold); }
+.sd-breadcrumb span:last-child { color: var(--muted); }
+
+/* ── Flash ── */
+.sd-flash {
+  max-width: 1380px; margin: 1rem auto 0; padding: .8rem 1.4rem;
+  border-radius: var(--r-md); font-size: .84rem; font-weight: 500;
+  display: flex; align-items: center; gap: .55rem;
+}
+.sd-flash--success { background: var(--green-soft); border: 1px solid var(--green-border); color: #4ADE80; }
+.sd-flash--error   { background: var(--red-soft);   border: 1px solid var(--red-border);   color: #FB7185; }
+
+/* ── Page & grid ── */
+.sd-page {
+  max-width: 1380px; margin: 0 auto;
+  padding: 2rem 1.75rem 5rem;
+  position: relative; z-index: 1;
+}
+.sd-grid {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+/* ── Card base ── */
+.sd-card {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  margin-bottom: 1.25rem;
+  transition: border-color .25s;
+}
+.sd-card:hover { border-color: var(--border-md); }
+
+/* ── Service overview card ── */
+.sd-card-head {
+  display: flex; align-items: flex-start; gap: 1.1rem;
+  padding: 1.5rem 1.75rem 1.25rem;
+}
+.sd-svc-av {
+  width: 56px; height: 56px; flex-shrink: 0;
+  border-radius: var(--r-lg);
+  background: var(--gold-soft); border: 1px solid var(--gold-border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.6rem;
+  box-shadow: 0 0 20px rgba(201,168,76,.10);
+}
+.sd-svc-identity { flex: 1; }
+.sd-svc-title {
+  font-family: var(--font-h); font-size: 1.25rem; font-weight: 800;
+  color: var(--white); letter-spacing: -.03em; margin-bottom: .35rem;
+}
+.sd-svc-rating-row { display: flex; align-items: center; gap: .4rem; }
+.sd-stars { color: var(--gold); font-size: .82rem; }
+.sd-rating-val { font-family: var(--font-m); font-size: .78rem; font-weight: 600; color: var(--off); }
+.sd-review-count { font-size: .75rem; color: var(--faint); }
+
+.sd-price-badge {
+  flex-shrink: 0;
+  display: flex; flex-direction: column; align-items: flex-end; gap: .1rem;
+}
+.sd-price-val {
+  font-family: var(--font-h); font-size: 1.5rem; font-weight: 800;
+  color: var(--gold-bright); letter-spacing: -.04em; line-height: 1;
+}
+.sd-price-per { font-family: var(--font-m); font-size: .65rem; color: var(--faint); }
+
+/* Description */
+.sd-description {
+  padding: 0 1.75rem 1.25rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1.1rem;
+}
+.sd-description p { font-size: .87rem; color: var(--off); line-height: 1.7; }
+.sd-section-label {
+  font-family: var(--font-m); font-size: .62rem; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: .65rem;
+}
+
+/* Detail chips */
+.sd-detail-chips {
+  display: flex; flex-wrap: wrap; gap: .65rem;
+  padding: 1.1rem 1.75rem 1.4rem;
+  border-top: 1px solid var(--border);
+}
+.sd-detail-chip {
+  display: flex; flex-direction: column; align-items: flex-start; gap: .15rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: .65rem .9rem;
+  min-width: 110px;
+}
+.sd-detail-chip-icon { font-size: .9rem; }
+.sd-detail-chip-label { font-family: var(--font-m); font-size: .58rem; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.sd-detail-chip-val { font-size: .82rem; font-weight: 600; color: var(--off); }
+
+/* ── Provider card ── */
+.sd-provider-card { padding: 1.4rem 1.75rem; }
+.sd-provider-card .sd-section-label { margin-bottom: .9rem; }
+.sd-provider-row {
+  display: flex; align-items: center; gap: 1rem;
+  margin-bottom: .75rem;
+}
+.sd-provider-av {
+  width: 48px; height: 48px; border-radius: 99px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--gold-dim), var(--gold));
+  color: #1a1200; font-family: var(--font-h); font-weight: 800; font-size: .8rem;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 2px rgba(201,168,76,.2);
+}
+.sd-provider-info { flex: 1; }
+.sd-provider-name { font-size: .95rem; font-weight: 700; color: var(--white); margin-bottom: .2rem; }
+.sd-provider-person,
+.sd-provider-loc   { font-size: .76rem; color: var(--muted); margin-top: .1rem; }
+.sd-view-profile-btn {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center;
+  font-size: .76rem; font-weight: 600; color: var(--gold);
+  background: var(--gold-soft); border: 1px solid var(--gold-border);
+  padding: .38rem .85rem; border-radius: var(--r-sm);
+  transition: background .2s, border-color .2s, transform .15s var(--ease-out);
+  white-space: nowrap;
+}
+.sd-view-profile-btn:hover {
+  background: var(--gold-soft-md); border-color: var(--gold-border-md);
+  transform: translateY(-1px);
+}
+.sd-provider-bio { font-size: .81rem; color: var(--muted); line-height: 1.65; margin-top: .25rem; }
+
+/* ── Sidebar / booking card ── */
+.sd-sidebar { position: sticky; top: 80px; }
+.sd-book-card { border-color: var(--gold-border); }
+.sd-book-card:hover { border-color: var(--gold-border-md); }
+
+.sd-book-header {
+  padding: 1.35rem 1.5rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.sd-book-title {
+  font-family: var(--font-h); font-size: .98rem; font-weight: 700; color: var(--white);
+}
+.sd-book-price {
+  font-family: var(--font-m); font-size: .72rem; color: var(--gold); font-weight: 600;
+}
+
+.sd-book-form {
+  padding: 1.25rem 1.5rem 1.5rem;
+  display: flex; flex-direction: column; gap: 1.1rem;
+}
+
+/* Form elements */
+.sd-form-group { display: flex; flex-direction: column; gap: .4rem; }
+.sd-form-label {
+  font-size: .79rem; font-weight: 600; color: var(--muted);
+  display: flex; align-items: center; gap: .4rem;
+}
+.sd-req { color: #FB7185; }
+.sd-form-hint { font-weight: 400; font-size: .72rem; color: var(--faint); margin-left: auto; }
+.sd-form-control {
+  width: 100%;
+  background: var(--surface-md); border: 1px solid var(--border-md);
+  border-radius: var(--r-sm); color: var(--white);
+  font-family: var(--font-b); font-size: .87rem;
+  padding: .62rem 1rem; outline: none;
+  transition: border-color .2s, background .2s, box-shadow .2s;
+  /* Date/time input color fix for dark backgrounds */
+  color-scheme: dark;
+}
+.sd-form-control::placeholder { color: var(--faint); }
+.sd-form-control:hover { background: var(--surface-hi); border-color: var(--border-hi); }
+.sd-form-control:focus {
+  background: rgba(201,168,76,.04);
+  border-color: var(--gold-border-md);
+  box-shadow: 0 0 0 3px rgba(201,168,76,.08);
+}
+.sd-textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
+
+/* Radio location picker */
+.sd-radio-group { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; }
+.sd-radio-option { cursor: pointer; }
+.sd-radio-option input { display: none; }
+.sd-radio-box {
+  display: flex; flex-direction: column; align-items: center; gap: .3rem;
+  padding: .7rem .5rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  transition: border-color .2s, background .2s;
+}
+.sd-radio-option input:checked ~ .sd-radio-box {
+  background: var(--gold-soft); border-color: var(--gold-border-md);
+}
+.sd-radio-icon { font-size: 1.1rem; }
+.sd-radio-label { font-size: .74rem; font-weight: 600; color: var(--muted); }
+.sd-radio-option input:checked ~ .sd-radio-box .sd-radio-label { color: var(--gold-bright); }
+
+/* Summary strip */
+.sd-book-summary {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: .9rem 1rem;
+}
+.sd-summary-row {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: .82rem; color: var(--muted);
+}
+.sd-summary-divider { border-top: 1px solid var(--border); margin: .55rem 0; }
+.sd-summary-total { font-weight: 700; color: var(--off); }
+.sd-loyalty-note {
+  font-family: var(--font-m); font-size: .65rem; color: var(--gold);
+  margin-top: .55rem; letter-spacing: .04em;
+}
+
+/* Submit button */
+.sd-submit-btn {
+  width: 100%; padding: .78rem 1rem;
+  background: var(--gold); color: #1a1200;
+  font-family: var(--font-h); font-size: .88rem; font-weight: 800;
+  border: none; border-radius: var(--r-md); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: .4rem;
+  box-shadow: 0 2px 16px rgba(201,168,76,.28);
+  transition: background .2s, transform .15s var(--ease-out), box-shadow .2s;
+}
+.sd-submit-btn:hover {
+  background: var(--gold-bright);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(201,168,76,.38);
+}
+.sd-submit-note {
+  font-size: .7rem; color: var(--faint); text-align: center; margin-top: -.35rem;
+  line-height: 1.5;
+}
+
+/* ══ Responsive ══ */
+@media (max-width: 1100px) {
+  .sd-grid { grid-template-columns: 1fr; }
+  .sd-sidebar { position: static; }
+}
+@media (max-width: 768px) {
+  .sd-page { padding: 1.25rem 1rem 3rem; }
+  .sd-card-head { flex-direction: column; gap: .75rem; }
+  .sd-price-badge { align-items: flex-start; }
+  .sd-hero-inner { flex-direction: column; align-items: flex-start; }
+  .sd-provider-row { flex-wrap: wrap; }
+  .sd-view-profile-btn { width: 100%; justify-content: center; }
+}
+@media (max-width: 480px) {
+  .sd-detail-chips { flex-direction: column; }
+  .sd-detail-chip { width: 100%; }
+  .sd-book-form { padding: 1rem; }
+}
