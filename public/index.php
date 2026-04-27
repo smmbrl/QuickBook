@@ -1,42 +1,30 @@
 <?php
-// public/index.php  — QuickBook Front Controller
-// ─────────────────────────────────────────────────────────────
-//  All HTTP requests are funnelled here by .htaccess.
-//  Routes map URI segments to Controller::method pairs.
-// ─────────────────────────────────────────────────────────────
 
 session_start();
 
-// ── Base URL (auto-detected) ──────────────────────────────────
+//  Base URL (auto-detected) 
 $scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));
 define('BASE_URL', rtrim($scriptDir, '/') . '/');   // e.g. /quickbook/public/
 
-// ── Autoload helpers ──────────────────────────────────────────
+//  Autoload helpers 
 require_once __DIR__ . '/../config/database.php';
 
 
-// ── Parse URI ─────────────────────────────────────────────────
-// ── Parse URI ─────────────────────────────────────────────────
+//  Parse URI 
 $basePath    = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
-$uri         = $_GET['url'] ?? '';                 // set by .htaccess RewriteRule
-$uri         = trim($uri, '/');                    // e.g. "auth/login"
-$method      = $_SERVER['REQUEST_METHOD'];         // GET | POST
+$uri         = $_GET['url'] ?? '';                 
+$uri         = trim($uri, '/');                    
+$method      = $_SERVER['REQUEST_METHOD'];         
 
 
-// ── Route Table ───────────────────────────────────────────────
-//  Format:
-//    'HTTP_METHOD:uri/pattern' => ['ControllerClass', 'method']
-//
-//  Wildcards:
-//    {any}  → matches one path segment (stored in $params[0] …)
 
 $routes = [
 
-    // ── Public pages ─────────────────────────────────────────
+    //  Public pages 
     'GET:'          => ['HomeController',  'index'],
     'GET:home'      => ['HomeController',  'index'],
 
-    // ── Auth views (GET shows the page) ──────────────────────
+    //  Auth views (GET shows the page) 
     'GET:login'                => ['AuthViewController', 'showLogin'],
     'GET:auth/login'           => ['AuthViewController', 'showLogin'],
     'GET:register'             => ['AuthViewController', 'showRegister'],
@@ -45,17 +33,18 @@ $routes = [
     'GET:auth/forgot-password' => ['AuthViewController', 'showForgotPassword'],
     'GET:reset-password'       => ['AuthViewController', 'showResetForm'],
 
-    // ── Auth actions (POST processes the form) ────────────────
+    //  Auth actions (POST processes the form)
     'POST:auth/login'           => ['AuthController', 'login'],
     'POST:auth/register'        => ['AuthController', 'register'],
     'POST:auth/logout'          => ['AuthController', 'logout'],
     'GET:auth/logout'           => ['AuthController', 'logout'],
     'GET:auth/verify'           => ['AuthController', 'verifyEmail'],
+    'GET:auth/forgot-password'  => ['AuthController', 'forgotPassword'],
     'POST:auth/forgot-password' => ['AuthController', 'forgotPassword'],
     'GET:auth/reset-password'   => ['AuthController', 'showResetForm'],
     'POST:auth/reset-password'  => ['AuthController', 'resetPassword'],
 
-    // ── Customer dashboard ────────────────────────────────────
+    //  Customer dashboard
     'GET:dashboard'                  => ['CustomerController', 'dashboard'],
     'GET:bookings'                   => ['CustomerController', 'bookings'],
     'GET:bookings/{any}'             => ['CustomerController', 'bookingDetail'],
@@ -65,14 +54,14 @@ $routes = [
     'GET:profile'                    => ['CustomerController', 'profile'],
     'POST:profile'                   => ['CustomerController', 'updateProfile'],
 
-    // ── Browse & booking flow ─────────────────────────────────
+    // Browse & booking flow 
 'GET:browse'                     => ['BrowseController',    'index'],
 'GET:browse/{any}'               => ['BrowseController',    'category'],
 'GET:services/{any}'             => ['CustomerController',  'serviceDetail'],  // ← ADD THIS
 'GET:providers/{any}'            => ['ProviderController',  'show'],
 'POST:book'                      => ['BookingController',   'store'],
 
-    // ── Provider dashboard ────────────────────────────────────
+    // Provider dashboard 
     'GET:provider/dashboard'                  => ['ProviderDashController', 'index'],
     'GET:provider/bookings'                   => ['ProviderDashController', 'bookings'],
     'POST:provider/bookings/{any}'            => ['ProviderDashController', 'updateBooking'],
@@ -85,10 +74,11 @@ $routes = [
     'POST:provider/availability/store'        => ['ProviderDashController', 'storeAvailability'],
     'POST:provider/availability/update/{any}' => ['ProviderDashController', 'updateAvailability'],
     'POST:provider/availability/delete/{any}' => ['ProviderDashController', 'deleteAvailability'],
-    'GET:provider/profile'                    => ['ProviderDashController', 'profile'],
-    'POST:provider/profile'                   => ['ProviderDashController', 'updateProfile'],
+    'GET:provider/profile'                          => ['ProviderDashController', 'profile'],
+    'POST:provider/profile'                         => ['ProviderDashController', 'updateProfile'],
+    'POST:provider/profile/update-business'         => ['ProviderDashController', 'updateProfile'],
 
-    // ── Admin ─────────────────────────────────────────────────
+    // Admin 
     'GET:admin/dashboard'       => ['AdminController', 'dashboard'],
     'GET:admin/bookings'               => ['AdminController', 'bookings'],
     'POST:admin/bookings/{any}'        => ['AdminController', 'updateBooking'],
@@ -99,7 +89,7 @@ $routes = [
     'GET:admin/reports'         => ['AdminController', 'reports'],
 ];
 
-// ── Dispatcher ────────────────────────────────────────────────
+// Dispatcher
 $matched = false;
 $params  = [];
 
@@ -110,21 +100,21 @@ foreach ($routes as $pattern => $handler) {
         continue;
     }
 
-    // Build regex — replace {any} with a capture group
+    
     $regex = '#^' . preg_replace('#\{any\}#', '([^/]+)', $routeUri) . '$#';
 
     if (preg_match($regex, $uri, $matches)) {
-        array_shift($matches);      // remove full match
+        array_shift($matches);      
         $params  = $matches;
         $matched = true;
 
         [$controllerName, $action] = $handler;
 
-        // Lazy-load controller file
+      
         $file = __DIR__ . '/../app/controllers/' . $controllerName . '.php';
 
         if (!file_exists($file)) {
-            // Controller not built yet — show friendly placeholder
+          
             renderPlaceholder($controllerName, $action, $uri);
             exit;
         }
@@ -148,14 +138,10 @@ foreach ($routes as $pattern => $handler) {
     }
 }
 
-// ── 404 ───────────────────────────────────────────────────────
 if (!$matched) {
     renderError(404, $uri);
 }
 
-// ─────────────────────────────────────────────────────────────
-// Helper: render error / 404 page
-// ─────────────────────────────────────────────────────────────
 function renderError(int $code, string $uri = ''): void
 {
     http_response_code($code);
@@ -181,9 +167,7 @@ function renderError(int $code, string $uri = ''): void
     exit;
 }
 
-// ─────────────────────────────────────────────────────────────
-// Helper: placeholder for controllers not yet implemented
-// ─────────────────────────────────────────────────────────────
+
 function renderPlaceholder(string $ctrl, string $action, string $uri): void
 {
     echo "<!DOCTYPE html><html><head>

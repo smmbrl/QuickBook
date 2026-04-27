@@ -80,7 +80,6 @@ class AuthController
             header('Location: ' . BASE_URL . 'register'); exit;
         }
 
-        // Auto-verify for now (no email server needed on localhost)
         $this->userModel->markVerified($userId);
 
         if ($role === 'provider') {
@@ -116,16 +115,94 @@ class AuthController
 
     public function forgotPassword(): void
     {
-        header('Location: ' . BASE_URL . 'login'); exit;
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            require_once __DIR__ . '/../views/forgot-password.php'; return;
+        }
+
+ 
+        $email = strtolower(trim($_POST['email'] ?? ''));
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Please enter a valid email address.'];
+            header('Location: ' . BASE_URL . 'auth/forgot-password'); exit;
+        }
+
+        $userModel = new User();
+        $user      = $userModel->findByEmail($email);
+
+     
+        if ($user) {
+            $token     = $userModel->createPasswordResetToken($email);
+            $resetLink = BASE_URL . 'auth/reset-password?token=' . $token;
+
+            
+            error_log("[QuickBook] Password reset link for {$email}: {$resetLink}");
+
+
+        }
+
+        $_SESSION['flash'] = [
+            'type' => 'success',
+            'msg'  => 'If that email is registered, a reset link has been sent. Check your inbox (and spam folder).'
+        ];
+        header('Location: ' . BASE_URL . 'auth/forgot-password'); exit;
     }
 
     public function showResetForm(): void
     {
-        header('Location: ' . BASE_URL . 'login'); exit;
+        $token = trim($_GET['token'] ?? '');
+
+        if (empty($token)) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Missing or invalid reset token.'];
+            header('Location: ' . BASE_URL . 'auth/forgot-password'); exit;
+        }
+
+        $userModel = new User();
+        $email     = $userModel->validatePasswordResetToken($token);
+
+        if (!$email) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'This reset link has expired or already been used. Please request a new one.'];
+            header('Location: ' . BASE_URL . 'auth/forgot-password'); exit;
+        }
+
+        require_once __DIR__ . '/../views/reset-password.php';
     }
 
     public function resetPassword(): void
     {
+        $token     = trim($_POST['token']           ?? '');
+        $newPw     = $_POST['new_password']          ?? '';
+        $confirmPw = $_POST['confirm_password']      ?? '';
+
+        $errors = [];
+        if (empty($token))           $errors[] = 'Reset token is missing.';
+        if (strlen($newPw) < 8)      $errors[] = 'Password must be at least 8 characters.';
+        if ($newPw !== $confirmPw)   $errors[] = 'Passwords do not match.';
+
+        if (!empty($errors)) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => implode(' ', $errors)];
+            header('Location: ' . BASE_URL . 'auth/reset-password?token=' . urlencode($token)); exit;
+        }
+
+        $userModel = new User();
+        $email     = $userModel->validatePasswordResetToken($token);
+
+        if (!$email) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'This reset link has expired or already been used.'];
+            header('Location: ' . BASE_URL . 'auth/forgot-password'); exit;
+        }
+
+        $user = $userModel->findByEmail($email);
+        if (!$user) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Account not found.'];
+            header('Location: ' . BASE_URL . 'auth/forgot-password'); exit;
+        }
+
+        $userModel->updatePassword((int)$user['id'], $newPw);
+        $userModel->consumePasswordResetToken($token);
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Password reset successfully. You can now sign in.'];
         header('Location: ' . BASE_URL . 'login'); exit;
     }
 }
