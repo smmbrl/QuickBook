@@ -9,12 +9,12 @@ $stmt->execute([$providerId]);
 $profile   = $stmt->fetch();
 $profileId = $profile['id'] ?? 0;
 
-
+/* ── Pending bookings for nav badge ── */
 $stmt = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ? AND status = 'pending'");
 $stmt->execute([$profileId]);
 $pendingBookings = (int)$stmt->fetchColumn();
 
-
+/* ── Service stats ── */
 $stmt = $db->prepare("SELECT COUNT(*) FROM tbl_services WHERE provider_id = ?");
 $stmt->execute([$profileId]);
 $totalServices = (int)$stmt->fetchColumn();
@@ -31,6 +31,7 @@ $stmt = $db->prepare("SELECT COALESCE(MIN(price), 0) FROM tbl_services WHERE pro
 $stmt->execute([$profileId]);
 $minPrice = round((float)$stmt->fetchColumn(), 2);
 
+/* ── Fetch services ── */
 $typeFilter = $_GET['type'] ?? 'all';
 $search     = trim($_GET['q'] ?? '');
 
@@ -49,20 +50,18 @@ $stServices = $db->prepare("SELECT * FROM tbl_services WHERE $where ORDER BY is_
 $stServices->execute($params);
 $services = $stServices->fetchAll();
 
-
+/* ── Service types for filter ── */
 $stTypes = $db->prepare("SELECT DISTINCT service_type FROM tbl_services WHERE provider_id = ? ORDER BY service_type");
 $stTypes->execute([$profileId]);
 $serviceTypes = $stTypes->fetchAll(PDO::FETCH_COLUMN);
 
+/* ── Flash ── */
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
 
-$stCats = $db->query("SELECT id, name FROM tbl_categories WHERE is_active = 1 ORDER BY sort_order, name");
-$cats   = $stCats->fetchAll();
-
 $initials = strtoupper(substr($providerName, 0, 2));
 
-
+/* Category image & accent maps — 9 fixed categories */
 $SERVICE_TYPES = [
     'Barber', 'Hair Stylist', 'Nail Tech', 'Massage',
     'Skincare', 'Fitness', 'Home Cleaning', 'Pet Groomer', 'Event Stylist'
@@ -105,7 +104,9 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
 
 <div class="grain" aria-hidden="true"></div>
 
-
+<!-- ══════════════════════════════════════
+     NAV
+══════════════════════════════════════ -->
 <nav class="pv-nav" role="navigation" aria-label="Provider navigation">
   <div class="pv-nav-inner">
     <a href="<?= BASE_URL ?>provider/dashboard" class="pv-logo">
@@ -131,7 +132,9 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
   </div>
 </nav>
 
-
+<!-- ══════════════════════════════════════
+     HERO
+══════════════════════════════════════ -->
 <header class="pv-hero" role="banner">
   <div class="pv-hero-overlay" aria-hidden="true"></div>
   <div class="pv-hero-inner">
@@ -143,8 +146,10 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
       <h1 class="pv-hero-title">Your <em>Service</em> Catalogue</h1>
       <p class="pv-hero-sub">Manage everything you offer — set pricing, toggle availability, and keep your listings sharp.</p>
     </div>
+    <!-- Add Service button removed from hero; only one button lives in the toolbar -->
   </div>
 
+  <!-- Stat strip -->
   <div class="pv-hero-stats">
     <div class="pv-hs-item">
       <span class="pv-hs-val"><?= $totalServices ?></span>
@@ -173,7 +178,9 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
   </div>
 </header>
 
-
+<!-- ══════════════════════════════════════
+     PAGE
+══════════════════════════════════════ -->
 <main class="sv-page" role="main">
 
   <?php if ($flash): ?>
@@ -183,7 +190,7 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
     </div>
   <?php endif; ?>
 
- 
+  <!-- TOOLBAR -->
   <div class="sv-toolbar" role="toolbar">
     <div class="sv-toolbar-left">
       <form method="GET" action="" style="display:contents">
@@ -206,7 +213,7 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
       </form>
     </div>
     <div style="display:flex;align-items:center;gap:.75rem">
-      
+      <!-- View toggle -->
       <div class="sv-view-toggle" role="group" aria-label="View mode">
         <button class="sv-view-btn is-active" id="btn-grid" onclick="setView('grid')" title="Grid view">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
@@ -215,7 +222,7 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
         </button>
       </div>
-      
+      <!-- Single Add Service button -->
       <button class="sv-add-btn" onclick="openAddModal()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Add Service
@@ -223,7 +230,7 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
     </div>
   </div>
 
- 
+  <!-- GRID VIEW -->
   <div class="sv-grid" id="view-grid">
     <?php if (empty($services)): ?>
       <div class="sv-empty">
@@ -250,7 +257,7 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
                 <div class="sv-card-type"><?= htmlspecialchars($svc['service_type'] ?? '—') ?></div>
               </div>
               <div class="sv-card-actions">
-                
+                <!-- Active toggle -->
                 <form method="POST" action="<?= BASE_URL ?>provider/service/toggle/<?= $svc['id'] ?>" style="display:inline">
                   <label class="sv-toggle-label" title="<?= $active ? 'Deactivate' : 'Activate' ?>">
                     <input
@@ -264,7 +271,7 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
                     </div>
                   </label>
                 </form>
-                
+                <!-- Edit -->
                 <button
                   class="sv-icon-btn is-edit"
                   onclick='openEditModal(<?= json_encode($svc) ?>)'
@@ -273,7 +280,7 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>
-                
+                <!-- Delete -->
                 <button
                   class="sv-icon-btn is-delete"
                   onclick="openDeleteModal(<?= $svc['id'] ?>, '<?= htmlspecialchars(addslashes($svc['name'])) ?>')"
@@ -318,7 +325,7 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
     <?php endif; ?>
   </div>
 
-  
+  <!-- LIST VIEW TABLE -->
   <div class="sv-table-wrap" id="view-list" style="display:none">
     <table class="sv-table">
       <thead>
@@ -374,11 +381,13 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
 
 </main>
 
-
+<!-- ══════════════════════════════════════
+     ADD / EDIT SERVICE MODAL
+══════════════════════════════════════ -->
 <div class="sv-modal-backdrop" id="serviceModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
   <div class="sv-modal">
 
-  
+    <!-- Header -->
     <div class="sv-modal-header">
       <div class="sv-modal-title-wrap">
         <div class="sv-modal-icon-badge" id="modalBadge">
@@ -399,7 +408,7 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
 
       <div class="sv-modal-body">
 
-      
+        <!-- Section 01: Basic Info -->
         <div class="sv-section-label">
           <span class="sv-section-num">01</span>
           <span>Basic Information</span>
@@ -438,29 +447,16 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
           </div>
         </div>
 
-        <div class="sv-form-group">
-          <label class="sv-label" for="field_category">Category <span>*</span></label>
-          <div class="sv-select-wrap">
-            <svg class="sv-select-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-            <select class="sv-select" id="field_category" name="category_id" required>
-              <option value="">Select category…</option>
-              <?php foreach ($cats as $cat): ?>
-                <option value="<?= (int)$cat['id'] ?>"><?= htmlspecialchars($cat['name']) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-        </div>
-
         <div class="sv-modal-divider"></div>
 
-        
+        <!-- Section 02: Pricing & Duration -->
         <div class="sv-section-label">
           <span class="sv-section-num">02</span>
           <span>Pricing & Duration</span>
         </div>
 
         <div class="sv-form-row">
-         
+          <!-- Price -->
           <div class="sv-form-group">
             <label class="sv-label" for="field_price">Price <span>*</span></label>
             <div class="sv-input-addon-wrap">
@@ -470,7 +466,7 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
                 placeholder="0.00" min="0" step="0.01" required>
             </div>
           </div>
-          
+          <!-- Duration with hr/min unit selector -->
           <div class="sv-form-group">
             <label class="sv-label" for="field_duration">Duration</label>
             <div class="sv-input-addon-wrap">
@@ -487,7 +483,7 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
 
         <div class="sv-modal-divider"></div>
 
-        
+        <!-- Section 03: Description -->
         <div class="sv-section-label">
           <span class="sv-section-num">03</span>
           <span>Description <span style="color:var(--faint);font-weight:400;letter-spacing:0">(optional)</span></span>
@@ -502,7 +498,7 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
           </div>
         </div>
 
-      </div>
+      </div><!-- /.sv-modal-body -->
 
       <div class="sv-modal-footer">
         <button type="button" class="sv-btn-ghost" onclick="closeModal('serviceModal')">
@@ -516,7 +512,9 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
   </div>
 </div>
 
-
+<!-- ══════════════════════════════════════
+     DELETE CONFIRM MODAL
+══════════════════════════════════════ -->
 <div class="sv-modal-backdrop" id="deleteModal" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
   <div class="sv-confirm-modal">
     <div class="sv-confirm-icon">🗑️</div>
@@ -533,7 +531,7 @@ function serviceImage($type, $map)  { return $map[$type] ?? 'https://images.unsp
 </div>
 
 <script>
-
+/* ── View Toggle ── */
 function setView(mode) {
   const isGrid = mode === 'grid';
   document.getElementById('view-grid').style.display = isGrid ? '' : 'none';
@@ -544,6 +542,7 @@ function setView(mode) {
 }
 (function() { const v = localStorage.getItem('sv-view'); if (v) setView(v); })();
 
+/* ── Modal helpers ── */
 function openModal(id) {
   document.getElementById(id).classList.add('is-open');
   document.body.style.overflow = 'hidden';
@@ -559,6 +558,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') document.querySelectorAll('.sv-modal-backdrop.is-open').forEach(el => closeModal(el.id));
 });
 
+/* ── Add Modal ── */
 function openAddModal() {
   document.getElementById('modalTitle').textContent    = 'Add New Service';
   document.getElementById('modalSubtitle').textContent = 'Fill in the details below to create a listing';
@@ -571,19 +571,20 @@ function openAddModal() {
   openModal('serviceModal');
 }
 
+/* ── Edit Modal ── */
 function openEditModal(svc) {
   document.getElementById('modalTitle').textContent    = 'Edit Service';
   document.getElementById('modalSubtitle').textContent = 'Update the details for this listing';
   document.getElementById('modalSubmitBtn').textContent = 'Update Service';
   document.getElementById('serviceForm').action = '<?= BASE_URL ?>provider/service/update/' + svc.id;
   document.getElementById('field_service_id').value = svc.id;
-  document.getElementById('field_name').value        = svc.name         || '';
+  document.getElementById('field_name').value        = svc.name        || '';
   document.getElementById('field_type').value        = svc.service_type || '';
-  document.getElementById('field_category').value   = svc.category_id  || '';
-  document.getElementById('field_location').value   = svc.location_type || 'On-site';
-  document.getElementById('field_price').value      = svc.price         || '';
-  document.getElementById('field_desc').value       = svc.description   || '';
+  document.getElementById('field_location').value    = svc.location_type || 'On-site';
+  document.getElementById('field_price').value       = svc.price        || '';
+  document.getElementById('field_desc').value        = svc.description  || '';
 
+  /* Smart unit detection: show hrs if cleanly divisible */
   const mins = parseInt(svc.duration_minutes) || 0;
   if (mins >= 60 && mins % 60 === 0) {
     document.getElementById('field_duration').value      = mins / 60;
@@ -597,6 +598,7 @@ function openEditModal(svc) {
   openModal('serviceModal');
 }
 
+/* ── Char counter ── */
 function updateCharCount() {
   const ta = document.getElementById('field_desc');
   const el = document.getElementById('charCount');
@@ -604,6 +606,7 @@ function updateCharCount() {
 }
 document.getElementById('field_desc')?.addEventListener('input', updateCharCount);
 
+/* ── Delete Modal ── */
 function openDeleteModal(id, name) {
   document.getElementById('deleteMsg').textContent =
     `Are you sure you want to delete "${name}"? This action cannot be undone and any related data will be lost.`;
@@ -611,6 +614,7 @@ function openDeleteModal(id, name) {
   openModal('deleteModal');
 }
 
+/* ── Custom number spinners ── */
 document.querySelectorAll('.sv-input[type="number"]').forEach(input => {
   const wrap = document.createElement('div');
   wrap.className = 'sv-spin-wrap';

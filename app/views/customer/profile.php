@@ -1,9 +1,11 @@
 <?php
+// app/views/customer/profile.php
 
 require_once __DIR__ . '/../../../config/database.php';
 $db     = Database::getInstance();
 $userId = (int)($_SESSION['user_id'] ?? 0);
 
+/* -- Full user record -- */
 $stUser = $db->prepare("SELECT * FROM tbl_users WHERE id = ? LIMIT 1");
 $stUser->execute([$userId]);
 $user = $stUser->fetch();
@@ -20,6 +22,7 @@ $phone       = htmlspecialchars($user['phone']      ?? '');
 $initials    = strtoupper(substr($firstName, 0, 1) . substr($lastName, 0, 1));
 $memberSince = isset($user['created_at']) ? date('F Y', strtotime($user['created_at'])) : 'Unknown';
 
+/* -- Loyalty -- */
 $stPoints = $db->prepare("SELECT COALESCE(SUM(points),0) FROM tbl_loyalty_points WHERE user_id = ?");
 $stPoints->execute([$userId]);
 $loyaltyPoints = (int)$stPoints->fetchColumn();
@@ -34,6 +37,7 @@ $tierIcon = match($loyaltyTier) {
     default  => '<i class="fa-solid fa-medal" style="color:#cd7f32"></i>',
 };
 
+/* -- Booking stats -- */
 $stStats = $db->prepare("
     SELECT
         COUNT(*) AS total,
@@ -55,6 +59,7 @@ $stSpent->execute([$userId]);
 $totalSpent    = (float)$stSpent->fetchColumn();
 $upcomingCount = (int)($stats['upcoming'] ?? 0);
 
+/* -- Favourite providers -- */
 $stFavs = $db->prepare("
     SELECT pp.business_name, pp.id AS profile_id,
            COUNT(*) AS booking_count,
@@ -68,6 +73,7 @@ $stFavs = $db->prepare("
 $stFavs->execute([$userId]);
 $favourites = $stFavs->fetchAll();
 
+/* -- Recent activity -- */
 $stRecent = $db->prepare("
     SELECT b.id, b.booking_date, b.status,
            s.name AS service_name, s.price,
@@ -81,9 +87,61 @@ $stRecent = $db->prepare("
 $stRecent->execute([$userId]);
 $recentActivity = $stRecent->fetchAll();
 
+/* -- Flash -- */
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
 
+/* -- Handle POST -- */
+$formErrors = [];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+
+    if ($action === 'update_profile') {
+        $newFirst = trim($_POST['first_name'] ?? '');
+        $newLast  = trim($_POST['last_name']  ?? '');
+        $newPhone = trim($_POST['phone']      ?? '');
+        $newEmail = strtolower(trim($_POST['email'] ?? ''));
+
+        if (empty($newFirst)) $formErrors[] = 'First name is required.';
+        if (empty($newLast))  $formErrors[] = 'Last name is required.';
+        if (!filter_var($newEmail, FILTER_VALIDATE_EMAIL)) $formErrors[] = 'A valid email address is required.';
+
+        if (empty($formErrors) && $newEmail !== $user['email']) {
+            $stCheck = $db->prepare("SELECT COUNT(*) FROM tbl_users WHERE email = ? AND id != ?");
+            $stCheck->execute([$newEmail, $userId]);
+            if ((int)$stCheck->fetchColumn() > 0) {
+                $formErrors[] = 'That email address is already in use.';
+            }
+        }
+
+        if (empty($formErrors)) {
+            $db->prepare("UPDATE tbl_users SET first_name=?, last_name=?, email=?, phone=? WHERE id=?")
+               ->execute([$newFirst, $newLast, $newEmail, $newPhone, $userId]);
+            $_SESSION['user_name']  = $newFirst;
+            $_SESSION['user_email'] = $newEmail;
+            $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Profile updated successfully.'];
+            header('Location: ' . BASE_URL . 'profile'); exit;
+        }
+    }
+
+    if ($action === 'change_password') {
+        $currentPw = $_POST['current_password'] ?? '';
+        $newPw     = $_POST['new_password']     ?? '';
+        $confirmPw = $_POST['confirm_password'] ?? '';
+
+        if (!password_verify($currentPw, $user['password_hash'])) $formErrors[] = 'Current password is incorrect.';
+        if (strlen($newPw) < 8)   $formErrors[] = 'New password must be at least 8 characters.';
+        if ($newPw !== $confirmPw) $formErrors[] = 'New passwords do not match.';
+
+        if (empty($formErrors)) {
+            $hash = password_hash($newPw, PASSWORD_BCRYPT, ['cost' => 12]);
+            $db->prepare("UPDATE tbl_users SET password_hash=? WHERE id=?")->execute([$hash, $userId]);
+            $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Password changed successfully.'];
+            header('Location: ' . BASE_URL . 'profile'); exit;
+        }
+    }
+}
 
 function fmtMoney(float $v): string {
     return $v >= 1000 ? '&#x20B1;' . number_format($v / 1000, 1) . 'k' : '&#x20B1;' . number_format($v, 0);
@@ -102,6 +160,7 @@ function fmtMoney(float $v): string {
 <body>
 <div class="grain" aria-hidden="true"></div>
 
+<!-- ══ NAV ══ -->
 <nav class="pv-nav" role="navigation" aria-label="Customer navigation">
   <div class="pv-nav-inner">
     <a href="<?= BASE_URL ?>home" class="pv-logo">
@@ -133,6 +192,7 @@ function fmtMoney(float $v): string {
   </div>
 </nav>
 
+<!-- ══ HERO ══ -->
 <header class="pr-hero" role="banner">
   <div class="pr-hero-overlay" aria-hidden="true"></div>
   <div class="pr-hero-inner">
@@ -180,24 +240,31 @@ function fmtMoney(float $v): string {
   </div>
 </header>
 
+<!-- ══ FLASH ══ -->
 <?php if ($flash): ?>
 <div class="pr-flash pr-flash--<?= $flash['type'] ?>" role="alert">
   <?= htmlspecialchars($flash['msg']) ?>
 </div>
 <?php endif; ?>
 
+<!-- ══ MAIN ══ -->
 <main class="pr-page" role="main">
 
+  <!-- Left col: forms -->
   <div class="pr-col-forms">
 
-    <?php if ($flash): ?>
-    <div class="pr-error-box pr-error-box--<?= htmlspecialchars($flash['type']) ?>" role="alert">
-      <?= $flash['type'] === 'success'
-          ? '<i class="fa-solid fa-circle-check"></i> ' . htmlspecialchars($flash['msg'])
-          : '<i class="fa-solid fa-triangle-exclamation"></i> ' . htmlspecialchars($flash['msg']) ?>
+    <?php if (!empty($formErrors)): ?>
+    <div class="pr-error-box" role="alert">
+      <strong>Please fix the following:</strong>
+      <ul>
+        <?php foreach ($formErrors as $err): ?>
+        <li><?= htmlspecialchars($err) ?></li>
+        <?php endforeach; ?>
+      </ul>
     </div>
     <?php endif; ?>
 
+    <!-- Personal info -->
     <section class="pr-card" aria-label="Personal information">
       <div class="pr-card-head">
         <div>
@@ -236,6 +303,7 @@ function fmtMoney(float $v): string {
       </form>
     </section>
 
+    <!-- Change password -->
     <section class="pr-card" aria-label="Change password">
       <div class="pr-card-head">
         <div>
@@ -288,6 +356,7 @@ function fmtMoney(float $v): string {
       </form>
     </section>
 
+    <!-- Danger zone -->
     <section class="pr-card pr-card--danger" aria-label="Account actions">
       <div class="pr-card-head">
         <div>
@@ -309,8 +378,10 @@ function fmtMoney(float $v): string {
 
   </div>
 
+  <!-- Right col: sidebar -->
   <aside class="pr-col-side" aria-label="Account overview">
 
+    <!-- Membership card -->
     <div class="pr-membership-card tier-<?= strtolower($loyaltyTier) ?>">
       <div class="pr-mc-top">
         <div class="pr-mc-avatar"><?= $initials ?></div>
@@ -331,6 +402,7 @@ function fmtMoney(float $v): string {
       <a href="<?= BASE_URL ?>loyalty" class="pr-mc-link">View Rewards &rarr;</a>
     </div>
 
+    <!-- Activity summary -->
     <div class="pr-side-card">
       <h3 class="pr-side-title">Activity Summary</h3>
       <div class="pr-activity-grid">
@@ -353,6 +425,7 @@ function fmtMoney(float $v): string {
       </div>
     </div>
 
+    <!-- Top providers -->
     <?php if (!empty($favourites)): ?>
     <div class="pr-side-card">
       <h3 class="pr-side-title">Top Providers</h3>
@@ -374,6 +447,7 @@ function fmtMoney(float $v): string {
     </div>
     <?php endif; ?>
 
+    <!-- Recent activity -->
     <?php if (!empty($recentActivity)): ?>
     <div class="pr-side-card">
       <div class="pr-side-head">
@@ -403,6 +477,7 @@ function fmtMoney(float $v): string {
     </div>
     <?php endif; ?>
 
+    <!-- Account details -->
     <div class="pr-side-card">
       <h3 class="pr-side-title">Account Details</h3>
       <dl class="pr-info-list">
