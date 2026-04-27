@@ -1,18 +1,27 @@
 <?php
 class ProviderDashController
 {
-    // ─────────────────────────────────────────────────────────
-    // Dashboard
-    // ─────────────────────────────────────────────────────────
+
+    public function __construct()
+    {
+        if (session_status() === PHP_SESSION_NONE) session_start();
+
+        // Must be logged in
+        if (empty($_SESSION['user_id'])) {
+            header('Location: ' . BASE_URL . 'login'); exit;
+        }
+
+        if (($_SESSION['user_role'] ?? '') !== 'provider') {
+            $map = ['admin' => 'admin/dashboard', 'customer' => 'dashboard'];
+            header('Location: ' . BASE_URL . ($map[$_SESSION['user_role']] ?? 'login')); exit;
+        }
+    }
 
     public function index(): void
     {
         require __DIR__ . '/../views/Provider/dashboard.php';
     }
 
-    // ─────────────────────────────────────────────────────────
-    // Bookings
-    // ─────────────────────────────────────────────────────────
 
     public function bookings(): void
     {
@@ -73,10 +82,6 @@ class ProviderDashController
         header('Location: ' . BASE_URL . 'provider/bookings');
         exit;
     }
-
-    // ─────────────────────────────────────────────────────────
-    // Services
-    // ─────────────────────────────────────────────────────────
 
     public function services(): void
     {
@@ -228,9 +233,6 @@ class ProviderDashController
         exit;
     }
 
-    // ─────────────────────────────────────────────────────────
-    // Availability
-    // ─────────────────────────────────────────────────────────
 
     public function availability(): void
     {
@@ -261,7 +263,6 @@ class ProviderDashController
             exit;
         }
 
-        // Delete all existing slots and re-insert
         $del = $db->prepare("DELETE FROM tbl_provider_availability WHERE provider_id = ?");
         $del->execute([$providerId]);
 
@@ -353,10 +354,6 @@ class ProviderDashController
         header('Location: ' . BASE_URL . 'provider/availability');
         exit;
     }
-
-    // ─────────────────────────────────────────────────────────
-    // Profile
-    // ─────────────────────────────────────────────────────────
 
     public function profile(): void
     {
