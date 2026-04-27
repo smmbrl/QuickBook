@@ -6,7 +6,7 @@ class ProviderDashController
     {
         if (session_status() === PHP_SESSION_NONE) session_start();
 
-        // Must be logged in
+
         if (empty($_SESSION['user_id'])) {
             header('Location: ' . BASE_URL . 'login'); exit;
         }
@@ -21,7 +21,6 @@ class ProviderDashController
     {
         require __DIR__ . '/../views/Provider/dashboard.php';
     }
-
 
     public function bookings(): void
     {
@@ -119,12 +118,14 @@ class ProviderDashController
             exit;
         }
 
+        $categoryId = (int)($_POST['category_id'] ?? 0);
+
         $ins = $db->prepare("
             INSERT INTO tbl_services
-                (provider_id, name, service_type, location_type, price, duration_minutes, description, is_active, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW())
+                (provider_id, category_id, name, service_type, location_type, price, duration_minutes, description, is_active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())
         ");
-        $ins->execute([$providerId, $name, $serviceType, $locationType, $price, $durationMins ?: null, $description ?: null]);
+        $ins->execute([$providerId, $categoryId ?: null, $name, $serviceType, $locationType, $price, $durationMins ?: null, $description ?: null]);
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => "Service \"{$name}\" added successfully."];
         header('Location: ' . BASE_URL . 'provider/services');
@@ -165,13 +166,15 @@ class ProviderDashController
             exit;
         }
 
+        $categoryId = (int)($_POST['category_id'] ?? 0);
+
         $upd = $db->prepare("
             UPDATE tbl_services
-            SET name = ?, service_type = ?, location_type = ?, price = ?,
+            SET category_id = ?, name = ?, service_type = ?, location_type = ?, price = ?,
                 duration_minutes = ?, description = ?, is_active = ?
             WHERE id = ?
         ");
-        $upd->execute([$name, $serviceType, $locationType, $price, $durationMins ?: null, $description ?: null, $isActive, $id]);
+        $upd->execute([$categoryId ?: null, $name, $serviceType, $locationType, $price, $durationMins ?: null, $description ?: null, $isActive, $id]);
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => "Service \"{$name}\" updated successfully."];
         header('Location: ' . BASE_URL . 'provider/services');
@@ -232,7 +235,6 @@ class ProviderDashController
         header('Location: ' . BASE_URL . 'provider/services');
         exit;
     }
-
 
     public function availability(): void
     {
@@ -363,31 +365,75 @@ class ProviderDashController
     public function updateProfile(): void
     {
         $db     = Database::getInstance();
-        $userId = $_SESSION['user_id'] ?? 0;
+        $userId = (int)($_SESSION['user_id'] ?? 0);
 
-        $bio        = trim($_POST['bio']               ?? '');
-        $phone      = trim($_POST['phone']             ?? '');
-        $address    = trim($_POST['address']           ?? '');
-        $experience = (int)($_POST['experience_years'] ?? 0);
+        $businessName      = trim($_POST['business_name']      ?? '');
+        $categoryId        = (int)($_POST['category_id']       ?? 0);
+        $bio               = trim($_POST['bio']                ?? '');
+        $address           = trim($_POST['address']            ?? '');
+        $barangay          = trim($_POST['barangay']           ?? '');
+        $city              = trim($_POST['city']               ?? '');
+        $offersHomeService = isset($_POST['offers_home_service']) ? 1 : 0;
+
+        $errors = [];
+        if (empty($businessName)) $errors[] = 'Business name is required.';
+        if ($categoryId <= 0)     $errors[] = 'Please select a service category.';
+        if (empty($city))         $errors[] = 'City is required.';
+
+        if ($categoryId > 0) {
+            $stCat = $db->prepare("SELECT COUNT(*) FROM tbl_categories WHERE id = ?");
+            $stCat->execute([$categoryId]);
+            if ((int)$stCat->fetchColumn() === 0) $errors[] = 'Invalid category selected.';
+        }
+
+        if (!empty($errors)) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => implode(' ', $errors)];
+            header('Location: ' . BASE_URL . 'provider/profile'); exit;
+        }
 
         $stmt = $db->prepare("SELECT id FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
         $stmt->execute([$userId]);
         $profile = $stmt->fetch();
 
         if ($profile) {
-            $upd = $db->prepare("
+            $db->prepare("
                 UPDATE tbl_provider_profiles
-                SET bio = ?, phone = ?, address = ?, experience_years = ?
+                SET business_name       = ?,
+                    category_id         = ?,
+                    bio                 = ?,
+                    address             = ?,
+                    barangay            = ?,
+                    city                = ?,
+                    offers_home_service = ?
                 WHERE user_id = ?
-            ");
-            $upd->execute([$bio ?: null, $phone ?: null, $address ?: null, $experience, $userId]);
+            ")->execute([
+                $businessName,
+                $categoryId,
+                $bio      ?: null,
+                $address  ?: null,
+                $barangay ?: null,
+                $city,
+                $offersHomeService,
+                $userId,
+            ]);
         } else {
-            $ins = $db->prepare("
-                INSERT INTO tbl_provider_profiles (user_id, bio, phone, address, experience_years, created_at)
-                VALUES (?, ?, ?, ?, ?, NOW())
-            ");
-            $ins->execute([$userId, $bio ?: null, $phone ?: null, $address ?: null, $experience]);
+            $db->prepare("
+                INSERT INTO tbl_provider_profiles
+                    (user_id, business_name, category_id, bio, address, barangay, city, offers_home_service, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ")->execute([
+                $userId,
+                $businessName,
+                $categoryId,
+                $bio      ?: null,
+                $address  ?: null,
+                $barangay ?: null,
+                $city,
+                $offersHomeService,
+            ]);
         }
+
+        $_SESSION['business_name'] = $businessName;
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Profile updated successfully.'];
         header('Location: ' . BASE_URL . 'provider/profile');
