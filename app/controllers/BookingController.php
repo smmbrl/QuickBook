@@ -19,8 +19,7 @@ class BookingController
 
         $db         = Database::getInstance();
         $customerId = (int)$_SESSION['user_id'];
-
-        // ── Collect & sanitise inputs ─────────────────────────
+        
         $serviceId    = (int)($_POST['service_id']    ?? 0);
         $providerId   = (int)($_POST['provider_id']   ?? 0);
         $bookingDate  = trim($_POST['booking_date']   ?? '');
@@ -28,7 +27,6 @@ class BookingController
         $notes        = trim($_POST['notes']          ?? '');
         $locationType = trim($_POST['location_type']  ?? 'In-shop');
 
-        // ── Basic validation ──────────────────────────────────
         $errors = [];
 
         if (!$serviceId)   $errors[] = 'Please select a service.';
@@ -36,7 +34,6 @@ class BookingController
         if (!$bookingDate) $errors[] = 'Please pick a booking date.';
         if (!$bookingTime) $errors[] = 'Please pick a booking time.';
 
-        // Date must not be in the past
         if ($bookingDate && strtotime($bookingDate) < strtotime('today')) {
             $errors[] = 'Booking date cannot be in the past.';
         }
@@ -46,7 +43,6 @@ class BookingController
             header('Location: ' . BASE_URL . 'providers/' . $providerId); exit;
         }
 
-        // ── Verify service belongs to provider & is active ────
         $svc = $db->prepare("
             SELECT s.*, pp.id as profile_id
             FROM tbl_services s
@@ -61,8 +57,7 @@ class BookingController
             header('Location: ' . BASE_URL . 'providers/' . $providerId); exit;
         }
 
-        // ── Validate booking date falls on an available day ────
-        $dayOfWeek = date('l', strtotime($bookingDate)); // e.g. "Monday"
+        $dayOfWeek = date('l', strtotime($bookingDate)); 
         $avCheck = $db->prepare("
             SELECT * FROM tbl_provider_availability
             WHERE provider_id = ? AND day_of_week = ? AND is_available = 1
@@ -75,7 +70,6 @@ class BookingController
             header('Location: ' . BASE_URL . 'providers/' . $providerId); exit;
         }
 
-        // ── Validate booking time is within provider hours ────
         if ($bookingTime) {
             $reqTime   = strtotime($bookingDate . ' ' . $bookingTime);
             $startTime = strtotime($bookingDate . ' ' . $avRow['start_time']);
@@ -87,7 +81,6 @@ class BookingController
             }
         }
 
-        // ── Prevent duplicate pending/confirmed booking ───────
         $dup = $db->prepare("
             SELECT id FROM tbl_bookings
             WHERE customer_id = ? AND service_id = ? AND booking_date = ?
@@ -99,13 +92,15 @@ class BookingController
             header('Location: ' . BASE_URL . 'providers/' . $providerId); exit;
         }
 
-        // ── Insert booking ────────────────────────────────────
+        $startTime = $bookingTime ?: $avRow['start_time'];
+        $endTime   = date('H:i:s', strtotime($startTime) + ($service['duration_minutes'] * 60));
+
         $insert = $db->prepare("
             INSERT INTO tbl_bookings
                 (customer_id, provider_id, service_id, booking_date, booking_time,
-                 location_type, notes, status, created_at)
+                 start_time, end_time, location_type, notes, status, created_at)
             VALUES
-                (?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
         ");
         $insert->execute([
             $customerId,
@@ -113,20 +108,27 @@ class BookingController
             $serviceId,
             $bookingDate,
             $bookingTime ?: null,
+            $startTime,
+            $endTime,
             $locationType,
             $notes ?: null,
         ]);
 
         $bookingId = (int)$db->lastInsertId();
 
-        // ── Loyalty: award 10 pts per booking ────────────────
-        $pts = $db->prepare("
-            INSERT INTO tbl_loyalty_points (user_id, points, description, created_at)
-            VALUES (?, 10, 'Booking placed', NOW())
+        $balStmt = $db->prepare("
+            SELECT COALESCE(SUM(points), 0) FROM tbl_loyalty_points WHERE user_id = ?
         ");
-        $pts->execute([$customerId]);
+        $balStmt->execute([$customerId]);
+        $currentBalance = (int) $balStmt->fetchColumn();
 
-        // ── Notification for customer ─────────────────────────
+        $pts = $db->prepare("
+            INSERT INTO tbl_loyalty_points
+                (user_id, booking_id, type, points, balance, description, created_at)
+            VALUES (?, ?, 'earn', 10, ?, 'Booking placed', NOW())
+        ");
+        $pts->execute([$customerId, $bookingId, $currentBalance + 10]);
+
         $notif = $db->prepare("
             INSERT INTO tbl_notifications (user_id, title, message, type, is_read, created_at)
             VALUES (?, 'Booking Submitted', 'Your booking has been submitted and is awaiting confirmation.', 'booking', 0, NOW())
