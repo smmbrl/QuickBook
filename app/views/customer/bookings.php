@@ -1,6 +1,4 @@
 <?php
-// app/views/customer/bookings.php
-// CHANGES: Added AND deleted_at IS NULL / AND b.deleted_at IS NULL to all 4 queries
 
 require_once __DIR__ . '/../../../config/database.php';
 $db     = Database::getInstance();
@@ -8,7 +6,7 @@ $userId = (int)($_SESSION['user_id'] ?? 0);
 $userName = htmlspecialchars($_SESSION['user_name'] ?? 'Customer');
 $initials = strtoupper(substr($userName, 0, 2));
 
-// ── Filters ──────────────────────────────────────────
+
 $statusFilter = $_GET['status'] ?? 'all';
 $search       = trim($_GET['search'] ?? '');
 $page         = max(1, (int)($_GET['page'] ?? 1));
@@ -17,20 +15,19 @@ $offset       = ($page - 1) * $perPage;
 
 $validStatuses = ['pending', 'confirmed', 'completed', 'cancelled', 'rejected'];
 
-// ── Stats (only non-deleted) ───────────────────────── ✅ FIXED
 $statsStmt = $db->prepare("
     SELECT
-        COUNT(*) as total,
-        SUM(status = 'pending')   as pending,
-        SUM(status = 'confirmed') as confirmed,
-        SUM(status = 'completed') as completed,
+        SUM(status NOT IN ('cancelled','rejected') AND deleted_at IS NULL) as total,
+        SUM(status = 'pending'    AND deleted_at IS NULL) as pending,
+        SUM(status = 'confirmed'  AND deleted_at IS NULL) as confirmed,
+        SUM(status = 'completed'  AND deleted_at IS NULL) as completed,
         SUM(status IN ('cancelled','rejected')) as cancelled
-    FROM tbl_bookings WHERE customer_id = ? AND deleted_at IS NULL
+    FROM tbl_bookings WHERE customer_id = ?
 ");
 $statsStmt->execute([$userId]);
 $stats = $statsStmt->fetch();
 
-// ── Loyalty points ──────────────────────────────────
+
 $stPoints = $db->prepare("SELECT COALESCE(SUM(points),0) FROM tbl_loyalty_points WHERE user_id = ?");
 $stPoints->execute([$userId]);
 $loyaltyPoints = (int)$stPoints->fetchColumn();
@@ -43,11 +40,16 @@ $nextLevel   = 500;
 $loyaltyProg = min(100, round(($loyaltyPoints % $nextLevel) / $nextLevel * 100));
 $ptsToNext   = $nextLevel - ($loyaltyPoints % $nextLevel);
 
-// ── Build query ───────────────────────────────────────
-$where  = ["b.customer_id = ?", "b.deleted_at IS NULL"];  // ✅ FIXED
+if ($statusFilter === 'cancelled') {
+
+    $where  = ["b.customer_id = ?", "b.status IN ('cancelled','rejected')"];
+} else {
+
+    $where  = ["b.customer_id = ?", "b.deleted_at IS NULL", "b.status NOT IN ('cancelled','rejected')"];
+}
 $params = [$userId];
 
-if ($statusFilter !== 'all' && in_array($statusFilter, $validStatuses)) {
+if ($statusFilter !== 'all' && $statusFilter !== 'cancelled' && in_array($statusFilter, $validStatuses)) {
     $where[]  = "b.status = ?";
     $params[] = $statusFilter;
 }
@@ -59,7 +61,7 @@ if ($search !== '') {
 
 $whereClause = implode(' AND ', $where);
 
-// Total count for pagination (only non-deleted) ✅ FIXED
+
 $countStmt = $db->prepare("
     SELECT COUNT(*) FROM tbl_bookings b
     JOIN tbl_services s ON b.service_id = s.id
@@ -70,7 +72,7 @@ $countStmt->execute($params);
 $totalRows  = (int)$countStmt->fetchColumn();
 $totalPages = max(1, ceil($totalRows / $perPage));
 
-// Fetch page
+
 $params[] = $perPage;
 $params[] = $offset;
 
@@ -91,7 +93,7 @@ $bookingStmt = $db->prepare("
 $bookingStmt->execute($params);
 $bookings = $bookingStmt->fetchAll();
 
-// ── Upcoming count for nav badge (only non-deleted) ── ✅ FIXED
+
 $stUpcoming = $db->prepare("
     SELECT COUNT(*) FROM tbl_bookings
     WHERE customer_id = ?
@@ -102,7 +104,7 @@ $stUpcoming = $db->prepare("
 $stUpcoming->execute([$userId]);
 $upcomingCount = (int)$stUpcoming->fetchColumn();
 
-// ── Helpers ───────────────────────────────────────────
+
 $catEmojiMap = [
     'barbershop'       => '✂️',
     'hair-salon'       => '💇',
