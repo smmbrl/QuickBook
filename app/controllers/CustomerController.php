@@ -41,7 +41,7 @@ class CustomerController
             JOIN tbl_services          s  ON b.service_id  = s.id
             JOIN tbl_provider_profiles pp ON b.provider_id = pp.id
             LEFT JOIN tbl_categories   c  ON pp.category_id = c.id
-            WHERE b.id = ? AND b.customer_id = ? AND b.deleted_at IS NULL
+            WHERE b.id = ? AND b.customer_id = ? AND (b.deleted_at IS NULL OR b.status IN ('cancelled','rejected'))
         ");
         $stmt->execute([(int)$id, $customerId]);
         $booking = $stmt->fetch();
@@ -75,7 +75,7 @@ class CustomerController
 
         $upd = $db->prepare("
             UPDATE tbl_bookings
-            SET status = 'cancelled', deleted_at = NOW()
+            SET status = 'cancelled'
             WHERE id = ?
         ");
         $upd->execute([$id]);
