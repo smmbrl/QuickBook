@@ -41,10 +41,8 @@ $loyaltyProg = min(100, round(($loyaltyPoints % $nextLevel) / $nextLevel * 100))
 $ptsToNext   = $nextLevel - ($loyaltyPoints % $nextLevel);
 
 if ($statusFilter === 'cancelled') {
-
     $where  = ["b.customer_id = ?", "b.status IN ('cancelled','rejected')"];
 } else {
-
     $where  = ["b.customer_id = ?", "b.deleted_at IS NULL", "b.status NOT IN ('cancelled','rejected')"];
 }
 $params = [$userId];
@@ -127,6 +125,14 @@ $tabCounts = [
     'completed' => (int)$stats['completed'],
     'cancelled' => (int)$stats['cancelled'],
 ];
+
+$filterCards = [
+    'all'       => ['label' => 'All Bookings',  'sub' => 'All time',             'icon' => '📋'],
+    'pending'   => ['label' => 'Pending',        'sub' => 'Awaiting confirmation','icon' => '⏳'],
+    'confirmed' => ['label' => 'Confirmed',      'sub' => 'Ready to go',          'icon' => '✅'],
+    'completed' => ['label' => 'Completed',      'sub' => 'Services enjoyed',     'icon' => '🏅'],
+    'cancelled' => ['label' => 'Cancelled',      'sub' => 'Dismissed',            'icon' => '✖'],
+];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -200,7 +206,7 @@ $tabCounts = [
     </div>
 
     <a href="<?= BASE_URL ?>browse" class="pv-points-chip">
-      <span class="pv-points-chip-dot" aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
       ＋ Book a New Service
       <span aria-hidden="true">→</span>
     </a>
@@ -209,64 +215,45 @@ $tabCounts = [
 
 <main class="pv-page" role="main">
 
-  <div class="pv-kpi-row" role="region" aria-label="Booking overview">
+  <div class="pv-filter-cards" role="region" aria-label="Filter bookings by status">
+    <?php foreach ($filterCards as $val => $card):
+      $url = BASE_URL . 'bookings?' . http_build_query(array_filter([
+          'status' => $val === 'all' ? '' : $val,
+          'search' => $search,
+      ]));
+      $isActive = $statusFilter === $val;
+    ?>
+    <a href="<?= $url ?>"
+       class="pv-fc pv-fc--<?= $val ?><?= $isActive ? ' active' : '' ?>"
+       role="button"
+       aria-pressed="<?= $isActive ? 'true' : 'false' ?>"
+       aria-label="Filter by <?= $card['label'] ?>, <?= $tabCounts[$val] ?> bookings">
 
-    <div class="pv-kpi pv-kpi--gold">
-      <div class="pv-kpi-val"><?= (int)$stats['total'] ?></div>
-      <div class="pv-kpi-label">Total Bookings</div>
-      <div class="pv-kpi-sub">All time</div>
-    </div>
+      <div class="pv-fc-top">
+        <span class="pv-fc-icon" aria-hidden="true"><?= $card['icon'] ?></span>
+        <?php if ($tabCounts[$val] > 0): ?>
+          <span class="pv-fc-badge"><?= $tabCounts[$val] ?></span>
+        <?php endif; ?>
+      </div>
 
-    <div class="pv-kpi pv-kpi--yellow">
-      <div class="pv-kpi-val"><?= (int)$stats['pending'] ?></div>
-      <div class="pv-kpi-label">Pending</div>
-      <div class="pv-kpi-sub">Awaiting confirmation</div>
-    </div>
+      <div class="pv-fc-val"><?= $tabCounts[$val] ?></div>
+      <div class="pv-fc-label"><?= $card['label'] ?></div>
+      <div class="pv-fc-sub"><?= $card['sub'] ?></div>
 
-    <div class="pv-kpi pv-kpi--green">
-      <div class="pv-kpi-val"><?= (int)$stats['confirmed'] ?></div>
-      <div class="pv-kpi-label">Confirmed</div>
-      <div class="pv-kpi-sub">Ready to go</div>
-    </div>
-
-    <div class="pv-kpi pv-kpi--blue">
-      <div class="pv-kpi-val"><?= (int)$stats['completed'] ?></div>
-      <div class="pv-kpi-label">Completed</div>
-      <div class="pv-kpi-sub">Services enjoyed</div>
-    </div>
-
+    </a>
+    <?php endforeach; ?>
   </div>
 
   <div class="pv-card pv-bookings-section">
 
     <div class="pv-bookings-head">
 
-      <div class="pv-tab-row" role="tablist" aria-label="Filter bookings by status">
-        <?php
-        $tabs = [
-            'all'       => ['label' => 'All', 'icon' => '📋'],
-            'pending'   => ['label' => 'Pending', 'icon' => '⏳'],
-            'confirmed' => ['label' => 'Confirmed', 'icon' => '✅'],
-            'completed' => ['label' => 'Completed', 'icon' => '🏅'],
-            'cancelled' => ['label' => 'Cancelled', 'icon' => '✖'],
-        ];
-        foreach ($tabs as $val => $tab):
-            $url = BASE_URL . 'bookings?' . http_build_query(array_filter([
-                'status' => $val === 'all' ? '' : $val,
-                'search' => $search,
-            ]));
-        ?>
-        <a href="<?= $url ?>"
-           class="pv-tab <?= $statusFilter === $val ? 'active' : '' ?>"
-           role="tab"
-           aria-selected="<?= $statusFilter === $val ? 'true' : 'false' ?>">
-          <span aria-hidden="true"><?= $tab['icon'] ?></span>
-          <?= $tab['label'] ?>
-          <?php if ($tabCounts[$val] > 0): ?>
-            <span class="pv-tab-count <?= $statusFilter === $val ? 'active' : '' ?>"><?= $tabCounts[$val] ?></span>
-          <?php endif; ?>
-        </a>
-        <?php endforeach; ?>
+      <div class="pv-bookings-head-left">
+        <h2 class="pv-bookings-title">
+          <?= $filterCards[$statusFilter]['icon'] ?>
+          <?= $filterCards[$statusFilter]['label'] ?>
+        </h2>
+        <p class="pv-bookings-subtitle"><?= $filterCards[$statusFilter]['sub'] ?></p>
       </div>
 
       <form method="GET" action="<?= BASE_URL ?>bookings" class="pv-search-form" role="search">
@@ -326,8 +313,10 @@ $tabCounts = [
             <?php if ($b['category_name']): ?>
               <span class="pv-tag pv-tag--cat"><?= htmlspecialchars($b['category_name']) ?></span>
             <?php endif; ?>
+           
           </div>
         </div>
+
 
         <div class="pv-booking-status-col">
           <span class="pv-pill pv-pill--<?= htmlspecialchars($status) ?>">
