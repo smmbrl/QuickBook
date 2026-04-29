@@ -1,9 +1,3 @@
-/* ============================================================
-   QUICKBOOK — Customer Bookings Page
-   Matches customer_dashboard.css exactly:
-   sticky nav · hero bg image · stat strip · KPI cards · card list
-   Fonts: Syne + DM Sans + DM Mono
-   ============================================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
 
@@ -74,14 +68,14 @@ body {
 a { text-decoration: none; color: inherit; }
 button { font-family: inherit; cursor: pointer; border: none; background: none; }
 
-/* ── GRAIN ── */
+
 .grain {
   pointer-events: none; position: fixed; inset: 0; z-index: 900;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   opacity: .028; mix-blend-mode: overlay;
 }
 
-/* ── AMBIENT ORBS ── */
+
 .bg-orb {
   pointer-events: none; position: fixed;
   border-radius: 50%; filter: blur(90px); opacity: .05; z-index: 0;
@@ -89,9 +83,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .bg-orb-1 { width: 600px; height: 600px; background: radial-gradient(circle,#C9A84C,transparent); top: -100px; right: 100px; }
 .bg-orb-2 { width: 400px; height: 400px; background: radial-gradient(circle,#38BDF8,transparent); bottom: 60px; left: 80px; }
 
-/* ══════════════════════════════════════
-   NAV — identical to dashboard
-══════════════════════════════════════ */
+
 .pv-nav {
   position: sticky; top: 0; z-index: 800;
   background: rgba(10,11,13,.92);
@@ -186,9 +178,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .pv-nav-logout:hover::before { background: var(--red); opacity: 1; }
 
-/* ══════════════════════════════════════
-   HERO — mirrors dashboard hero exactly
-══════════════════════════════════════ */
+
 .pv-hero {
   position: relative; background-image: var(--hero-img);
   background-size: cover; background-position: center 40%;
@@ -259,162 +249,132 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   width: 7px; height: 7px; border-radius: 99px; background: rgba(0,0,0,.3); flex-shrink: 0;
 }
 
-/* ── Hero stat strip ── */
-.pv-hero-stats {
-  position: relative; z-index: 2;
-  background: rgba(10,11,13,.55);
-  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-  border-top: 1px solid rgba(255,255,255,.07);
-}
-.pv-hero-stats-inner {
-  max-width: 1380px; margin: 0 auto;
-  padding: 0 1.75rem;
-  display: flex; align-items: stretch;
-}
-.pv-hs-item {
-  display: flex; align-items: center; gap: .9rem;
-  flex: 1; padding: 1.15rem 1.2rem;
-  border-right: 1px solid rgba(255,255,255,.06);
-  position: relative; overflow: hidden;
-  transition: background .2s;
-  cursor: default;
-}
-.pv-hs-item:first-child { padding-left: 0; }
-.pv-hs-item:last-child  { border-right: none; }
-.pv-hs-item:hover       { background: rgba(255,255,255,.025); }
-.pv-hs-item::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-  background: var(--hs-color, transparent);
-  opacity: 0; transition: opacity .2s;
-}
-.pv-hs-item:hover::before { opacity: 1; }
 
-/* per-item accent colors */
-.pv-hs-item.hs-white  { --hs-color: var(--white); }
-.pv-hs-item.hs-yellow { --hs-color: var(--yellow); }
-.pv-hs-item.hs-blue   { --hs-color: var(--blue); }
-.pv-hs-item.hs-green  { --hs-color: var(--green); }
-.pv-hs-item.hs-red    { --hs-color: var(--red); }
-.pv-hs-item.hs-gold   { --hs-color: var(--gold); }
-
-.pv-hs-text { display: flex; flex-direction: column; gap: .08rem; min-width: 0; }
-
-.pv-hs-val {
-  font-family: var(--font-h); font-size: 1.55rem; font-weight: 800;
-  letter-spacing: -.05em; color: var(--white); line-height: 1;
-}
-.pv-hs-item.hs-yellow .pv-hs-val { color: var(--yellow); }
-.pv-hs-item.hs-blue   .pv-hs-val { color: var(--blue); }
-.pv-hs-item.hs-green  .pv-hs-val { color: var(--green); }
-.pv-hs-item.hs-red    .pv-hs-val { color: var(--red); }
-.pv-hs-item.hs-gold   .pv-hs-val { color: var(--gold-bright); }
-
-.pv-hs-label {
-  font-family: var(--font-m); font-size: .6rem; letter-spacing: .1em; text-transform: uppercase;
-  color: var(--muted); white-space: nowrap;
-}
-.pv-hs-div { display: none; } /* no longer used — border-right on items instead */
-
-/* ══════════════════════════════════════
-   PAGE LAYOUT — mirrors dashboard
-══════════════════════════════════════ */
 .pv-page {
   max-width: 1380px; margin: 0 auto;
   padding: 2.25rem 1.75rem 4rem;
   position: relative; z-index: 1;
 }
 
-/* ══════════════════════════════════════
-   KPI ROW — same as dashboard
-══════════════════════════════════════ */
-.pv-kpi-row {
+
+.pv-filter-cards {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1.1rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1rem;
   margin-bottom: 2rem;
 }
 
-.pv-kpi {
+.pv-fc {
   position: relative; overflow: hidden;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r-xl); padding: 1.5rem 1.6rem;
-  transition: border-color .25s var(--ease-out), transform .25s var(--ease-out), box-shadow .2s;
-  cursor: default;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 1.4rem 1.5rem 1.25rem;
+  display: flex; flex-direction: column; gap: .3rem;
+  cursor: pointer;
+  transition: border-color .22s var(--ease-out), transform .22s var(--ease-out),
+              box-shadow .2s, background .2s;
+  text-decoration: none; color: inherit;
 }
-.pv-kpi::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-  background: var(--kpi-color, var(--gold)); opacity: .6;
-  border-radius: var(--r-xl) var(--r-xl) 0 0; transition: opacity .2s;
-}
-.pv-kpi::after {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-  background: radial-gradient(ellipse at top left, var(--kpi-glow, rgba(201,168,76,.06)), transparent 65%);
-  pointer-events: none;
-}
-.pv-kpi:hover { border-color: var(--border-md); transform: translateY(-4px); box-shadow: 0 16px 40px rgba(0,0,0,.5); }
-.pv-kpi:hover::before { opacity: 1; }
 
-.pv-kpi--gold   { --kpi-color: var(--gold);   --kpi-glow: rgba(201,168,76,.07); }
-.pv-kpi--green  { --kpi-color: var(--green);  --kpi-glow: rgba(34,197,94,.06); }
-.pv-kpi--blue   { --kpi-color: var(--blue);   --kpi-glow: rgba(56,189,248,.06); }
-.pv-kpi--yellow { --kpi-color: var(--yellow); --kpi-glow: rgba(251,191,36,.06); }
-.pv-kpi--indigo { --kpi-color: var(--indigo); --kpi-glow: rgba(129,140,248,.06); }
 
-.pv-kpi-icon {
-  font-size: 1.4rem; margin-bottom: .55rem;
-  width: 42px; height: 42px; border-radius: var(--r-sm);
-  background: var(--surface-md); border: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: center;
+.pv-fc::before {
+  content: ''; position: absolute;
+  top: 0; left: 0; right: 0; height: 3px;
+  background: var(--fc-accent, transparent);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  opacity: 0; transition: opacity .22s;
 }
-.pv-kpi-val {
-  font-family: var(--font-h); font-size: 2rem; font-weight: 800;
+
+
+.pv-fc::after {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at top, var(--fc-glow, transparent) 0%, transparent 60%);
+  pointer-events: none; opacity: 0; transition: opacity .22s;
+}
+
+.pv-fc:hover {
+  border-color: var(--border-md);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 36px rgba(0,0,0,.4);
+}
+.pv-fc:hover::before,
+.pv-fc:hover::after { opacity: 1; }
+
+.pv-fc.active {
+  border-color: var(--fc-accent, var(--border-md));
+  box-shadow: 0 0 0 1px var(--fc-accent, transparent), 0 12px 36px rgba(0,0,0,.4);
+  transform: translateY(-3px);
+}
+.pv-fc.active::before { opacity: 1; }
+.pv-fc.active::after  { opacity: .6; }
+
+/* Per-status accent colours */
+.pv-fc--all       { --fc-accent: var(--gold);   --fc-glow: rgba(201,168,76,.08); }
+.pv-fc--pending   { --fc-accent: var(--yellow);  --fc-glow: rgba(251,191,36,.08); }
+.pv-fc--confirmed { --fc-accent: var(--green);   --fc-glow: rgba(34,197,94,.08); }
+.pv-fc--completed { --fc-accent: var(--blue);    --fc-glow: rgba(56,189,248,.08); }
+.pv-fc--cancelled { --fc-accent: var(--red);     --fc-glow: rgba(244,63,94,.08); }
+
+
+.pv-fc-top {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: .35rem;
+}
+.pv-fc-icon { font-size: 1.25rem; line-height: 1; }
+.pv-fc-badge {
+  font-family: var(--font-m); font-size: .6rem; font-weight: 700;
+  background: var(--surface-hi); color: var(--muted);
+  padding: .12rem .5rem; border-radius: 99px;
+}
+.pv-fc.active .pv-fc-badge {
+  background: var(--fc-accent); color: #1a1200;
+}
+
+.pv-fc-val {
+  font-family: var(--font-h); font-size: 2.1rem; font-weight: 800;
   letter-spacing: -.05em; color: var(--white); line-height: 1;
-  margin-bottom: .3rem;
 }
-.pv-kpi-label { font-size: .8rem; font-weight: 600; color: var(--off); }
-.pv-kpi-sub   { font-family: var(--font-m); font-size: .65rem; color: var(--muted); margin-top: .18rem; }
+.pv-fc--pending.active   .pv-fc-val { color: var(--yellow); }
+.pv-fc--confirmed.active .pv-fc-val { color: var(--green); }
+.pv-fc--completed.active .pv-fc-val { color: var(--blue); }
+.pv-fc--cancelled.active .pv-fc-val { color: var(--red); }
+.pv-fc--all.active       .pv-fc-val { color: var(--gold-bright); }
 
-/* ══════════════════════════════════════
-   BOOKINGS CARD — main container
-══════════════════════════════════════ */
+.pv-fc-label {
+  font-size: .82rem; font-weight: 600; color: var(--off);
+}
+
+/* Sub-label */
+.pv-fc-sub {
+  font-family: var(--font-m); font-size: .62rem; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .06em;
+}
+
+
 .pv-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-xl); overflow: hidden;
 }
 
 
-/* ── Bookings head ── */
 .pv-bookings-head {
   padding: 1.4rem 1.75rem;
   border-bottom: 1px solid var(--border);
   display: flex; align-items: center; justify-content: space-between;
   flex-wrap: wrap; gap: 1rem;
 }
-
-/* ── Tab row ── */
-.pv-tab-row { display: flex; gap: .3rem; flex-wrap: wrap; }
-
-.pv-tab {
-  display: inline-flex; align-items: center; gap: .45rem;
-  padding: .4rem 1rem; border-radius: 99px;
-  font-size: .78rem; font-weight: 500; color: var(--muted);
-  border: 1px solid transparent;
-  transition: color .18s, background .18s, border-color .18s;
-  white-space: nowrap;
+.pv-bookings-head-left { display: flex; flex-direction: column; gap: .2rem; }
+.pv-bookings-title {
+  font-family: var(--font-h); font-size: 1.05rem; font-weight: 700;
+  color: var(--white); letter-spacing: -.02em;
+  display: flex; align-items: center; gap: .5rem;
 }
-.pv-tab:hover { color: var(--off); background: var(--surface-md); }
-.pv-tab.active {
-  color: var(--gold-bright); background: var(--gold-soft);
-  border-color: var(--gold-border);
+.pv-bookings-subtitle {
+  font-family: var(--font-m); font-size: .65rem; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .08em;
 }
-.pv-tab-count {
-  font-family: var(--font-m); font-size: .6rem; font-weight: 700;
-  background: var(--surface-hi); color: var(--muted);
-  padding: .08rem .38rem; border-radius: 99px; line-height: 1.4;
-}
-.pv-tab-count.active { background: var(--gold); color: #1a1200; }
 
-/* ── Search form ── */
 .pv-search-form { flex-shrink: 0; }
 .pv-search-wrap {
   display: flex; align-items: center; gap: .6rem;
@@ -438,7 +398,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .pv-search-clear:hover { color: var(--red); }
 
-/* ── Results info ── */
+
 .pv-results-info {
   padding: .75rem 1.75rem;
   border-bottom: 1px solid rgba(255,255,255,.04);
@@ -453,9 +413,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .pv-results-clear:hover { background: var(--gold-soft); }
 
-/* ══════════════════════════════════════
-   BOOKING LIST ITEMS
-══════════════════════════════════════ */
+
 .pv-booking-list { display: flex; flex-direction: column; }
 
 .pv-booking-item {
@@ -468,7 +426,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .pv-booking-item:last-child { border-bottom: none; }
 .pv-booking-item:hover { background: rgba(255,255,255,.025); }
 
-/* Colored left accent bar */
+
 .pv-booking-accent {
   position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
   border-radius: 0 3px 3px 0;
@@ -479,7 +437,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .pv-booking-accent--cancelled { background: var(--red);    box-shadow: 0 0 8px rgba(244,63,94,.3); }
 .pv-booking-accent--rejected  { background: var(--red);    box-shadow: 0 0 8px rgba(244,63,94,.3); }
 
-/* Emoji avatar */
+
 .pv-booking-av {
   width: 46px; height: 46px; border-radius: var(--r-md);
   background: var(--surface-md); border: 1px solid var(--border-md);
@@ -487,7 +445,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   font-size: 1.3rem; flex-shrink: 0;
 }
 
-/* Service info */
+
 .pv-booking-info { flex: 1; min-width: 0; }
 .pv-booking-service {
   font-family: var(--font-h); font-size: .92rem; font-weight: 700;
@@ -496,33 +454,18 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .pv-booking-provider { font-size: .75rem; color: var(--muted); margin-top: .15rem; }
 .pv-booking-tags { display: flex; gap: .35rem; flex-wrap: wrap; margin-top: .45rem; }
+
 .pv-tag {
   font-family: var(--font-m); font-size: .6rem; font-weight: 600;
   letter-spacing: .06em; text-transform: uppercase;
   padding: .12rem .52rem; border-radius: 99px;
 }
 .pv-tag--cat  { background: var(--surface-hi); color: var(--muted); border: 1px solid var(--border-md); }
-.pv-tag--home { background: var(--blue-soft); color: var(--blue); border: 1px solid var(--blue-border); }
+.pv-tag--date { background: var(--gold-soft); color: var(--gold-bright); border: 1px solid var(--gold-border); }
+.pv-tag--time { background: var(--blue-soft); color: var(--blue); border: 1px solid var(--blue-border); }
+.pv-tag--dur  { background: var(--surface-hi); color: var(--faint); border: 1px solid var(--border); }
 
-/* Date / time */
-.pv-booking-datetime {
-  flex-shrink: 0; text-align: center; min-width: 80px;
-}
-.pv-booking-datetime-day { display: flex; flex-direction: column; align-items: center; }
-.pv-booking-date-num {
-  font-family: var(--font-h); font-size: 1.5rem; font-weight: 800;
-  color: var(--white); line-height: 1; letter-spacing: -.04em;
-}
-.pv-booking-date-mon {
-  font-family: var(--font-m); font-size: .6rem; color: var(--muted);
-  text-transform: uppercase; letter-spacing: .1em; margin-top: .1rem;
-}
-.pv-booking-time, .pv-booking-dur {
-  font-family: var(--font-m); font-size: .65rem; color: var(--faint);
-  margin-top: .3rem; white-space: nowrap;
-}
 
-/* Price */
 .pv-booking-price-col { flex-shrink: 0; text-align: right; min-width: 90px; }
 .pv-booking-price {
   font-family: var(--font-h); font-size: 1.05rem; font-weight: 800;
@@ -533,7 +476,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   margin-top: .1rem; text-transform: uppercase; letter-spacing: .06em;
 }
 
-/* Status badge */
+
 .pv-booking-status-col { flex-shrink: 0; }
 
 .pv-pill {
@@ -549,7 +492,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .pv-pill--cancelled { background: var(--red-soft);    color: var(--red);    border-color: var(--red-border); }
 .pv-pill--rejected  { background: var(--red-soft);    color: var(--red);    border-color: var(--red-border); }
 
-/* Actions */
+
 .pv-booking-actions { display: flex; gap: .5rem; flex-shrink: 0; }
 
 .pv-btn {
@@ -574,9 +517,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .pv-btn--review:hover { background: rgba(251,191,36,.18); transform: translateY(-1px); }
 
-/* ══════════════════════════════════════
-   EMPTY STATE
-══════════════════════════════════════ */
+
 .pv-empty-state {
   padding: 4rem 2rem; text-align: center;
   display: flex; flex-direction: column; align-items: center; gap: .75rem;
@@ -593,9 +534,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .pv-empty-cta:hover { background: var(--gold-bright); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(201,168,76,.3); }
 
-/* ══════════════════════════════════════
-   PAGINATION
-══════════════════════════════════════ */
+
 .pv-pagination {
   display: flex; align-items: center; justify-content: center; gap: .35rem;
   padding: 1.5rem 1.75rem;
@@ -624,40 +563,31 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   width: 36px; height: 36px; color: var(--faint); font-family: var(--font-m); font-size: .78rem;
 }
 
-/* ══════════════════════════════════════
-   ANIMATIONS
-══════════════════════════════════════ */
+
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%       { opacity: .6; transform: scale(.85); }
 }
 
-/* ══════════════════════════════════════
-   RESPONSIVE
-══════════════════════════════════════ */
+
 @media (max-width: 1100px) {
-  .pv-kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .pv-filter-cards { grid-template-columns: repeat(3, 1fr); }
   .pv-nav-links { display: none; }
 }
 
 @media (max-width: 860px) {
-  .pv-booking-item {
-    flex-wrap: wrap;
-    gap: .85rem;
-  }
-  .pv-booking-datetime,
+  .pv-filter-cards { grid-template-columns: repeat(2, 1fr); }
+  .pv-booking-item { flex-wrap: wrap; gap: .85rem; }
   .pv-booking-price-col,
   .pv-booking-status-col { min-width: auto; }
   .pv-bookings-head { flex-direction: column; align-items: flex-start; }
-  .pv-hero-stats-inner { flex-wrap: wrap; }
-  .pv-hs-item { flex: 0 0 calc(50% - 1px); border-right: none; border-bottom: 1px solid rgba(255,255,255,.06); }
 }
 
 @media (max-width: 600px) {
-  .pv-kpi-row { grid-template-columns: 1fr 1fr; gap: .75rem; }
+  .pv-filter-cards { grid-template-columns: 1fr 1fr; gap: .75rem; }
   .pv-page { padding: 1.5rem 1rem 3rem; }
   .pv-nav-end .pv-points-badge,
   .pv-nav-end .pv-nav-user { display: none; }
   .pv-hero-inner { padding: 2rem 1rem 1.25rem; }
-  .pv-hero-stats { padding: .85rem 1rem; }
+  .pv-fc-val { font-size: 1.6rem; }
 }
