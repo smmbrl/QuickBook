@@ -5,6 +5,9 @@ $db     = Database::getInstance();
 $userId = (int)($_SESSION['user_id'] ?? 0);
 $userName = htmlspecialchars($_SESSION['user_name'] ?? 'Customer');
 $initials = strtoupper(substr($userName, 0, 2));
+$stAv = $db->prepare("SELECT avatar_url FROM tbl_users WHERE id = ? LIMIT 1");
+$stAv->execute([$userId]);
+$avatarUrl = ($av = $stAv->fetchColumn()) ? BASE_URL . 'assets/uploads/profiles/' . htmlspecialchars($av) : null;
 
 
 $statusFilter = $_GET['status'] ?? 'all';
@@ -13,15 +16,16 @@ $page         = max(1, (int)($_GET['page'] ?? 1));
 $perPage      = 8;
 $offset       = ($page - 1) * $perPage;
 
-$validStatuses = ['pending', 'confirmed', 'completed', 'cancelled', 'rejected'];
+$validStatuses = ['pending', 'confirmed', 'completed', 'cancelled', 'rejected', 'rescheduled'];
 
 $statsStmt = $db->prepare("
     SELECT
         SUM(status NOT IN ('cancelled','rejected') AND deleted_at IS NULL) as total,
-        SUM(status = 'pending'    AND deleted_at IS NULL) as pending,
-        SUM(status = 'confirmed'  AND deleted_at IS NULL) as confirmed,
-        SUM(status = 'completed'  AND deleted_at IS NULL) as completed,
-        SUM(status IN ('cancelled','rejected')) as cancelled
+        SUM(status = 'pending'      AND deleted_at IS NULL) as pending,
+        SUM(status = 'confirmed'    AND deleted_at IS NULL) as confirmed,
+        SUM(status = 'completed'    AND deleted_at IS NULL) as completed,
+        SUM(status IN ('cancelled','rejected')) as cancelled,
+        SUM(status = 'rescheduled'  AND deleted_at IS NULL) as rescheduled
     FROM tbl_bookings WHERE customer_id = ?
 ");
 $statsStmt->execute([$userId]);
@@ -76,7 +80,7 @@ $params[] = $offset;
 
 $bookingStmt = $db->prepare("
     SELECT b.*,
-           s.name  as service_name, s.price, s.duration_minutes,
+           s.name  as service_name, s.price, s.duration_minutes, s.service_type,
            pp.business_name, pp.offers_home_service,
            c.name  as category_name, c.slug as category_slug,
            (SELECT COUNT(*) FROM tbl_reviews r WHERE r.booking_id = b.id) as has_review
@@ -103,35 +107,38 @@ $stUpcoming->execute([$userId]);
 $upcomingCount = (int)$stUpcoming->fetchColumn();
 
 
-$catEmojiMap = [
-    'barbershop'       => '✂️',
-    'hair-salon'       => '💇',
-    'nail-care'        => '💅',
-    'massage-therapy'  => '💆',
-    'skincare-facial'  => '🧴',
-    'fitness-training' => '🏋️',
-    'home-cleaning'    => '🧹',
-    'pet-grooming'     => '🐾',
-    'event-styling'    => '🎨',
-    'dental'           => '🦷',
-    'tutoring'         => '📚',
+$svcImageMap = [
+    'Barber'        => 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=80&h=80&fit=crop&q=70',
+    'Hair Stylist'  => 'https://images.unsplash.com/photo-1562322140-8baeececf3df?w=80&h=80&fit=crop&q=70',
+    'Nail Tech'     => 'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=80&h=80&fit=crop&q=70',
+    'Massage'       => 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=80&h=80&fit=crop&q=70',
+    'Skincare'      => 'https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=80&h=80&fit=crop&q=70',
+    'Fitness'       => 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=80&h=80&fit=crop&q=70',
+    'Home Cleaning' => 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=80&h=80&fit=crop&q=70',
+    'Pet Groomer'   => 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=80&h=80&fit=crop&q=70',
+    'Event Stylist' => 'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=80&h=80&fit=crop&q=70',
+    'Makeup'        => 'https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?w=80&h=80&fit=crop&q=70',
 ];
-function catEmoji($slug, $map) { return $map[$slug] ?? '🛠️'; }
+function pvBookingImage(string $type, array $map): string {
+    return $map[$type] ?? 'https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?w=80&h=80&fit=crop&q=70';
+}
 
 $tabCounts = [
-    'all'       => (int)$stats['total'],
-    'pending'   => (int)$stats['pending'],
-    'confirmed' => (int)$stats['confirmed'],
-    'completed' => (int)$stats['completed'],
-    'cancelled' => (int)$stats['cancelled'],
+    'all'          => (int)$stats['total'],
+    'pending'      => (int)$stats['pending'],
+    'confirmed'    => (int)$stats['confirmed'],
+    'rescheduled'  => (int)$stats['rescheduled'],
+    'completed'    => (int)$stats['completed'],
+    'cancelled'    => (int)$stats['cancelled'],
 ];
 
 $filterCards = [
-    'all'       => ['label' => 'All Bookings',  'sub' => 'All time',             'icon' => '📋'],
-    'pending'   => ['label' => 'Pending',        'sub' => 'Awaiting confirmation','icon' => '⏳'],
-    'confirmed' => ['label' => 'Confirmed',      'sub' => 'Ready to go',          'icon' => '✅'],
-    'completed' => ['label' => 'Completed',      'sub' => 'Services enjoyed',     'icon' => '🏅'],
-    'cancelled' => ['label' => 'Cancelled',      'sub' => 'Dismissed',            'icon' => '✖'],
+    'all'          => ['label' => 'All Bookings',  'sub' => 'All time',               'icon' => ''],
+    'pending'      => ['label' => 'Pending',        'sub' => 'Awaiting confirmation',   'icon' => ''],
+    'confirmed'    => ['label' => 'Confirmed',      'sub' => 'Ready to go',             'icon' => ''],
+    'rescheduled'  => ['label' => 'Rescheduled',    'sub' => 'New schedule suggested',  'icon' => ''],
+    'completed'    => ['label' => 'Completed',      'sub' => 'Services enjoyed',        'icon' => ''],
+    'cancelled'    => ['label' => 'Cancelled',      'sub' => 'Dismissed',               'icon' => ''],
 ];
 ?>
 <!DOCTYPE html>
@@ -142,6 +149,7 @@ $filterCards = [
   <title>QuickBook — My Bookings</title>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_bookings.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
 
@@ -169,12 +177,17 @@ $filterCards = [
     </div>
 
     <div class="pv-nav-end">
-      <div class="pv-points-badge">⭐ <?= number_format($loyaltyPoints) ?> pts</div>
       <button class="pv-notif-btn" aria-label="Notifications">
-        🔔
+        <i class="fa-solid fa-bell"></i>
         <span class="pv-notif-dot" aria-hidden="true"></span>
       </button>
-      <div class="pv-nav-av" aria-hidden="true"><?= $initials ?></div>
+      <div class="pv-nav-av" aria-hidden="true">
+        <?php if ($avatarUrl): ?>
+          <img src="<?= $avatarUrl ?>" alt="<?= $userName ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
+        <?php else: ?>
+          <?= $initials ?>
+        <?php endif; ?>
+      </div>
       <div class="pv-nav-user">
         <div class="pv-nav-user-name"><?= $userName ?></div>
         <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
@@ -201,7 +214,7 @@ $filterCards = [
           <span class="pv-status-dot" aria-hidden="true"></span>
           Active Member
         </span>
-        <span class="pv-tier-badge">⭐ <?= $loyaltyTier ?></span>
+        <span class="pv-tier-badge"> <?= $loyaltyTier ?></span>
       </div>
     </div>
 
@@ -230,7 +243,6 @@ $filterCards = [
        aria-label="Filter by <?= $card['label'] ?>, <?= $tabCounts[$val] ?> bookings">
 
       <div class="pv-fc-top">
-        <span class="pv-fc-icon" aria-hidden="true"><?= $card['icon'] ?></span>
         <?php if ($tabCounts[$val] > 0): ?>
           <span class="pv-fc-badge"><?= $tabCounts[$val] ?></span>
         <?php endif; ?>
@@ -250,7 +262,6 @@ $filterCards = [
 
       <div class="pv-bookings-head-left">
         <h2 class="pv-bookings-title">
-          <?= $filterCards[$statusFilter]['icon'] ?>
           <?= $filterCards[$statusFilter]['label'] ?>
         </h2>
         <p class="pv-bookings-subtitle"><?= $filterCards[$statusFilter]['sub'] ?></p>
@@ -285,7 +296,7 @@ $filterCards = [
 
     <?php if (empty($bookings)): ?>
     <div class="pv-empty-state">
-      <div class="pv-empty-icon" aria-hidden="true">📭</div>
+      <div class="pv-empty-icon" aria-hidden="true"></div>
       <p>No bookings found<?= $search ? ' for "<strong>' . htmlspecialchars($search) . '</strong>"' : '' ?>.</p>
       <a href="<?= BASE_URL ?>browse" class="pv-empty-cta">Browse Services →</a>
     </div>
@@ -293,9 +304,9 @@ $filterCards = [
     <?php else: ?>
     <div class="pv-booking-list" role="list">
       <?php foreach ($bookings as $b):
-        $emoji        = catEmoji($b['category_slug'] ?? '', $catEmojiMap);
+        $imgSrc       = pvBookingImage($b['service_type'] ?? '', $svcImageMap);
         $status       = $b['status'];
-        $isCancellable= in_array($status, ['pending', 'confirmed']);
+        $isCancellable= in_array($status, ['pending', 'confirmed', 'rescheduled']);
         $isCompleted  = $status === 'completed';
         $bookingTime  = !empty($b['booking_time']) ? date('g:i A', strtotime($b['booking_time'])) : null;
         $duration     = !empty($b['duration_minutes']) ? $b['duration_minutes'].' min' : null;
@@ -304,11 +315,13 @@ $filterCards = [
 
         <div class="pv-booking-accent pv-booking-accent--<?= htmlspecialchars($status) ?>" aria-hidden="true"></div>
 
-        <div class="pv-booking-av" aria-hidden="true"><?= $emoji ?></div>
+        <div class="pv-booking-av" aria-hidden="true">
+          <img src="<?= $imgSrc ?>" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;max-width:none;">
+        </div>
 
         <div class="pv-booking-info">
           <div class="pv-booking-service"><?= htmlspecialchars($b['service_name']) ?></div>
-          <div class="pv-booking-provider">📍 <?= htmlspecialchars($b['business_name']) ?></div>
+          <div class="pv-booking-provider"> <?= htmlspecialchars($b['business_name']) ?></div>
           <div class="pv-booking-tags">
             <?php if ($b['category_name']): ?>
               <span class="pv-tag pv-tag--cat"><?= htmlspecialchars($b['category_name']) ?></span>
@@ -337,7 +350,7 @@ $filterCards = [
           <?php elseif ($isCompleted && !$b['has_review']): ?>
             <a href="<?= BASE_URL ?>bookings/<?= (int)$b['id'] ?>/review"
                class="pv-btn pv-btn--sm pv-btn--review">
-              ⭐ Review
+              Review
             </a>
           <?php endif; ?>
         </div>
