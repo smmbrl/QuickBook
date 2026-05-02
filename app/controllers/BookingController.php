@@ -1,5 +1,5 @@
 <?php
-// app/controllers/BookingController.php
+
 
 class BookingController
 {
@@ -20,12 +20,16 @@ class BookingController
         $db         = Database::getInstance();
         $customerId = (int)$_SESSION['user_id'];
         
-        $serviceId    = (int)($_POST['service_id']    ?? 0);
-        $providerId   = (int)($_POST['provider_id']   ?? 0);
-        $bookingDate  = trim($_POST['booking_date']   ?? '');
-        $bookingTime  = trim($_POST['booking_time']   ?? '');
-        $notes        = trim($_POST['notes']          ?? '');
-        $locationType = trim($_POST['location_type']  ?? 'In-shop');
+        $serviceId      = (int)($_POST['service_id']      ?? 0);
+        $providerId     = (int)($_POST['provider_id']     ?? 0);
+        $bookingDate    = trim($_POST['booking_date']     ?? '');
+        $bookingTime    = trim($_POST['booking_time']     ?? '');
+        $notes          = trim($_POST['notes']            ?? '');
+        $locationType   = trim($_POST['location_type']    ?? 'In-shop');
+        $customerAddress= trim($_POST['customer_address'] ?? '');
+        $paymentMethod  = trim($_POST['payment_method']   ?? 'cash');
+        $allowedPayments = ['gcash', 'paymaya', 'card', 'cash'];
+        if (!in_array($paymentMethod, $allowedPayments)) $paymentMethod = 'cash';
 
         $errors = [];
 
@@ -33,6 +37,9 @@ class BookingController
         if (!$providerId)  $errors[] = 'Provider not found.';
         if (!$bookingDate) $errors[] = 'Please pick a booking date.';
         if (!$bookingTime) $errors[] = 'Please pick a booking time.';
+        if ($locationType === 'On-site' && $customerAddress === '') {
+            $errors[] = 'Please enter your address so the provider knows where to come.';
+        }
 
         if ($bookingDate && strtotime($bookingDate) < strtotime('today')) {
             $errors[] = 'Booking date cannot be in the past.';
@@ -95,12 +102,22 @@ class BookingController
         $startTime = $bookingTime ?: $avRow['start_time'];
         $endTime   = date('H:i:s', strtotime($startTime) + ($service['duration_minutes'] * 60));
 
+        // Use submitted total (includes home service fee if applicable)
+        $serviceFee  = 50.00;
+        $totalAmount = (float)($_POST['total_amount'] ?? $service['price']);
+        $expectedMin = (float)$service['price'];
+        $expectedMax = (float)$service['price'] + $serviceFee;
+        // Clamp to valid range to prevent tampering
+        if ($totalAmount < $expectedMin || $totalAmount > $expectedMax) {
+            $totalAmount = ($locationType === 'On-site') ? $expectedMax : $expectedMin;
+        }
+
         $insert = $db->prepare("
             INSERT INTO tbl_bookings
                 (customer_id, provider_id, service_id, booking_date, booking_time,
-                 start_time, end_time, location_type, notes, status, created_at)
+                 start_time, end_time, location_type, customer_address, notes, total_amount, status, created_at)
             VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
         ");
         $insert->execute([
             $customerId,
@@ -111,10 +128,26 @@ class BookingController
             $startTime,
             $endTime,
             $locationType,
+            $customerAddress ?: null,
             $notes ?: null,
+            $totalAmount,
         ]);
 
         $bookingId = (int)$db->lastInsertId();
+
+        // Insert payment record into tbl_payments
+        $payStatus = in_array($paymentMethod, ['gcash', 'paymaya', 'card']) ? 'pending' : 'pending';
+        $payInsert = $db->prepare("
+            INSERT INTO tbl_payments
+                (booking_id, amount, payment_method, status, created_at)
+            VALUES (?, ?, ?, ?, NOW())
+        ");
+        $payInsert->execute([
+            $bookingId,
+            $totalAmount,
+            $paymentMethod,
+            $payStatus,
+        ]);
 
         $balStmt = $db->prepare("
             SELECT COALESCE(SUM(points), 0) FROM tbl_loyalty_points WHERE user_id = ?

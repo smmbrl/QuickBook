@@ -1,0 +1,51 @@
+[hidden] { display: none !important; }
+:root { --yellow:#fbbf24; --yellow-soft:rgba(251,191,36,.10); --yellow-border:rgba(251,191,36,.28); }
+
+.pv-nav { position:sticky;top:0;z-index:100; }
+.pv-nav-logout { font-size:.78rem;color:rgba(255,255,255,.4);transition:color .18s; }
+.pv-nav-logout:hover { color:#fff; }
+
+.pv-hero { min-height:260px; }
+.pv-hero-inner { display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;padding-bottom:2rem; }
+
+.pv-status-badge { display:inline-flex;align-items:center;gap:.5rem;padding:.38rem .9rem;border-radius:999px;font-size:.73rem;font-weight:700;letter-spacing:.04em;border:1px solid transparent; }
+.pv-status-badge--amber  { background:rgba(251,191,36,.12); color:#fbbf24;border-color:rgba(251,191,36,.3); }
+.pv-status-badge--green  { background:rgba(74,222,128,.12); color:#4ade80;border-color:rgba(74,222,128,.3); }
+.pv-status-badge--blue   { background:rgba(96,165,250,.12); color:#60a5fa;border-color:rgba(96,165,250,.3); }
+.pv-status-badge--red    { background:rgba(244,63,94,.12);  color:#f43f5e;border-color:rgba(244,63,94,.3); }
+.pv-status-badge--muted  { background:rgba(255,255,255,.06);color:rgba(255,255,255,.5);border-color:rgba(255,255,255,.12); }
+
+.pv-tier-badge { display:inline-flex;align-items:center;gap:.4rem;padding:.35rem .85rem;border-radius:999px;font-size:.73rem;font-weight:600;background:var(--gold-soft);color:var(--gold);border:1px solid var(--gold-border); }
+
+.pv-card { background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg); }
+
+.cd-btn { display:flex;align-items:center;justify-content:center;gap:.5rem;width:100%;padding:.65rem 1rem;border-radius:var(--r-sm);font-size:.82rem;font-weight:700;cursor:pointer;border:1px solid transparent;text-decoration:none;transition:background .18s; }
+.cd-btn--confirm { background:rgba(74,222,128,.12);color:#4ade80;border-color:rgba(74,222,128,.3); }
+.cd-btn--confirm:hover { background:rgba(74,222,128,.22); }
+.cd-btn--start   { background:rgba(96,165,250,.12);color:#60a5fa;border-color:rgba(96,165,250,.3); }
+.cd-btn--start:hover { background:rgba(96,165,250,.22); }
+.cd-btn--complete{ background:rgba(201,168,76,.12);color:#C9A84C;border-color:rgba(201,168,76,.3); }
+.cd-btn--complete:hover { background:rgba(201,168,76,.22); }
+.cd-btn--delete  { background:rgba(244,63,94,.09);color:#f43f5e;border-color:rgba(244,63,94,.2); }
+.cd-btn--delete:hover { background:rgba(244,63,94,.18); }
+.cd-btn--ghost   { background:var(--surface);color:var(--muted);border-color:var(--border); }
+.cd-btn--ghost:hover { background:var(--surface-md);color:var(--white); }
+
+/* Delete modal */
+.cd-btn--resched { background:rgba(245,158,11,.1);color:#f59e0b;border-color:rgba(245,158,11,.25); }
+.resch-row  { display:flex;gap:.6rem;margin-bottom:.75rem; }
+.resch-field{ flex:1; }
+
+/* Cancel reason box */
+.cancel-reason-box { background:rgba(244,63,94,.06);border:1px solid rgba(244,63,94,.2);border-radius:10px;padding:.85rem 1rem;margin-top:.75rem;font-size:.82rem;color:rgba(255,255,255,.65);line-height:1.55; }
+.cancel-reason-lbl { font-size:.62rem;font-family:var(--font-m);letter-spacing:.08em;text-transform:uppercase;color:#f43f5e;margin-bottom:.3rem; }
+
+/* Toast */
+.toast-container{ position:fixed;bottom:1.5rem;right:1.5rem;display:flex;flex-direction:column;gap:.6rem;z-index:9999;pointer-events:none; }
+.toast{ display:flex;align-items:center;gap:.65rem;padding:.7rem 1rem;border-radius:10px;min-width:260px;max-width:380px;font-size:.82rem;font-weight:500;backdrop-filter:blur(12px);box-shadow:0 8px 30px rgba(0,0,0,.35);transform:translateX(120%);opacity:0;transition:transform .32s cubic-bezier(.22,1,.36,1),opacity .28s;pointer-events:auto; }
+.toast.is-visible{ transform:translateX(0);opacity:1; }
+.toast--success{ background:rgba(20,184,166,.18);border:1px solid rgba(20,184,166,.3);color:#5eead4; }
+.toast--error  { background:rgba(244,63,94,.15);border:1px solid rgba(244,63,94,.28);color:#fb7185; }
+
+@media(max-width:900px){ .bd-grid{grid-template-columns:1fr} .bd-sidebar{order:-1} }
+@media(max-width:540px){ .bd-detail-grid{grid-template-columns:1fr} .bd-card{padding:1.2rem 1.1rem} }
