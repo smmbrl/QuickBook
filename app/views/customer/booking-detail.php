@@ -1,5 +1,4 @@
 <?php
-// app/views/customer/booking-detail.php
 
 require_once __DIR__ . '/../../../config/database.php';
 $db       = Database::getInstance();
@@ -7,9 +6,6 @@ $userId   = (int)($_SESSION['user_id'] ?? 0);
 $userName = htmlspecialchars($_SESSION['user_name'] ?? 'Customer');
 $initials = strtoupper(substr($userName, 0, 2));
 
-// $booking is already fetched & validated by CustomerController::bookingDetail()
-
-// ── Loyalty points (for nav badge) ──────────────────────
 $stPoints = $db->prepare("SELECT COALESCE(SUM(points),0) FROM tbl_loyalty_points WHERE user_id = ?");
 $stPoints->execute([$userId]);
 $loyaltyPoints = (int)$stPoints->fetchColumn();
@@ -19,14 +15,12 @@ $loyaltyTier   = match(true) {
     default                => 'Bronze',
 };
 
-// ── Upcoming count for nav badge ─────────────────────────
 $stUpcoming = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE customer_id = ? AND status IN ('pending','confirmed') AND booking_date >= CURDATE()");
 $stUpcoming->execute([$userId]);
 $upcomingCount = (int)$stUpcoming->fetchColumn();
 
-// ── Helpers ──────────────────────────────────────────────
 $status        = $booking['status'];
-$isCancellable = in_array($status, ['pending', 'confirmed']);
+$isCancellable = in_array($status, ['pending', 'confirmed', 'rescheduled']);
 $isCompleted   = $status === 'completed';
 $bookingTime   = !empty($booking['booking_time']) ? date('g:i A', strtotime($booking['booking_time'])) : null;
 $duration      = !empty($booking['duration_minutes']) ? $booking['duration_minutes'] . ' min' : null;
@@ -47,15 +41,15 @@ $catEmojiMap = [
 $emoji = $catEmojiMap[$booking['category_slug'] ?? ''] ?? '<i class="fa-solid fa-screwdriver-wrench"></i>';
 
 $statusLabels = [
-    'pending'   => ['label' => 'Pending Confirmation', 'icon' => '⏳', 'color' => 'yellow'],
-    'confirmed' => ['label' => 'Confirmed',            'icon' => '<i class="fa-solid fa-circle-check"></i>', 'color' => 'green'],
-    'completed' => ['label' => 'Completed',            'icon' => '<i class="fa-solid fa-medal"></i>', 'color' => 'blue'],
-    'cancelled' => ['label' => 'Cancelled',            'icon' => '✖',  'color' => 'red'],
-    'rejected'  => ['label' => 'Rejected',             'icon' => '✖',  'color' => 'red'],
+    'pending'      => ['label' => 'Pending Confirmation', 'icon' => '⏳', 'color' => 'yellow'],
+    'confirmed'    => ['label' => 'Confirmed',            'icon' => '<i class="fa-solid fa-circle-check"></i>', 'color' => 'green'],
+    'completed'    => ['label' => 'Completed',            'icon' => '<i class="fa-solid fa-medal"></i>', 'color' => 'blue'],
+    'cancelled'    => ['label' => 'Cancelled',            'icon' => '✖',  'color' => 'red'],
+    'rejected'     => ['label' => 'Rejected',             'icon' => '✖',  'color' => 'red'],
+    'rescheduled'  => ['label' => 'Rescheduled',          'icon' => '<i class="fa-solid fa-rotate-right"></i>', 'color' => 'yellow'],
 ];
 $statusInfo = $statusLabels[$status] ?? ['label' => ucfirst($status), 'icon' => '<i class="fa-solid fa-clipboard-list"></i>', 'color' => 'white'];
 
-// ── Flash message ─────────────────────────────────────────
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
 ?>
@@ -69,6 +63,13 @@ unset($_SESSION['flash']);
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_bookings.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_booking_detail.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    .bd-cancel-reason-card { border-color: rgba(251,113,133,.25) !important; background: rgba(244,63,94,.04) !important; }
+    .bd-cancel-reason-body { display:flex; align-items:flex-start; gap:.65rem; margin:.75rem 0 .5rem; }
+    .bd-cancel-reason-icon { flex-shrink:0; margin-top:.1rem; }
+    .bd-cancel-reason-text { font-size:.86rem; color:rgba(255,255,255,.8); line-height:1.65; margin:0; }
+    .bd-cancel-reason-note { font-size:.72rem; color:rgba(255,255,255,.3); margin-top:.5rem; }
+  </style>
 </head>
 <body>
 
@@ -76,7 +77,6 @@ unset($_SESSION['flash']);
 <div class="bg-orb bg-orb-1" aria-hidden="true"></div>
 <div class="bg-orb bg-orb-2" aria-hidden="true"></div>
 
-<!-- ══ NAV ══ -->
 <nav class="pv-nav" role="navigation" aria-label="Customer navigation">
   <div class="pv-nav-inner">
     <a href="<?= BASE_URL ?>home" class="pv-logo">
@@ -94,7 +94,6 @@ unset($_SESSION['flash']);
       <a href="<?= BASE_URL ?>profile"   class="pv-nav-link">Profile</a>
     </div>
     <div class="pv-nav-end">
-      <div class="pv-points-badge">⭐ <?= number_format($loyaltyPoints) ?> pts</div>
       <button class="pv-notif-btn" aria-label="Notifications"><i class="fa-solid fa-bell"></i><span class="pv-notif-dot" aria-hidden="true"></span></button>
       <div class="pv-nav-av" aria-hidden="true"><?= $initials ?></div>
       <div class="pv-nav-user">
@@ -106,7 +105,6 @@ unset($_SESSION['flash']);
   </div>
 </nav>
 
-<!-- ══ HERO ══ -->
 <header class="pv-hero" role="banner">
   <div class="pv-hero-overlay" aria-hidden="true"></div>
   <div class="pv-hero-inner">
@@ -131,7 +129,6 @@ unset($_SESSION['flash']);
   </div>
 </header>
 
-<!-- ══ MAIN ══ -->
 <main class="pv-page">
 
   <?php if ($flash): ?>
@@ -142,10 +139,8 @@ unset($_SESSION['flash']);
 
   <div class="bd-grid">
 
-    <!-- ── LEFT: Main detail card ── -->
     <div class="bd-main">
 
-      <!-- Service card -->
       <div class="pv-card bd-card">
         <div class="bd-card-header">
           <div class="bd-service-av"><?= $emoji ?></div>
@@ -162,7 +157,6 @@ unset($_SESSION['flash']);
         <?php endif; ?>
       </div>
 
-      <!-- Date / time / location card -->
       <div class="pv-card bd-card">
         <div class="bd-section-title"><i class="fa-solid fa-calendar-days"></i> Appointment Details</div>
         <div class="bd-detail-grid">
@@ -199,7 +193,6 @@ unset($_SESSION['flash']);
         </div>
       </div>
 
-      <!-- Notes card -->
       <?php if (!empty($booking['notes'])): ?>
       <div class="pv-card bd-card">
         <div class="bd-section-title"><i class="fa-solid fa-pen-to-square"></i> Your Notes</div>
@@ -207,27 +200,117 @@ unset($_SESSION['flash']);
       </div>
       <?php endif; ?>
 
-    </div><!-- /bd-main -->
+      <?php if ($status === 'rescheduled' && !empty($booking['suggested_date'])): ?>
+      <div class="pv-card bd-card" style="border-color:rgba(255,255,255,.1);">
+        <div class="bd-section-title" style="font-size:.72rem;"><i class="fa-solid fa-rotate-right" style="color:#f59e0b"></i> Reschedule Suggested</div>
 
-    <!-- ── RIGHT: Summary + Actions ── -->
+        <div style="display:flex;gap:.75rem;margin:.6rem 0 .75rem;">
+          <div style="flex:1;padding:.6rem .85rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;">
+            <div style="font-size:.6rem;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.35);margin-bottom:.25rem;">Date</div>
+            <div style="font-size:.88rem;font-weight:600;color:#fff;"><?= date('M j, Y', strtotime($booking['suggested_date'])) ?></div>
+            <div style="font-size:.7rem;color:rgba(255,255,255,.35);"><?= date('l', strtotime($booking['suggested_date'])) ?></div>
+          </div>
+          <div style="flex:1;padding:.6rem .85rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;">
+            <div style="font-size:.6rem;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.35);margin-bottom:.25rem;">Time</div>
+            <div style="font-size:.88rem;font-weight:600;color:#fff;"><?= date('g:i A', strtotime($booking['suggested_time'])) ?></div>
+          </div>
+        </div>
+
+        <?php if (!empty($booking['reschedule_note'])): ?>
+        <div style="font-size:.6rem;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.3);margin-bottom:.25rem;">Provider's Note</div>
+        <p style="font-size:.83rem;color:rgba(255,255,255,.65);line-height:1.6;margin:0 0 .85rem;"><?= nl2br(htmlspecialchars($booking['reschedule_note'])) ?></p>
+        <?php endif; ?>
+
+        <div style="display:flex;gap:.6rem;">
+          <form method="POST" action="<?= BASE_URL ?>bookings/<?= (int)$booking['id'] ?>/accept-reschedule" style="flex:1;">
+            <button type="submit"
+                    onclick="return confirm('Accept the new schedule on <?= date('M j, Y', strtotime($booking['suggested_date'])) ?> at <?= date('g:i A', strtotime($booking['suggested_time'])) ?>?')"
+                    style="display:flex;align-items:center;justify-content:center;gap:.5rem;width:100%;padding:.6rem 1rem;border-radius:8px;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.25);color:#4ade80;font-size:.82rem;font-weight:600;cursor:pointer;transition:background .18s;"
+                    onmouseover="this.style.background='rgba(74,222,128,.2)'" onmouseout="this.style.background='rgba(74,222,128,.1)'">
+              <i class="fa-solid fa-circle-check"></i> Accept
+            </button>
+          </form>
+          <form method="POST" action="<?= BASE_URL ?>bookings/<?= (int)$booking['id'] ?>/cancel" style="flex:1;">
+            <button type="submit"
+                    onclick="return confirm('Decline this reschedule and cancel your booking?')"
+                    style="display:flex;align-items:center;justify-content:center;gap:.5rem;width:100%;padding:.6rem 1rem;border-radius:8px;background:rgba(244,63,94,.08);border:1px solid rgba(244,63,94,.2);color:#f43f5e;font-size:.82rem;font-weight:600;cursor:pointer;transition:background .18s;"
+                    onmouseover="this.style.background='rgba(244,63,94,.18)'" onmouseout="this.style.background='rgba(244,63,94,.08)'">
+              <i class="fa-solid fa-xmark"></i> Decline
+            </button>
+          </form>
+        </div>
+      </div>
+      <?php endif; ?>
+
+      <?php if (in_array($status, ['cancelled','rejected']) && !empty($booking['cancellation_reason'])): ?>
+      <div class="pv-card bd-card bd-cancel-reason-card">
+        <div class="bd-section-title"><i class="fa-solid fa-circle-xmark" style="color:#FB7185"></i> Reason for Cancellation</div>
+        <div class="bd-cancel-reason-body">
+          <div class="bd-cancel-reason-icon">
+            <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
+              <path d="M12 8v5M12 15.5v.5" stroke="#FB7185" stroke-width="2.2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <p class="bd-cancel-reason-text"><?= nl2br(htmlspecialchars($booking['cancellation_reason'])) ?></p>
+        </div>
+        <div class="bd-cancel-reason-note">This message was sent by the provider.</div>
+      </div>
+      <?php endif; ?>
+
+    </div>
+
+
     <div class="bd-sidebar">
 
-      <!-- Price summary -->
+
       <div class="pv-card bd-card">
+        <?php
+          $isHomeService  = ($booking['location_type'] ?? '') === 'Home';
+          $homeServiceFee = 50;
+          $total          = $booking['price'] + ($isHomeService ? $homeServiceFee : 0);
+          $payMethod = $booking['payment_method'] ?? null;
+          $payIcons  = [
+            'cash'         => '<i class="fa-solid fa-money-bill-wave"></i>',
+            'gcash'        => '<i class="fa-solid fa-mobile-screen"></i>',
+            'paymaya'      => '<i class="fa-solid fa-mobile-screen"></i>',
+            'card'         => '<i class="fa-solid fa-credit-card"></i>',
+            'credit_card'  => '<i class="fa-solid fa-credit-card"></i>',
+            'debit_card'   => '<i class="fa-solid fa-credit-card"></i>',
+            'bank_transfer'=> '<i class="fa-solid fa-building-columns"></i>',
+          ];
+          $payIcon  = $payIcons[strtolower($payMethod ?? '')] ?? '<i class="fa-solid fa-wallet"></i>';
+          $payLabel = $payMethod ? ucwords(str_replace('_', ' ', $payMethod)) : null;
+        ?>
         <div class="bd-section-title"><i class="fa-solid fa-credit-card"></i> Payment Summary</div>
+
+        <?php if ($payLabel): ?>
+        <div class="bd-price-row bd-pay-method-row">
+          <span class="bd-pay-method-label">Payment Method</span>
+          <span class="bd-pay-method-val"><?= $payIcon ?> <?= htmlspecialchars($payLabel) ?></span>
+        </div>
+        <div class="bd-price-divider"></div>
+        <?php endif; ?>
+
         <div class="bd-price-row">
-          <span>Service fee</span>
+          <span>Amount</span>
           <span class="bd-price-val">₱<?= number_format($booking['price'], 2) ?></span>
         </div>
+
+        <?php if ($isHomeService): ?>
+        <div class="bd-price-row">
+          <span>Home service fee</span>
+          <span class="bd-price-val">₱<?= number_format($homeServiceFee, 2) ?></span>
+        </div>
+        <?php endif; ?>
+
         <div class="bd-price-divider"></div>
         <div class="bd-price-row bd-price-row--total">
           <span>Total</span>
-          <span class="bd-price-total">₱<?= number_format($booking['price'], 2) ?></span>
+          <span class="bd-price-total">₱<?= number_format($total, 2) ?></span>
         </div>
         <div class="bd-loyalty-note">⭐ +10 loyalty points earned</div>
       </div>
 
-      <!-- Status timeline -->
       <div class="pv-card bd-card">
         <div class="bd-section-title"><i class="fa-solid fa-rotate"></i> Status Timeline</div>
         <div class="bd-timeline">
@@ -274,13 +357,12 @@ unset($_SESSION['flash']);
         </div>
       </div>
 
-      <!-- Actions -->
       <div class="bd-actions">
         <?php if ($isCancellable): ?>
           <a href="<?= BASE_URL ?>bookings/<?= (int)$booking['id'] ?>/cancel"
              class="pv-btn pv-btn--ghost bd-btn-full"
              onclick="return confirm('Are you sure you want to cancel this booking?')">
-            ✖ Cancel Booking
+            Cancel Booking
           </a>
         <?php elseif ($isCompleted && !$booking['has_review']): ?>
           <a href="<?= BASE_URL ?>bookings/<?= (int)$booking['id'] ?>/review"
@@ -294,8 +376,7 @@ unset($_SESSION['flash']);
         </a>
       </div>
 
-    </div><!-- /bd-sidebar -->
-  </div><!-- /bd-grid -->
+    </div>
 
 </main>
 

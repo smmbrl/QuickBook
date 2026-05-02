@@ -36,11 +36,14 @@ class CustomerController
                    pp.id             AS profile_id,
                    c.name            AS category_name,
                    c.slug            AS category_slug,
+                   p.payment_method,
+                   p.status          AS payment_status,
                    (SELECT COUNT(*) FROM tbl_reviews r WHERE r.booking_id = b.id) AS has_review
             FROM tbl_bookings b
             JOIN tbl_services          s  ON b.service_id  = s.id
             JOIN tbl_provider_profiles pp ON b.provider_id = pp.id
             LEFT JOIN tbl_categories   c  ON pp.category_id = c.id
+            LEFT JOIN tbl_payments     p  ON p.booking_id  = b.id
             WHERE b.id = ? AND b.customer_id = ? AND (b.deleted_at IS NULL OR b.status IN ('cancelled','rejected'))
         ");
         $stmt->execute([(int)$id, $customerId]);
@@ -54,6 +57,81 @@ class CustomerController
         require_once __DIR__ . '/../views/customer/booking-detail.php';
     }
 
+    public function acceptReschedule(string $id): void
+    {
+        $db         = Database::getInstance();
+        $customerId = (int)$_SESSION['user_id'];
+
+        // Fetch booking — must belong to this customer and be in 'rescheduled' state
+        $stmt = $db->prepare("
+            SELECT b.id, b.customer_id, b.provider_id, b.status,
+                   b.suggested_date, b.suggested_time, b.reschedule_note,
+                   s.name AS service_name,
+                   pp.user_id AS provider_user_id
+            FROM tbl_bookings b
+            JOIN tbl_services          s  ON s.id  = b.service_id
+            JOIN tbl_provider_profiles pp ON pp.id = b.provider_id
+            WHERE b.id = ? AND b.customer_id = ? AND b.status = 'rescheduled'
+        ");
+        $stmt->execute([(int)$id, $customerId]);
+        $booking = $stmt->fetch();
+
+        if (!$booking) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Booking not found or cannot be accepted.'];
+            header('Location: ' . BASE_URL . 'bookings'); exit;
+        }
+
+        if (empty($booking['suggested_date']) || empty($booking['suggested_time'])) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'No suggested schedule found for this booking.'];
+            header('Location: ' . BASE_URL . 'bookings/' . (int)$id); exit;
+        }
+
+        // Update booking with suggested schedule, clear suggestion fields, set back to pending
+        $upd = $db->prepare("
+            UPDATE tbl_bookings
+            SET booking_date    = ?,
+                booking_time    = ?,
+                start_time      = ?,
+                status          = 'pending',
+                suggested_date  = NULL,
+                suggested_time  = NULL,
+                reschedule_note = NULL,
+                updated_at      = NOW()
+            WHERE id = ?
+        ");
+        $upd->execute([
+            $booking['suggested_date'],
+            $booking['suggested_time'],
+            $booking['suggested_time'],
+            (int)$id,
+        ]);
+
+        // Notify the provider that the customer accepted the reschedule
+        $custStmt = $db->prepare("SELECT first_name, last_name FROM tbl_users WHERE id = ? LIMIT 1");
+        $custStmt->execute([$customerId]);
+        $custUser = $custStmt->fetch();
+        $custName = $custUser
+            ? htmlspecialchars($custUser['first_name'] . ' ' . $custUser['last_name'])
+            : 'The customer';
+
+        $formattedDate = date('l, F j, Y', strtotime($booking['suggested_date']));
+        $formattedTime = date('g:i A',     strtotime($booking['suggested_time']));
+
+        $notif = $db->prepare("
+            INSERT INTO tbl_notifications
+                (user_id, type, title, message, body, is_read, created_at)
+            VALUES (?, 'reschedule_accepted', 'Reschedule Accepted', ?, ?, 0, NOW())
+        ");
+        $notif->execute([
+            $booking['provider_user_id'],
+            "{$custName} accepted the reschedule for \"{$booking['service_name']}\".",
+            "New schedule confirmed: {$formattedDate} at {$formattedTime}.",
+        ]);
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'You accepted the reschedule. Booking is now pending confirmation.'];
+        header('Location: ' . BASE_URL . 'bookings/' . (int)$id); exit;
+    }
+
     public function cancelBooking(string $id): void
     {
         $db         = Database::getInstance();
@@ -62,7 +140,7 @@ class CustomerController
         $stmt = $db->prepare("
             SELECT id, status FROM tbl_bookings
             WHERE id = ? AND customer_id = ?
-              AND status IN ('pending','confirmed')
+              AND status IN ('pending','confirmed','rescheduled')
               AND deleted_at IS NULL
         ");
         $stmt->execute([$id, $customerId]);
@@ -98,6 +176,7 @@ class CustomerController
                    pp.total_reviews,
                    pp.offers_home_service,
                    pp.is_approved,
+                   pp.profile_photo,
                    c.name              AS category_name,
                    c.slug              AS category_slug,
                    u.first_name        AS provider_first,
@@ -105,7 +184,7 @@ class CustomerController
             FROM tbl_services s
             JOIN tbl_provider_profiles pp ON s.provider_id = pp.id
             JOIN tbl_users             u  ON pp.user_id    = u.id
-            LEFT JOIN tbl_categories   c  ON pp.category_id = c.id
+            LEFT JOIN tbl_categories   c  ON s.category_id = c.id
             WHERE s.id = ? AND s.is_active = 1 AND pp.is_approved = 1
         ");
         $stmt->execute([(int)$id]);
@@ -144,11 +223,63 @@ class CustomerController
         $userId = (int)$_SESSION['user_id'];
         $action = $_POST['action'] ?? '';
 
+        // Upload avatar
+        if ($action === 'upload_avatar') {
+            if (empty($_FILES['avatar']) || $_FILES['avatar']['error'] !== UPLOAD_ERR_OK) {
+                $_SESSION['flash'] = ['type' => 'error', 'msg' => 'No file uploaded or upload error occurred.'];
+                header('Location: ' . BASE_URL . 'profile'); exit;
+            }
+
+            $file     = $_FILES['avatar'];
+            $allowed  = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+            $mimeType = mime_content_type($file['tmp_name']);
+
+            if (!isset($allowed[$mimeType])) {
+                $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Only JPG, PNG, or WEBP images are allowed.'];
+                header('Location: ' . BASE_URL . 'profile'); exit;
+            }
+            if ($file['size'] > 3 * 1024 * 1024) {
+                $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Image must be under 3 MB.'];
+                header('Location: ' . BASE_URL . 'profile'); exit;
+            }
+
+            $ext       = $allowed[$mimeType];
+            $filename  = 'customer_' . $userId . '_' . time() . '.' . $ext;
+            $uploadDir = __DIR__ . '/../../public/assets/uploads/profiles/';
+
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+
+            // Delete old avatar if present
+            $stOld = $db->prepare("SELECT avatar_url FROM tbl_users WHERE id = ? LIMIT 1");
+            $stOld->execute([$userId]);
+            $oldAvatar = $stOld->fetchColumn();
+            if ($oldAvatar && file_exists($uploadDir . $oldAvatar)) {
+                unlink($uploadDir . $oldAvatar);
+            }
+
+            if (!move_uploaded_file($file['tmp_name'], $uploadDir . $filename)) {
+                $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Failed to save image. Please try again.'];
+                header('Location: ' . BASE_URL . 'profile'); exit;
+            }
+
+            $db->prepare("UPDATE tbl_users SET avatar_url = ? WHERE id = ?")
+               ->execute([$filename, $userId]);
+
+            $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Profile picture updated successfully.'];
+            header('Location: ' . BASE_URL . 'profile'); exit;
+        }
+
+        // Update profile info
         if ($action === 'update_profile') {
-            $newFirst = trim($_POST['first_name'] ?? '');
-            $newLast  = trim($_POST['last_name']  ?? '');
-            $newPhone = trim($_POST['phone']      ?? '');
-            $newEmail = strtolower(trim($_POST['email'] ?? ''));
+            $newFirst   = trim($_POST['first_name']    ?? '');
+            $newLast    = trim($_POST['last_name']     ?? '');
+            $newPhone   = trim($_POST['phone']         ?? '');
+            $newEmail   = strtolower(trim($_POST['email'] ?? ''));
+            $newGender  = in_array($_POST['gender'] ?? '', ['male','female','non_binary','prefer_not_to_say'])
+                          ? $_POST['gender'] : null;
+            $newDob     = trim($_POST['date_of_birth'] ?? '') ?: null;
 
             $errors = [];
             if (empty($newFirst)) $errors[] = 'First name is required.';
@@ -168,8 +299,8 @@ class CustomerController
                 header('Location: ' . BASE_URL . 'profile'); exit;
             }
 
-            $db->prepare("UPDATE tbl_users SET first_name=?, last_name=?, email=?, phone=? WHERE id=?")
-               ->execute([$newFirst, $newLast, $newEmail, $newPhone ?: null, $userId]);
+            $db->prepare("UPDATE tbl_users SET first_name=?, last_name=?, email=?, phone=?, gender=?, date_of_birth=? WHERE id=?")
+               ->execute([$newFirst, $newLast, $newEmail, $newPhone ?: null, $newGender, $newDob, $userId]);
 
             $_SESSION['user_name']  = $newFirst;
             $_SESSION['user_email'] = $newEmail;
@@ -178,6 +309,7 @@ class CustomerController
             header('Location: ' . BASE_URL . 'profile'); exit;
         }
 
+        // Change password 
         if ($action === 'change_password') {
             $currentPw = $_POST['current_password'] ?? '';
             $newPw     = $_POST['new_password']     ?? '';
