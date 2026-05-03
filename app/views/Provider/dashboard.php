@@ -9,7 +9,7 @@ $profile->execute([$providerId]);
 $profile   = $profile->fetch();
 $profileId = $profile['id'] ?? 0;
 
-/* ── Core counts ── */
+/* Core counts */
 $stmt = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ?");
 $stmt->execute([$profileId]);
 $totalBookings = (int)$stmt->fetchColumn();
@@ -44,7 +44,7 @@ $lastMonthRevenue = (float)$stmt->fetchColumn();
 $revDelta   = $lastMonthRevenue > 0 ? round(($thisMonthRevenue - $lastMonthRevenue) / $lastMonthRevenue * 100) : null;
 $revDeltaPos = $revDelta !== null && $revDelta >= 0;
 
-/* ── Status counts ── */
+/* Status counts */
 $stmt = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ? AND status = 'pending'");
 $stmt->execute([$profileId]);
 $pendingBookings = (int)$stmt->fetchColumn();
@@ -65,10 +65,10 @@ $stmt = $db->prepare("SELECT COUNT(*) FROM tbl_services WHERE provider_id = ? AN
 $stmt->execute([$profileId]);
 $totalServices = (int)$stmt->fetchColumn();
 
-/* ── Recent bookings ── */
+/* Recent bookings */
 $stmt = $db->prepare("
     SELECT b.id, b.booking_date, b.status, b.total_amount, b.created_at,
-           u.first_name, u.last_name,
+           u.first_name, u.last_name, u.avatar_url,
            s.name AS service_name
     FROM tbl_bookings b
     JOIN tbl_users u ON u.id = b.customer_id
@@ -79,7 +79,7 @@ $stmt = $db->prepare("
 $stmt->execute([$profileId]);
 $recentBookings = $stmt->fetchAll();
 
-/* ── Status breakdown ── */
+/* Status breakdown */
 $stmt = $db->prepare("SELECT status, COUNT(*) AS cnt FROM tbl_bookings WHERE provider_id = ? GROUP BY status");
 $stmt->execute([$profileId]);
 $statusCounts = [];
@@ -87,7 +87,7 @@ foreach ($stmt->fetchAll() as $row) {
     $statusCounts[$row['status']] = (int)$row['cnt'];
 }
 
-/* ── 6-month revenue trend ── */
+/* 6-month revenue trend */
 $stmt = $db->prepare("
     SELECT DATE_FORMAT(booking_date,'%b') AS month,
            DATE_FORMAT(booking_date,'%Y-%m') AS ym,
@@ -103,7 +103,7 @@ $stmt->execute([$profileId]);
 $revTrend = $stmt->fetchAll();
 $currentYM = date('Y-m');
 
-/* ── Average rating ── */
+/* Average rating */
 $stmt = $db->prepare("
     SELECT COALESCE(AVG(rating), 0) AS avg_rating, COUNT(*) AS total_reviews
     FROM tbl_reviews WHERE provider_id = ?
@@ -121,7 +121,7 @@ for ($i = 5; $i >= 1; $i--) {
     $ratingDist[$i] = (int)$s->fetchColumn();
 }
 
-/* ── Greeting ── */
+/* Greeting */
 $hour     = (int)date('H');
 $greeting = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good evening');
 $initials = strtoupper(substr($providerName, 0, 2));
@@ -140,9 +140,7 @@ $initials = strtoupper(substr($providerName, 0, 2));
 <!-- GRAIN -->
 <div class="grain" aria-hidden="true"></div>
 
-<!-- ══════════════════════════════════════
-     NAV
-══════════════════════════════════════ -->
+<!-- NAV -->
 <nav class="pv-nav" role="navigation" aria-label="Provider navigation">
   <div class="pv-nav-inner">
 
@@ -173,7 +171,13 @@ $initials = strtoupper(substr($providerName, 0, 2));
       </button>
 
       <div class="pv-nav-user">
-        <div class="pv-nav-av" aria-hidden="true"><?= $initials ?></div>
+        <div class="pv-nav-av" aria-hidden="true">
+          <?php if (!empty($profile['profile_photo'])): ?>
+            <img src="<?= BASE_URL ?>assets/uploads/profiles/<?= htmlspecialchars($profile['profile_photo']) ?>" alt="Profile photo" style="width:34px;height:34px;min-width:34px;min-height:34px;max-width:34px;max-height:34px;object-fit:cover;border-radius:99px;display:block;">
+          <?php else: ?>
+            <span><?= $initials ?></span>
+          <?php endif; ?>
+        </div>
         <span><?= $providerName ?></span>
       </div>
       <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout">Sign out</a>
@@ -182,9 +186,7 @@ $initials = strtoupper(substr($providerName, 0, 2));
   </div>
 </nav>
 
-<!-- ══════════════════════════════════════
-     HERO
-══════════════════════════════════════ -->
+<!-- HERO -->
 <header class="pv-hero" role="banner">
   <div class="pv-hero-overlay" aria-hidden="true"></div>
 
@@ -262,13 +264,10 @@ $initials = strtoupper(substr($providerName, 0, 2));
   </div>
 </header>
 
-<!-- ══════════════════════════════════════
-     MAIN CONTENT
-══════════════════════════════════════ -->
+<!-- MAIN CONTENT -->
 <main class="pv-page" role="main">
   <div class="pv-layout">
 
-    <!-- ── LEFT COLUMN ── -->
     <div class="pv-main">
 
       <!-- KPI Cards Row -->
@@ -276,7 +275,7 @@ $initials = strtoupper(substr($providerName, 0, 2));
 
         <!-- Revenue this month -->
         <div class="pv-kpi pv-kpi--gold">
-          <div class="pv-kpi-icon">💰</div>
+          
           <?php if ($revDelta !== null): ?>
           <span class="pv-kpi-delta <?= $revDeltaPos ? '' : 'neg' ?>">
             <?= $revDeltaPos ? '+' : '' ?><?= $revDelta ?>%
@@ -288,14 +287,14 @@ $initials = strtoupper(substr($providerName, 0, 2));
 
         <!-- Completed -->
         <div class="pv-kpi pv-kpi--green">
-          <div class="pv-kpi-icon">✅</div>
+          
           <div class="pv-kpi-val"><?= $completedBookings ?></div>
           <div class="pv-kpi-label">Completed Bookings</div>
         </div>
 
         <!-- Pending -->
         <div class="pv-kpi pv-kpi--indigo">
-          <div class="pv-kpi-icon">⏳</div>
+          
           <div class="pv-kpi-val"><?= $pendingBookings ?></div>
           <div class="pv-kpi-label">Awaiting Confirmation</div>
         </div>
@@ -303,7 +302,7 @@ $initials = strtoupper(substr($providerName, 0, 2));
         <!-- Cancellation rate -->
         <?php $cancelRate = $totalBookings > 0 ? round($cancelledBookings / $totalBookings * 100) : 0; ?>
         <div class="pv-kpi pv-kpi--blue">
-          <div class="pv-kpi-icon">📊</div>
+          
           <div class="pv-kpi-val"><?= $cancelRate ?>%</div>
           <div class="pv-kpi-label">Cancellation Rate</div>
         </div>
@@ -387,22 +386,13 @@ $initials = strtoupper(substr($providerName, 0, 2));
           </div>
         </div>
 
-      </div><!-- /pv-row2 -->
+      </div>
 
       <!-- Recent Bookings Table -->
       <div class="pv-card">
         <div class="pv-card-head">
           <h2>Recent Bookings</h2>
           <a href="<?= BASE_URL ?>provider/bookings" class="pv-link">View all →</a>
-        </div>
-
-        <!-- Filter tabs -->
-        <div class="pv-table-tabs" role="tablist" aria-label="Filter bookings">
-          <button class="pv-tab is-active" role="tab" aria-selected="true">All</button>
-          <button class="pv-tab" role="tab" aria-selected="false">Pending</button>
-          <button class="pv-tab" role="tab" aria-selected="false">Confirmed</button>
-          <button class="pv-tab" role="tab" aria-selected="false">Completed</button>
-          <button class="pv-tab" role="tab" aria-selected="false">Cancelled</button>
         </div>
 
         <div class="pv-table-wrap">
@@ -430,7 +420,12 @@ $initials = strtoupper(substr($providerName, 0, 2));
                 <td>
                   <div class="pv-cust">
                     <div class="pv-cust-av" aria-hidden="true">
-                      <?= strtoupper(substr($b['first_name'], 0, 1) . substr($b['last_name'], 0, 1)) ?>
+                      <?php if (!empty($b['avatar_url'])): ?>
+                        <img src="<?= BASE_URL ?>assets/uploads/profiles/<?= htmlspecialchars($b['avatar_url']) ?>"
+                             alt="<?= htmlspecialchars($b['first_name'] . ' ' . $b['last_name']) ?>">
+                      <?php else: ?>
+                        <?= strtoupper(substr($b['first_name'], 0, 1) . substr($b['last_name'], 0, 1)) ?>
+                      <?php endif; ?>
                     </div>
                     <span class="pv-cust-name">
                       <?= htmlspecialchars($b['first_name'] . ' ' . $b['last_name']) ?>
@@ -454,9 +449,8 @@ $initials = strtoupper(substr($providerName, 0, 2));
         </div>
       </div>
 
-    </div><!-- /pv-main -->
-
-    <!-- ── SIDEBAR ── -->
+    </div>
+    
     <aside class="pv-sidebar" aria-label="Sidebar">
 
       <!-- Quick Actions -->
@@ -465,7 +459,12 @@ $initials = strtoupper(substr($providerName, 0, 2));
         <div class="pv-actions">
 
           <a href="<?= BASE_URL ?>provider/bookings?status=pending" class="pv-action is-primary">
-            <span class="pv-action-ico" aria-hidden="true">⏳</span>
+            <span class="pv-action-ico" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+                <circle cx="10" cy="10" r="8.5" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M10 6v4.5l2.5 2.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
             <div class="pv-action-txt">
               <strong>Pending Bookings</strong>
               <span>Review &amp; confirm</span>
@@ -478,17 +477,32 @@ $initials = strtoupper(substr($providerName, 0, 2));
           </a>
 
           <a href="<?= BASE_URL ?>provider/services" class="pv-action">
-            <span class="pv-action-ico" aria-hidden="true">🛎️</span>
+            <span class="pv-action-ico" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+                <path d="M3 5h14M3 10h14M3 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                <circle cx="15.5" cy="15" r="2.5" stroke="currentColor" stroke-width="1.4"/>
+              </svg>
+            </span>
             <div class="pv-action-txt"><strong>My Services</strong><span>Manage listings</span></div>
           </a>
 
           <a href="<?= BASE_URL ?>provider/availability" class="pv-action">
-            <span class="pv-action-ico" aria-hidden="true">📅</span>
+            <span class="pv-action-ico" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+                <rect x="2.5" y="4" width="15" height="13.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M2.5 8.5h15M6.5 2.5v3M13.5 2.5v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </span>
             <div class="pv-action-txt"><strong>Availability</strong><span>Set your schedule</span></div>
           </a>
 
           <a href="<?= BASE_URL ?>provider/profile" class="pv-action">
-            <span class="pv-action-ico" aria-hidden="true">👤</span>
+            <span class="pv-action-ico" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+                <circle cx="10" cy="7" r="3.5" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M3 17c0-3.314 3.134-6 7-6s7 2.686 7 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </span>
             <div class="pv-action-txt"><strong>My Profile</strong><span>Edit information</span></div>
           </a>
 
@@ -500,7 +514,6 @@ $initials = strtoupper(substr($providerName, 0, 2));
         <div class="pv-card-head"><h2>Today's Snapshot</h2></div>
         <div class="pv-snap">
           <div class="pv-snap-item">
-            <div class="pv-snap-ico-wrap" aria-hidden="true">📥</div>
             <div>
               <strong><?= $todayBookings ?></strong>
               <span>New booking<?= $todayBookings !== 1 ? 's' : '' ?></span>
@@ -510,21 +523,18 @@ $initials = strtoupper(substr($providerName, 0, 2));
             <?php endif; ?>
           </div>
           <div class="pv-snap-item">
-            <div class="pv-snap-ico-wrap" aria-hidden="true">✅</div>
             <div>
               <strong><?= $confirmedBookings ?></strong>
               <span>Confirmed</span>
             </div>
           </div>
           <div class="pv-snap-item">
-            <div class="pv-snap-ico-wrap" aria-hidden="true">🏅</div>
             <div>
               <strong><?= $completedBookings ?></strong>
               <span>Completed</span>
             </div>
           </div>
           <div class="pv-snap-item">
-            <div class="pv-snap-ico-wrap" aria-hidden="true">❌</div>
             <div>
               <strong><?= $cancelledBookings ?></strong>
               <span>Cancelled</span>
@@ -580,32 +590,7 @@ $initials = strtoupper(substr($providerName, 0, 2));
 </main>
 
 <script>
-/* ── Tab filter (client-side UX, no page reload) ── */
-(function () {
-  var tabs  = document.querySelectorAll('.pv-tab');
-  var rows  = document.querySelectorAll('.pv-table tbody tr[data-status]');
 
-  tabs.forEach(function (tab) {
-    tab.addEventListener('click', function () {
-      tabs.forEach(function (t) {
-        t.classList.remove('is-active');
-        t.setAttribute('aria-selected', 'false');
-      });
-      tab.classList.add('is-active');
-      tab.setAttribute('aria-selected', 'true');
-
-      var filter = tab.textContent.trim().toLowerCase().replace(' ', '_');
-      rows.forEach(function (row) {
-        if (filter === 'all' || row.dataset.status === filter) {
-          row.style.display = '';
-        } else {
-          row.style.display = 'none';
-        }
-      });
-    });
-  });
-})();
-</script>
-
+  
 </body>
 </html>
