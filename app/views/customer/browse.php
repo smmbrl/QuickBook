@@ -9,6 +9,9 @@ $userName      = htmlspecialchars($_SESSION['user_name']  ?? 'Customer');
 $userEmail     = htmlspecialchars($_SESSION['user_email'] ?? '');
 $userId        = (int)($_SESSION['user_id'] ?? 0);
 $initials      = strtoupper(substr($userName, 0, 2));
+$stAv = $db->prepare("SELECT avatar_url FROM tbl_users WHERE id = ? LIMIT 1");
+$stAv->execute([$userId]);
+$avatarUrl = ($av = $stAv->fetchColumn()) ? BASE_URL . 'assets/uploads/profiles/' . htmlspecialchars($av) : null;
 
 
 $stPoints = $db->prepare("SELECT COALESCE(SUM(points),0) FROM tbl_loyalty_points WHERE user_id = ?");
@@ -44,7 +47,7 @@ $where  = ["s.is_active = 1", "pp.is_approved = 1", "u.is_active = 1"];
 $params = [];
 
 if ($selectedCat) {
-    $where[]  = "pp.category_id = ?";
+    $where[]  = "s.category_id = ?";
     $params[] = $selectedCat;
 }
 if ($search !== '') {
@@ -89,7 +92,7 @@ $sql = "
     FROM tbl_services s
     JOIN tbl_provider_profiles pp ON s.provider_id = pp.id
     JOIN tbl_users u              ON pp.user_id = u.id
-    LEFT JOIN tbl_categories c    ON pp.category_id = c.id
+    LEFT JOIN tbl_categories c    ON s.category_id = c.id
     WHERE " . implode(' AND ', $where) . "
     ORDER BY $order
 ";
@@ -193,7 +196,7 @@ function renderStars(float $rating): string {
 }
 
 $serviceTypeLabels = [
-    'on-site'  => ' On-site',
+    'on-site'  => ' Home Service',
     'remote'   => ' Remote',
     'in-shop'  => ' In-shop',
     'flexible' => ' Flexible',
@@ -207,6 +210,7 @@ $serviceTypeLabels = [
   <title>QuickBook — Browse Services</title>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_browse.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
 
     .pv-cat-scroll { --cat-count: <?= $catCount ?>; }
@@ -236,12 +240,17 @@ $serviceTypeLabels = [
       <a href="<?= BASE_URL ?>profile"    class="pv-nav-link">Profile</a>
     </div>
     <div class="pv-nav-end">
-      <div class="pv-points-badge">⭐ <?= number_format($loyaltyPoints) ?> pts</div>
       <button class="pv-notif-btn" aria-label="Notifications">
-        🔔
+        <i class="fa-solid fa-bell"></i>
         <span class="pv-notif-dot" aria-hidden="true"></span>
       </button>
-      <div class="pv-nav-av" aria-hidden="true"><?= $initials ?></div>
+      <div class="pv-nav-av" aria-hidden="true">
+        <?php if ($avatarUrl): ?>
+          <img src="<?= $avatarUrl ?>" alt="<?= $userName ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
+        <?php else: ?>
+          <?= $initials ?>
+        <?php endif; ?>
+      </div>
       <div class="pv-nav-user">
         <div class="pv-nav-user-name"><?= $userName ?></div>
         <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
@@ -306,7 +315,7 @@ $serviceTypeLabels = [
       <div class="pv-hs-item hs-green">
         <div class="pv-hs-text">
           <span class="pv-hs-val"><?= $onSiteServices ?></span>
-          <span class="pv-hs-label">On-site Available</span>
+          <span class="pv-hs-label">Home Service Available</span>
         </div>
       </div>
       <div class="pv-hs-item hs-yellow">
@@ -397,7 +406,7 @@ $serviceTypeLabels = [
           <?php
             $stypeOptions = [
               ''         => ['label' => 'All types',  'desc' => 'No filter applied',         'icon' => '◈'],
-              'on-site'  => ['label' => 'On-site',    'desc' => 'Provider comes to you',      'icon' => ''],
+              'on-site'  => ['label' => 'Home Service', 'desc' => 'Provider comes to you',      'icon' => ''],
               'remote'   => ['label' => 'Remote',     'desc' => 'Online / virtual session',   'icon' => ''],
               'in-shop'  => ['label' => 'In-shop',    'desc' => "Visit provider's location",  'icon' => ''],
               'flexible' => ['label' => 'Flexible',   'desc' => 'Multiple options available', 'icon' => ''],
@@ -447,7 +456,7 @@ $serviceTypeLabels = [
       </form>
 
       <?php if ($search || $selectedCat || $locationFilter): ?>
-        <a href="<?= BASE_URL ?>browse" class="pv-clear-btn">✕ Clear</a>
+        <a href="<?= BASE_URL ?>browse" class="pv-clear-btn">Clear</a>
       <?php endif; ?>
     </div>
   </div>
@@ -470,13 +479,13 @@ $serviceTypeLabels = [
       $stype     = $s['service_type'] ?? '';
       $stypeLower = strtolower(str_replace(' ', '-', $stype));
       $stypeBadgeMap = [
-        'on-site'  => ['label' => 'On-site',  'class' => 'badge-onsite'],
+        'on-site'  => ['label' => 'Home Service',  'class' => 'badge-onsite'],
         'remote'   => ['label' => 'Remote',   'class' => 'badge-remote'],
         'in-shop'  => ['label' => 'In-shop',  'class' => 'badge-inshop'],
         'flexible' => ['label' => 'Flexible', 'class' => 'badge-flexible'],
       ];
     ?>
-    <a href="<?= BASE_URL ?>providers/<?= (int)$s['profile_id'] ?>"
+    <a href="<?= BASE_URL ?>services/<?= (int)$s['id'] ?>"
        class="pv-service-card"
        role="listitem"
        aria-label="<?= htmlspecialchars($s['name']) ?> by <?= htmlspecialchars($s['business_name']) ?>">
@@ -527,11 +536,8 @@ $serviceTypeLabels = [
       <div class="pv-svc-footer">
         <div class="pv-svc-price">
           <span class="pv-svc-price-val">₱<?= number_format((float)$s['price'], 0) ?></span>
-          <?php if ($duration): ?>
-            <span class="pv-svc-price-per">/ <?= $duration ?></span>
-          <?php endif; ?>
         </div>
-        <span class="pv-svc-cta">Book Now →</span>
+        <span class="pv-svc-cta">Book Now</span>
       </div>
 
     </a>
