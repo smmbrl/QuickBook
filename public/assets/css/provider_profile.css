@@ -1,14 +1,6 @@
-/* ============================================================
-   QUICKBOOK — Provider Profile Page
-   Dark gold luxury theme · Syne + DM Sans + DM Mono
-   FIXED: All nav/page prefixes unified to pp- to match PHP view
-   ============================================================ */
-
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
 
-/* ══════════════════════════════════════
-   DESIGN TOKENS
-══════════════════════════════════════ */
+/* DESIGN TOKENS */
 :root {
   --gold:           #C9A84C;
   --gold-bright:    #E8C96A;
@@ -67,7 +59,7 @@
   --ease-in-out: cubic-bezier(.4,0,.2,1);
 }
 
-/* ── Reset ── */
+/*  Reset  */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
 
@@ -85,7 +77,6 @@ body {
 a { text-decoration: none; color: inherit; }
 button { font-family: inherit; cursor: pointer; border: none; background: none; }
 
-/* ── Grain overlay ── */
 .grain {
   pointer-events: none;
   position: fixed; inset: 0; z-index: 900;
@@ -93,7 +84,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   opacity: .028; mix-blend-mode: overlay;
 }
 
-/* ── Background orbs ── */
+/*  Background orbs  */
 .bg-orb {
   pointer-events: none;
   position: fixed; border-radius: 50%; z-index: 0;
@@ -110,9 +101,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   background: radial-gradient(circle, rgba(129,140,248,.04) 0%, transparent 70%);
 }
 
-/* ══════════════════════════════════════
-   NAV  — pp- prefix (matches PHP view)
-══════════════════════════════════════ */
+/* NAV  — pp- prefix (matches PHP view) */
 .pp-nav {
   position: sticky; top: 0; z-index: 800;
   background: rgba(10,11,13,.92);
@@ -192,6 +181,12 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   color: #1a1200; font-family: var(--font-h); font-weight: 800; font-size: .68rem;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   box-shadow: 0 0 0 2px rgba(201,168,76,.25);
+  overflow: hidden;
+}
+.pp-nav-av img {
+  width: 34px; height: 34px; min-width: 34px; min-height: 34px;
+  max-width: 34px; max-height: 34px;
+  object-fit: cover; display: block; border-radius: 99px;
 }
 
 /* Nav user info */
@@ -215,9 +210,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   transform: translateY(-1px);
 }
 
-/* ══════════════════════════════════════
-   FLASH  (success / error)
-══════════════════════════════════════ */
+/* FLASH  (success / error) */
 .pp-flash {
   max-width: 1380px; margin: 1rem auto 0;
   padding: .85rem 1.4rem; border-radius: var(--r-md);
@@ -236,9 +229,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .pp-flash-close:hover { opacity: 1; }
 @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
 
-/* ══════════════════════════════════════
-   HERO BANNER
-══════════════════════════════════════ */
+/* HERO BANNER */
 .pp-hero {
   position: relative;
   background-image: var(--hero-img);
@@ -264,20 +255,11 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   display: flex; flex-direction: column; gap: 2rem;
 }
 
-/* ── Hero profile row (avatar + identity + approval) ── */
+/*  Hero profile row (avatar + identity + approval)  */
 .pp-hero-profile-row {
   display: flex; align-items: flex-start; gap: 1.75rem;
 }
 
-/* Category emoji avatar */
-.pp-hero-av {
-  width: 80px; height: 80px; border-radius: var(--r-xl);
-  background: var(--gold-soft);
-  border: 1px solid var(--gold-border);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 2.2rem; flex-shrink: 0;
-  box-shadow: 0 0 32px rgba(201,168,76,.12);
-}
 
 /* Identity block */
 .pp-hero-identity { flex: 1; }
@@ -345,7 +327,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .pp-hero-approval.pp-status--pending   .pp-approval-val { color: var(--amber); }
 .pp-hero-approval.pp-status--suspended .pp-approval-val { color: #FB7185; }
 
-/* ── Hero stat strip ── */
+/* Hero stat strip */
 .pp-hero-stats {
   display: flex; align-items: stretch;
   border-top: 1px solid rgba(201,168,76,.10);
@@ -371,9 +353,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .pp-hs-div { width: 1px; background: var(--border); margin: .8rem 2rem .8rem 0; flex-shrink: 0; }
 
-/* ══════════════════════════════════════
-   PAGE WRAPPER & LAYOUT
-══════════════════════════════════════ */
+/* PAGE WRAPPER & LAYOUT */
 .pp-page {
   max-width: 1380px; margin: 0 auto;
   padding: 2rem 1.75rem 5rem;
@@ -397,9 +377,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   align-items: start;
 }
 
-/* ══════════════════════════════════════
-   TABS
-══════════════════════════════════════ */
+/*TABS */
 .pp-tabs {
   display: flex; gap: .25rem;
   background: rgba(255,255,255,.03);
@@ -430,9 +408,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .pp-tab-panel.is-active { display: block; animation: panelIn .22s var(--ease-out); }
 @keyframes panelIn { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
 
-/* ══════════════════════════════════════
-   CARD
-══════════════════════════════════════ */
+/* CARD */
 .pp-card {
   background: var(--bg-alt);
   border: 1px solid var(--border);
@@ -450,7 +426,8 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 /* Card head */
 .pp-card-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 1.35rem 1.75rem 0;
+  padding: 1.35rem 1.75rem 1.1rem;
+  border-bottom: 1px solid var(--border);
   gap: .75rem;
 }
 .pp-card-head h2 {
@@ -481,12 +458,10 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   border-color: var(--red-border);
 }
 
-/* ══════════════════════════════════════
-   FORM
-══════════════════════════════════════ */
+/* FORM */
 .pp-form {
-  padding: 1.35rem 1.75rem 1.65rem;
-  display: flex; flex-direction: column; gap: 1.25rem;
+  padding: 1.5rem 1.75rem 1.65rem;
+  display: flex; flex-direction: column; gap: 1.35rem;
 }
 
 .pp-form-row { display: grid; gap: 1rem; }
@@ -549,10 +524,10 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 
 .pp-char-counter {
-  font-size: .7rem; color: var(--faint); text-align: right; margin-top: -.75rem;
+  font-size: .7rem; color: var(--faint); text-align: right; margin-top: .35rem;
 }
 
-/* ── Info notice ── */
+/* Info notice */
 .pp-info-notice {
   display: flex; align-items: flex-start; gap: .65rem;
   background: var(--indigo-soft); border: 1px solid var(--indigo-border);
@@ -561,7 +536,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .pp-info-notice-icon { font-size: 1rem; flex-shrink: 0; margin-top: .05rem; }
 
-/* ── Toggle ── */
+/* Toggle */
 .pp-toggle-group {
   display: flex; align-items: center; justify-content: space-between;
   gap: 1rem; padding: 1.1rem 1.2rem;
@@ -597,15 +572,13 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   transform: translateX(22px);
 }
 
-/* ── Form actions ── */
+/* Form actions */
 .pp-form-actions {
   display: flex; align-items: center; justify-content: flex-end; gap: .6rem;
   padding-top: .75rem; border-top: 1px solid var(--border); margin-top: .25rem;
 }
 
-/* ══════════════════════════════════════
-   BUTTONS
-══════════════════════════════════════ */
+/* BUTTONS */
 .pp-btn {
   font-family: var(--font-b); font-size: .84rem; font-weight: 600;
   display: inline-flex; align-items: center; gap: .45rem;
@@ -650,15 +623,22 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 
 .pp-btn-icon { font-size: .9rem; line-height: 1; }
 
-/* ══════════════════════════════════════
-   PASSWORD SECTION
-══════════════════════════════════════ */
+/* PASSWORD SECTION */
 .pp-pw-toggle {
   position: absolute; right: .65rem;
   background: none; border: none; cursor: pointer;
   font-size: 1rem; color: var(--faint); padding: .25rem .4rem;
   border-radius: 4px; transition: color .2s;
+  -webkit-appearance: none; appearance: none;
+  box-shadow: none; outline: none;
 }
+
+/* Hide browser-native password reveal button (Chrome/Edge) */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear,
+input[type="password"]::-webkit-credentials-auto-fill-button,
+input[type="password"]::-webkit-contacts-auto-fill-button,
+input[type="password"]::-webkit-textfield-decoration-container { display: none !important; }
 .pp-pw-toggle:hover { color: var(--white); }
 
 .pp-pw-strength {
@@ -679,8 +659,8 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   display: block; color: var(--faint);
 }
 
-.pp-match-hint { font-size: .74rem; margin-top: .3rem; display: block; }
-.pp-match-hint.is-match    { color: var(--green); }
+.pp-match-hint { font-size: .74rem; font-weight: 600; margin-top: .3rem; display: flex; align-items: center; gap: .35rem; }
+.pp-match-hint.is-match    { color: #4ADE80; }
 .pp-match-hint.is-no-match { color: #FB7185; }
 
 .pp-pw-requirements {
@@ -702,9 +682,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   background: currentColor; flex-shrink: 0;
 }
 
-/* ══════════════════════════════════════
-   DANGER ZONE
-══════════════════════════════════════ */
+/* DANGER ZONE */
 .pp-danger-body { padding: 1rem 1.75rem 1.4rem; }
 .pp-danger-row {
   display: flex; align-items: center; gap: 1rem;
@@ -717,9 +695,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .pp-danger-title { font-size: .87rem; font-weight: 600; color: var(--white); margin-bottom: .18rem; }
 .pp-danger-desc  { font-size: .75rem; color: var(--faint); line-height: 1.5; }
 
-/* ══════════════════════════════════════
-   SIDEBAR
-══════════════════════════════════════ */
+/* SIDEBAR */
 .pp-sidebar {
   display: flex; flex-direction: column; gap: 0;
   position: sticky; top: 80px;
@@ -804,14 +780,12 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .pp-account-row:last-child { border-bottom: none; }
 .pp-account-label { font-size: .75rem; color: var(--faint); }
 .pp-account-val   { font-size: .81rem; font-weight: 500; color: var(--muted); }
-.pp-account-val.pp-status--approved  { color: #4ADE80; }
-.pp-account-val.pp-status--pending   { color: var(--amber); }
-.pp-account-val.pp-status--suspended { color: #FB7185; }
+.pp-account-val.pp-status--approved  { color: #4ADE80;        background: none; border: none; padding: 0; }
+.pp-account-val.pp-status--pending   { color: var(--amber);    background: none; border: none; padding: 0; }
+.pp-account-val.pp-status--suspended { color: #FB7185;         background: none; border: none; padding: 0; }
 .pp-mono { font-family: var(--font-m); font-size: .77rem; }
 
-/* ══════════════════════════════════════
-   MODAL
-══════════════════════════════════════ */
+/* MODAL */
 .pp-modal-overlay {
   position: fixed; inset: 0; z-index: 1000;
   background: rgba(0,0,0,.75);
@@ -862,9 +836,68 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   border-top: 1px solid var(--border);
 }
 
-/* ══════════════════════════════════════
-   SCROLLBAR
-══════════════════════════════════════ */
+/*  PROFILE PHOTO UPLOAD */
+.pp-hero-av-wrap {
+  position: relative; flex-shrink: 0;
+  width: 80px; height: 80px;
+}
+
+.pp-hero-av {
+  width: 80px; height: 80px; border-radius: var(--r-xl);
+  background: var(--gold-soft);
+  border: 1px solid var(--gold-border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2.2rem; overflow: hidden;
+  box-shadow: 0 0 32px rgba(201,168,76,.12);
+  transition: filter .2s;
+}
+.pp-hero-av img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.pp-hero-av-wrap:hover .pp-hero-av {
+  filter: brightness(.72);
+}
+
+.pp-av-upload-btn {
+  position: absolute; inset: 0; border-radius: var(--r-xl);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; cursor: pointer;
+  color: var(--white); font-size: 1.2rem;
+  transition: opacity .2s;
+  background: rgba(0,0,0,.35);
+}
+.pp-hero-av-wrap:hover .pp-av-upload-btn { opacity: 1; }
+
+.pp-av-upload-btn--loading {
+  opacity: 1 !important; cursor: wait;
+  animation: pp-spin .8s linear infinite;
+}
+@keyframes pp-spin {
+  from { transform: rotate(0deg); } to { transform: rotate(360deg); }
+}
+
+/* Photo toast notification */
+.pp-photo-toast {
+  position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%) translateY(12px);
+  z-index: 2000; opacity: 0; pointer-events: none;
+  padding: .75rem 1.25rem; border-radius: var(--r-md);
+  font-size: .85rem; font-weight: 500;
+  display: flex; align-items: center; gap: .55rem;
+  transition: opacity .3s, transform .3s var(--ease-out);
+  white-space: nowrap;
+  box-shadow: var(--shadow-md);
+}
+.pp-photo-toast--show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.pp-photo-toast--success { background: var(--green-soft); border: 1px solid var(--green-border); color: #4ADE80; }
+.pp-photo-toast--error   { background: var(--red-soft);   border: 1px solid var(--red-border);   color: #FB7185; }
+
+/* Update hero-av for mobile */
+@media (max-width: 768px) {
+  .pp-hero-av-wrap { width: 64px; height: 64px; }
+  .pp-hero-av { width: 64px; height: 64px; font-size: 1.75rem; }
+}
+
+/* SCROLLBAR */
 ::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08); border-radius: 4px; }
@@ -872,9 +905,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 
 ::selection { background: rgba(201,168,76,.25); color: var(--white); }
 
-/* ══════════════════════════════════════
-   RESPONSIVE
-══════════════════════════════════════ */
+/* RESPONSIVE */
 @media (max-width: 1100px) {
   .pp-layout { grid-template-columns: 1fr; }
   .pp-sidebar { position: static; }
@@ -890,7 +921,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   .pp-nav-inner  { padding: 0 1rem; }
   .pp-hero-inner { padding: 1.75rem 1rem 0; }
   .pp-hero-profile-row { flex-direction: column; gap: 1rem; }
-  .pp-hero-av    { width: 64px; height: 64px; font-size: 1.75rem; }
   .pp-hero-approval { align-self: flex-start; }
   .pp-hero-stats { padding: 0 1rem; flex-wrap: wrap; }
   .pp-hs-item    { flex: 0 0 45%; }
@@ -906,7 +936,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 @media (max-width: 480px) {
   .pp-hero-name  { font-size: 1.5rem; }
   .pp-form       { padding: 1rem 1rem 1.25rem; }
-  .pp-card-head  { padding: 1rem 1rem 0; }
+  .pp-card-head  { padding: 1rem 1rem .85rem; }
   .pp-form-actions { flex-direction: column-reverse; }
   .pp-form-actions .pp-btn { width: 100%; justify-content: center; }
   .pp-modal      { margin: 0 .5rem; }
