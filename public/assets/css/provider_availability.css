@@ -1,9 +1,3 @@
-/* ============================================================
-   QUICKBOOK — Provider Availability
-   Dark gold luxury theme
-   Fonts: Syne + DM Sans + DM Mono
-   ============================================================ */
-
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
 
 :root {
@@ -74,7 +68,7 @@ body {
 a { text-decoration: none; color: inherit; }
 button { font-family: inherit; cursor: pointer; border: none; background: none; }
 
-/* ── GRAIN ── */
+/* GRAIN */
 .grain {
   pointer-events: none;
   position: fixed; inset: 0; z-index: 900;
@@ -82,9 +76,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   opacity: .028; mix-blend-mode: overlay;
 }
 
-/* ══════════════════════════════════════
-   NAV
-══════════════════════════════════════ */
+/* NAV */
 .pv-nav {
   position: sticky; top: 0; z-index: 800;
   background: rgba(10,11,13,.92);
@@ -156,6 +148,12 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   color: #1a1200; font-family: var(--font-h); font-weight: 800; font-size: .68rem;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   box-shadow: 0 0 0 2px rgba(201,168,76,.2);
+  overflow: hidden;
+}
+.pv-nav-av img {
+  width: 34px; height: 34px; min-width: 34px; min-height: 34px;
+  max-width: 34px; max-height: 34px;
+  object-fit: cover; display: block; border-radius: 99px;
 }
 
 .pv-nav-logout {
@@ -165,12 +163,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   display: inline-flex; align-items: center; gap: .4rem;
   transition: color .2s, background .2s, border-color .2s, box-shadow .2s, transform .15s var(--ease-out);
 }
-.pv-nav-logout::before {
-  content: ''; display: inline-block;
-  width: 6px; height: 6px; border-radius: 99px;
-  background: currentColor; opacity: .5;
-  transition: opacity .2s, background .2s;
-}
 .pv-nav-logout:hover {
   color: #FB7185; background: rgba(244,63,94,.10);
   border-color: rgba(244,63,94,.25);
@@ -179,9 +171,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .pv-nav-logout:hover::before { background: var(--red); opacity: 1; }
 
-/* ══════════════════════════════════════
-   HERO
-══════════════════════════════════════ */
+/* HERO */
 .pv-hero {
   position: relative;
   background-image: url('https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?w=1800&auto=format&fit=crop&q=80');
@@ -235,7 +225,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   font-size: .9rem; color: var(--muted); max-width: 460px; line-height: 1.65;
 }
 
-/* ── Hero stats strip ── */
+/* Hero stats strip */
 .pv-hero-stats {
   position: relative; z-index: 2;
   max-width: 1380px; width: 100%; margin: 0 auto; padding: 0 1.75rem;
@@ -262,7 +252,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .pv-hs-div { width: 1px; background: var(--border); margin: .8rem 2.25rem .8rem 0; flex-shrink: 0; }
 
-/* ── Flash ── */
+/* Flash */
 .pv-flash {
   max-width: 1380px; margin: 1.25rem auto 0;
   padding: .85rem 1.25rem; border-radius: var(--r-md);
@@ -276,9 +266,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   background: var(--red-soft); border: 1px solid var(--red-border); color: var(--red);
 }
 
-/* ══════════════════════════════════════
-   PAGE LAYOUT
-══════════════════════════════════════ */
+/* PAGE LAYOUT */
 .av-page {
   max-width: 1380px; margin: 0 auto;
   padding: 2rem 1.75rem 4rem;
@@ -291,7 +279,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   align-items: start;
 }
 
-/* ── Cards ── */
+/* Cards */
 .av-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -316,7 +304,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   font-size: .78rem; color: var(--muted); margin-top: .2rem;
 }
 
-/* ── Bulk buttons ── */
+/* Bulk buttons */
 .av-bulk-btns { display: flex; gap: .5rem; flex-shrink: 0; margin-top: .1rem; }
 
 .av-ghost-btn {
@@ -328,9 +316,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .av-ghost-btn:hover { color: var(--white); border-color: var(--gold-border); background: var(--gold-soft); }
 .av-ghost-btn--red:hover { color: var(--red); border-color: var(--red-border); background: var(--red-soft); }
 
-/* ══════════════════════════════════════
-   DAY ROWS
-══════════════════════════════════════ */
+/* DAY ROWS */
 .av-days-list {
   padding: .5rem 0;
 }
@@ -375,7 +361,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   border-color: rgba(56,189,248,.2);
 }
 
-/* ── Day left ── */
+/*  Day left  */
 .av-day-left {
   display: flex; align-items: center; gap: .85rem;
 }
@@ -413,7 +399,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .av-day-row.is-active .av-day-status { color: var(--gold-dim); }
 
-/* ── Day center (time inputs) ── */
+/*  Day center (time inputs)  */
 .av-day-center {
   display: flex; align-items: center; gap: .75rem;
   opacity: .3; transition: opacity .3s var(--ease-out);
@@ -462,7 +448,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   opacity: 0; white-space: nowrap;
 }
 
-/* ── Day right (toggle) ── */
+/*  Day right (toggle)  */
 .av-day-right { display: flex; justify-content: flex-end; }
 
 .av-toggle { cursor: pointer; display: inline-flex; align-items: center; }
@@ -493,7 +479,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   transform: translateX(20px);
 }
 
-/* ── Notice ── */
+/*  Notice  */
 .av-notice {
   display: flex; align-items: flex-start; gap: .6rem;
   margin: .5rem 1.75rem 0;
@@ -504,7 +490,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .av-notice svg { flex-shrink: 0; color: var(--gold); margin-top: .1rem; }
 
-/* ── Form footer ── */
 .av-form-footer {
   display: flex; align-items: center; justify-content: space-between;
   padding: 1.25rem 1.75rem;
@@ -540,12 +525,10 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .av-save-btn:active { transform: translateY(0); }
 
-/* ══════════════════════════════════════
-   SIDEBAR
-══════════════════════════════════════ */
+/* SIDEBAR */
 .av-sidebar { display: flex; flex-direction: column; gap: 1.25rem; }
 
-/* ── Heatmap card ── */
+/*  Heatmap card  */
 .av-heatmap-card { padding: 1.5rem; }
 .av-heatmap-card .av-card-title { margin-bottom: .25rem; }
 .av-heatmap-card .av-card-sub   { margin-bottom: 1.25rem; }
@@ -586,7 +569,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   text-align: right; white-space: nowrap;
 }
 
-/* ── Tips card ── */
+/*  Tips card  */
 .av-tips-card { padding: 1.5rem; }
 .av-tips-card .av-card-title { margin-bottom: 1rem; }
 
@@ -605,7 +588,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 
 .av-tip p { font-size: .78rem; color: var(--muted); line-height: 1.5; }
 
-/* ── Summary card ── */
+/*  Summary card  */
 .av-summary-card { padding: 1.5rem; }
 .av-summary-card .av-card-title { margin-bottom: 1.25rem; }
 
@@ -645,9 +628,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   color: var(--gold);
 }
 
-/* ══════════════════════════════════════
-   RESPONSIVE
-══════════════════════════════════════ */
+/* RESPONSIVE */
 @media (max-width: 1100px) {
   .av-layout { grid-template-columns: 1fr; }
   .av-sidebar { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
