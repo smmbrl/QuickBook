@@ -45,13 +45,15 @@ class AuthController
 
     public function register(): void
     {
-        $firstName = trim($_POST['first_name'] ?? '');
-        $lastName  = trim($_POST['last_name']  ?? '');
-        $email     = strtolower(trim($_POST['email'] ?? ''));
-        $phone     = $_POST['phone']    ?? '';
-        $password  = $_POST['password'] ?? '';
-        $role      = in_array($_POST['role'] ?? '', ['customer','provider']) ? $_POST['role'] : 'customer';
-        $terms     = isset($_POST['terms']);
+        $firstName   = trim($_POST['first_name'] ?? '');
+        $lastName    = trim($_POST['last_name']  ?? '');
+        $email       = strtolower(trim($_POST['email'] ?? ''));
+        $phone       = $_POST['phone']         ?? '';
+        $password    = $_POST['password']      ?? '';
+        $role        = in_array($_POST['role'] ?? '', ['customer','provider']) ? $_POST['role'] : 'customer';
+        $terms       = isset($_POST['terms']);
+        $gender      = in_array($_POST['gender'] ?? '', ['male','female','non_binary','prefer_not_to_say']) ? $_POST['gender'] : null;
+        $dateOfBirth = trim($_POST['date_of_birth'] ?? '') ?: null;
 
         $errors = [];
         if (empty($firstName))         $errors[] = 'First name is required.';
@@ -67,12 +69,14 @@ class AuthController
         }
 
         $userId = $this->userModel->create([
-            'first_name' => $firstName,
-            'last_name'  => $lastName,
-            'email'      => $email,
-            'phone'      => $phone,
-            'password'   => $password,
-            'role'       => $role,
+            'first_name'    => $firstName,
+            'last_name'     => $lastName,
+            'email'         => $email,
+            'phone'         => $phone,
+            'gender'        => $gender,
+            'date_of_birth' => $dateOfBirth,
+            'password'      => $password,
+            'role'          => $role,
         ]);
 
         if (!$userId) {
