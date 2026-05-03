@@ -48,8 +48,9 @@ $routes = [
     'GET:dashboard'                  => ['CustomerController', 'dashboard'],
     'GET:bookings'                   => ['CustomerController', 'bookings'],
     'GET:bookings/{any}'             => ['CustomerController', 'bookingDetail'],
-    'POST:bookings/{any}/cancel'     => ['CustomerController', 'cancelBooking'],
-    'GET:bookings/{any}/cancel'      => ['CustomerController', 'cancelBooking'],
+    'POST:bookings/{any}/cancel'           => ['CustomerController', 'cancelBooking'],
+    'GET:bookings/{any}/cancel'            => ['CustomerController', 'cancelBooking'],
+    'POST:bookings/{any}/accept-reschedule'=> ['CustomerController', 'acceptReschedule'],
     'GET:loyalty'                    => ['CustomerController', 'loyalty'],
     'GET:profile'                    => ['CustomerController', 'profile'],
     'POST:profile'                   => ['CustomerController', 'updateProfile'],
@@ -64,6 +65,7 @@ $routes = [
     // Provider dashboard 
     'GET:provider/dashboard'                  => ['ProviderDashController', 'index'],
     'GET:provider/bookings'                   => ['ProviderDashController', 'bookings'],
+    'GET:provider/bookings/{any}'             => ['ProviderDashController', 'bookingDetail'],
     'POST:provider/bookings/{any}'            => ['ProviderDashController', 'updateBooking'],
     'GET:provider/services'                   => ['ProviderDashController', 'services'],
     'POST:provider/services/store'            => ['ProviderDashController', 'storeService'],
@@ -77,6 +79,9 @@ $routes = [
     'GET:provider/profile'                          => ['ProviderDashController', 'profile'],
     'POST:provider/profile'                         => ['ProviderDashController', 'updateProfile'],
     'POST:provider/profile/update-business'         => ['ProviderDashController', 'updateProfile'],
+    'POST:provider/profile/update-personal'         => ['ProviderDashController', 'updatePersonalInfo'],
+    'POST:provider/profile/update-password'         => ['ProviderDashController', 'updatePassword'],
+    'POST:provider/profile/upload-photo'            => ['ProviderDashController', 'uploadProfilePhoto'],
 
     // Admin 
     'GET:admin/dashboard'       => ['AdminController', 'dashboard'],
