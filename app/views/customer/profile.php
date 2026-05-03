@@ -1,11 +1,10 @@
 <?php
-// app/views/customer/profile.php
 
 require_once __DIR__ . '/../../../config/database.php';
 $db     = Database::getInstance();
 $userId = (int)($_SESSION['user_id'] ?? 0);
 
-/* -- Full user record -- */
+/* Full user record */
 $stUser = $db->prepare("SELECT * FROM tbl_users WHERE id = ? LIMIT 1");
 $stUser->execute([$userId]);
 $user = $stUser->fetch();
@@ -19,10 +18,13 @@ $lastName    = htmlspecialchars($user['last_name']  ?? '');
 $fullName    = trim("$firstName $lastName");
 $email       = htmlspecialchars($user['email']      ?? '');
 $phone       = htmlspecialchars($user['phone']      ?? '');
+$gender      = $user['gender']        ?? '';
+$dateOfBirth = $user['date_of_birth'] ?? '';
 $initials    = strtoupper(substr($firstName, 0, 1) . substr($lastName, 0, 1));
 $memberSince = isset($user['created_at']) ? date('F Y', strtotime($user['created_at'])) : 'Unknown';
+$avatarUrl   = !empty($user['avatar_url']) ? BASE_URL . 'assets/uploads/profiles/' . htmlspecialchars($user['avatar_url']) : null;
 
-/* -- Loyalty -- */
+/* Loyalty */
 $stPoints = $db->prepare("SELECT COALESCE(SUM(points),0) FROM tbl_loyalty_points WHERE user_id = ?");
 $stPoints->execute([$userId]);
 $loyaltyPoints = (int)$stPoints->fetchColumn();
@@ -37,7 +39,7 @@ $tierIcon = match($loyaltyTier) {
     default  => '<i class="fa-solid fa-medal" style="color:#cd7f32"></i>',
 };
 
-/* -- Booking stats -- */
+/* Booking stats */
 $stStats = $db->prepare("
     SELECT
         COUNT(*) AS total,
@@ -59,7 +61,7 @@ $stSpent->execute([$userId]);
 $totalSpent    = (float)$stSpent->fetchColumn();
 $upcomingCount = (int)($stats['upcoming'] ?? 0);
 
-/* -- Favourite providers -- */
+/* Favourite providers */
 $stFavs = $db->prepare("
     SELECT pp.business_name, pp.id AS profile_id,
            COUNT(*) AS booking_count,
@@ -73,7 +75,7 @@ $stFavs = $db->prepare("
 $stFavs->execute([$userId]);
 $favourites = $stFavs->fetchAll();
 
-/* -- Recent activity -- */
+/* Recent activity  */
 $stRecent = $db->prepare("
     SELECT b.id, b.booking_date, b.status,
            s.name AS service_name, s.price,
@@ -87,61 +89,8 @@ $stRecent = $db->prepare("
 $stRecent->execute([$userId]);
 $recentActivity = $stRecent->fetchAll();
 
-/* -- Flash -- */
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
-
-/* -- Handle POST -- */
-$formErrors = [];
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
-
-    if ($action === 'update_profile') {
-        $newFirst = trim($_POST['first_name'] ?? '');
-        $newLast  = trim($_POST['last_name']  ?? '');
-        $newPhone = trim($_POST['phone']      ?? '');
-        $newEmail = strtolower(trim($_POST['email'] ?? ''));
-
-        if (empty($newFirst)) $formErrors[] = 'First name is required.';
-        if (empty($newLast))  $formErrors[] = 'Last name is required.';
-        if (!filter_var($newEmail, FILTER_VALIDATE_EMAIL)) $formErrors[] = 'A valid email address is required.';
-
-        if (empty($formErrors) && $newEmail !== $user['email']) {
-            $stCheck = $db->prepare("SELECT COUNT(*) FROM tbl_users WHERE email = ? AND id != ?");
-            $stCheck->execute([$newEmail, $userId]);
-            if ((int)$stCheck->fetchColumn() > 0) {
-                $formErrors[] = 'That email address is already in use.';
-            }
-        }
-
-        if (empty($formErrors)) {
-            $db->prepare("UPDATE tbl_users SET first_name=?, last_name=?, email=?, phone=? WHERE id=?")
-               ->execute([$newFirst, $newLast, $newEmail, $newPhone, $userId]);
-            $_SESSION['user_name']  = $newFirst;
-            $_SESSION['user_email'] = $newEmail;
-            $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Profile updated successfully.'];
-            header('Location: ' . BASE_URL . 'profile'); exit;
-        }
-    }
-
-    if ($action === 'change_password') {
-        $currentPw = $_POST['current_password'] ?? '';
-        $newPw     = $_POST['new_password']     ?? '';
-        $confirmPw = $_POST['confirm_password'] ?? '';
-
-        if (!password_verify($currentPw, $user['password_hash'])) $formErrors[] = 'Current password is incorrect.';
-        if (strlen($newPw) < 8)   $formErrors[] = 'New password must be at least 8 characters.';
-        if ($newPw !== $confirmPw) $formErrors[] = 'New passwords do not match.';
-
-        if (empty($formErrors)) {
-            $hash = password_hash($newPw, PASSWORD_BCRYPT, ['cost' => 12]);
-            $db->prepare("UPDATE tbl_users SET password_hash=? WHERE id=?")->execute([$hash, $userId]);
-            $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Password changed successfully.'];
-            header('Location: ' . BASE_URL . 'profile'); exit;
-        }
-    }
-}
 
 function fmtMoney(float $v): string {
     return $v >= 1000 ? '&#x20B1;' . number_format($v / 1000, 1) . 'k' : '&#x20B1;' . number_format($v, 0);
@@ -160,7 +109,7 @@ function fmtMoney(float $v): string {
 <body>
 <div class="grain" aria-hidden="true"></div>
 
-<!-- ══ NAV ══ -->
+<!-- NAV -->
 <nav class="pv-nav" role="navigation" aria-label="Customer navigation">
   <div class="pv-nav-inner">
     <a href="<?= BASE_URL ?>home" class="pv-logo">
@@ -178,11 +127,17 @@ function fmtMoney(float $v): string {
       <a href="<?= BASE_URL ?>profile"    class="pv-nav-link is-active">Profile</a>
     </div>
     <div class="pv-nav-end">
-      <div class="pv-points-badge">&#9733; <?= number_format($loyaltyPoints) ?> pts</div>
       <button class="pv-notif-btn" aria-label="Notifications">
-        <i class="fa-solid fa-bell"></i><span class="pv-notif-dot" aria-hidden="true"></span>
+        <i class="fa-solid fa-bell"></i>
+        <span class="pv-notif-dot" aria-hidden="true"></span>
       </button>
-      <div class="pv-nav-av" aria-hidden="true"><?= $initials ?></div>
+      <div class="pv-nav-av" aria-hidden="true" id="navAv">
+        <?php if ($avatarUrl): ?>
+          <img id="navAvImg" src="<?= $avatarUrl ?>" alt="<?= $fullName ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
+        <?php else: ?>
+          <span id="navAvInitials"><?= $initials ?></span>
+        <?php endif; ?>
+      </div>
       <div class="pv-nav-user">
         <div class="pv-nav-user-name"><?= $fullName ?></div>
         <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
@@ -192,77 +147,101 @@ function fmtMoney(float $v): string {
   </div>
 </nav>
 
-<!-- ══ HERO ══ -->
-<header class="pr-hero" role="banner">
-  <div class="pr-hero-overlay" aria-hidden="true"></div>
-  <div class="pr-hero-inner">
+<!-- HERO -->
+<header class="pp-hero" role="banner">
+  <div class="pp-hero-overlay" aria-hidden="true"></div>
+  <div class="pp-hero-inner">
 
-    <div class="pr-identity">
-      <div class="pr-avatar"><?= $initials ?></div>
-      <div class="pr-identity-text">
-        <p class="pr-hero-eyebrow">
-          <span class="pv-dot-pulse" aria-hidden="true"></span>
-          Active Member &middot; Since <?= $memberSince ?>
-        </p>
-        <h1 class="pr-hero-name"><?= $fullName ?></h1>
-        <p class="pr-hero-email"><?= $email ?></p>
-        <div class="pr-hero-badges">
-          <span class="pr-tier-badge tier-<?= strtolower($loyaltyTier) ?>"><?= $tierIcon ?> <?= $loyaltyTier ?> Tier</span>
-          <?php if ($user['is_verified'] ?? false): ?>
-          <span class="pr-verified-badge"><i class="fa-solid fa-circle-check"></i> Verified</span>
+    <div class="pp-hero-profile-row">
+
+      <!-- Avatar -->
+      <div class="pp-hero-av-wrap">
+        <div class="pp-hero-av" id="heroAv">
+          <?php if ($avatarUrl): ?>
+            <img src="<?= $avatarUrl ?>" alt="<?= $fullName ?>" id="heroAvImg">
+          <?php else: ?>
+            <span id="heroAvInitials"><?= $initials ?></span>
           <?php endif; ?>
         </div>
+        <label class="pp-av-upload-btn" for="avatarInput" title="Change profile picture" aria-label="Change profile picture">
+          <i class="fa-solid fa-camera"></i>
+        </label>
+        <form id="avatarForm" method="POST" action="<?= BASE_URL ?>profile" enctype="multipart/form-data" style="display:none">
+          <input type="hidden" name="action" value="upload_avatar">
+          <input type="file" id="avatarInput" name="avatar" accept="image/jpeg,image/png,image/webp" onchange="document.getElementById('avatarForm').submit()">
+        </form>
       </div>
+
+      <!-- Identity -->
+      <div class="pp-hero-identity">
+        <p class="pp-hero-eyebrow">
+          <span class="pp-dot-pulse" aria-hidden="true"></span>
+          Customer
+        </p>
+        <h1 class="pp-hero-name"><?= $fullName ?></h1>
+        <div class="pp-hero-meta">
+          <span class="pp-meta-chip"><i class="fa-solid fa-envelope"></i> <?= $email ?></span>
+          <?php if ($phone): ?>
+          <span class="pp-meta-chip"><i class="fa-solid fa-phone"></i> <?= $phone ?></span>
+          <?php endif; ?>
+          <?php if ($user['is_verified'] ?? false): ?>
+          <span class="pp-meta-chip pp-meta-chip--green"><i class="fa-solid fa-circle-check"></i> Verified</span>
+          <?php endif; ?>
+        </div>
+        <p class="pp-hero-eyebrow" style="margin-top:.5rem">
+          <span>Since <?= $memberSince ?></span>
+        </p>
+      </div>
+
+      <!-- Tier Badge -->
+      <div class="pp-hero-approval pp-status--tier-<?= strtolower($loyaltyTier) ?>">
+        <span class="pp-approval-icon"><?= $tierIcon ?></span>
+        <div>
+          <div class="pp-approval-label">Loyalty Tier</div>
+          <div class="pp-approval-val"><?= $loyaltyTier ?></div>
+        </div>
+      </div>
+
     </div>
 
-    <div class="pr-hero-stats">
-      <div class="pr-hs-item">
-        <span class="pr-hs-val"><?= $stats['total'] ?? 0 ?></span>
-        <span class="pr-hs-label">Total Bookings</span>
+    <!-- Stat strip -->
+    <div class="pp-hero-stats">
+      <div class="pp-hs-item">
+        <span class="pp-hs-val"><?= $stats['total'] ?? 0 ?></span>
+        <span class="pp-hs-label">Total Bookings</span>
       </div>
-      <div class="pr-hs-div" aria-hidden="true"></div>
-      <div class="pr-hs-item">
-        <span class="pr-hs-val green"><?= $stats['completed'] ?? 0 ?></span>
-        <span class="pr-hs-label">Completed</span>
+      <div class="pp-hs-div" aria-hidden="true"></div>
+      <div class="pp-hs-item">
+        <span class="pp-hs-val green"><?= $stats['completed'] ?? 0 ?></span>
+        <span class="pp-hs-label">Completed</span>
       </div>
-      <div class="pr-hs-div" aria-hidden="true"></div>
-      <div class="pr-hs-item">
-        <span class="pr-hs-val gold"><?= number_format($loyaltyPoints) ?></span>
-        <span class="pr-hs-label">Loyalty Points</span>
+      <div class="pp-hs-div" aria-hidden="true"></div>
+      <div class="pp-hs-item">
+        <span class="pp-hs-val gold"><?= number_format($loyaltyPoints) ?></span>
+        <span class="pp-hs-label">Loyalty Points</span>
       </div>
-      <div class="pr-hs-div" aria-hidden="true"></div>
-      <div class="pr-hs-item">
-        <span class="pr-hs-val"><?= fmtMoney($totalSpent) ?></span>
-        <span class="pr-hs-label">Total Spent</span>
+      <div class="pp-hs-div" aria-hidden="true"></div>
+      <div class="pp-hs-item">
+        <span class="pp-hs-val"><?= fmtMoney($totalSpent) ?></span>
+        <span class="pp-hs-label">Total Spent</span>
       </div>
     </div>
 
   </div>
 </header>
 
-<!-- ══ FLASH ══ -->
 <?php if ($flash): ?>
-<div class="pr-flash pr-flash--<?= $flash['type'] ?>" role="alert">
+<div class="pp-flash pp-flash--<?= $flash['type'] ?>" role="alert">
+  <span><?= $flash['type'] === 'success' ? '<i class="fa-solid fa-circle-check"></i>' : '<i class="fa-solid fa-triangle-exclamation"></i>' ?></span>
   <?= htmlspecialchars($flash['msg']) ?>
+  <button class="pp-flash-close" onclick="this.parentElement.remove()" aria-label="Dismiss">✕</button>
 </div>
 <?php endif; ?>
 
-<!-- ══ MAIN ══ -->
+<!-- MAIN -->
 <main class="pr-page" role="main">
 
-  <!-- Left col: forms -->
   <div class="pr-col-forms">
-
-    <?php if (!empty($formErrors)): ?>
-    <div class="pr-error-box" role="alert">
-      <strong>Please fix the following:</strong>
-      <ul>
-        <?php foreach ($formErrors as $err): ?>
-        <li><?= htmlspecialchars($err) ?></li>
-        <?php endforeach; ?>
-      </ul>
-    </div>
-    <?php endif; ?>
 
     <!-- Personal info -->
     <section class="pr-card" aria-label="Personal information">
@@ -296,6 +275,25 @@ function fmtMoney(float $v): string {
           <label class="pr-label" for="phone">Phone Number</label>
           <input type="tel" id="phone" name="phone" class="pr-input"
             value="<?= $phone ?>" placeholder="+63 917 000 0000" autocomplete="tel">
+        </div>
+        <div class="pr-form-row">
+          <div class="pr-form-group">
+            <label class="pr-label" for="gender">Gender</label>
+            <select id="gender" name="gender" class="pr-input" style="cursor:pointer">
+              <option value="" <?= !$gender ? 'selected' : '' ?>>Prefer not to say</option>
+              <option value="male"            <?= $gender === 'male'            ? 'selected' : '' ?>>Male</option>
+              <option value="female"          <?= $gender === 'female'          ? 'selected' : '' ?>>Female</option>
+              <option value="non_binary"      <?= $gender === 'non_binary'      ? 'selected' : '' ?>>Non-binary</option>
+              <option value="prefer_not_to_say" <?= $gender === 'prefer_not_to_say' ? 'selected' : '' ?>>Prefer not to say</option>
+            </select>
+          </div>
+          <div class="pr-form-group">
+            <label class="pr-label" for="date_of_birth">Date of Birth</label>
+            <input type="date" id="date_of_birth" name="date_of_birth" class="pr-input"
+              value="<?= htmlspecialchars($dateOfBirth) ?>"
+              max="<?= date('Y-m-d', strtotime('-13 years')) ?>"
+              style="color-scheme:dark">
+          </div>
         </div>
         <div class="pr-form-footer">
           <button type="submit" class="pr-btn-primary">Save Changes</button>
@@ -344,10 +342,12 @@ function fmtMoney(float $v): string {
             <label class="pr-label" for="confirm_password">Confirm New Password</label>
             <div class="pr-pw-wrap">
               <input type="password" id="confirm_password" name="confirm_password" class="pr-input"
-                placeholder="Repeat new password" autocomplete="new-password">
+                placeholder="Repeat new password" autocomplete="new-password"
+                oninput="checkPasswordMatch()">
               <button type="button" class="pr-pw-toggle" aria-label="Toggle visibility"
                 onclick="togglePw('confirm_password', this)"><i class="fa-solid fa-eye"></i></button>
             </div>
+            <div id="pwMatchMsg" style="display:none;margin-top:.4rem;font-size:.75rem;font-weight:600;display:flex;align-items:center;gap:.35rem"></div>
           </div>
         </div>
         <div class="pr-form-footer">
@@ -378,13 +378,18 @@ function fmtMoney(float $v): string {
 
   </div>
 
-  <!-- Right col: sidebar -->
   <aside class="pr-col-side" aria-label="Account overview">
 
     <!-- Membership card -->
     <div class="pr-membership-card tier-<?= strtolower($loyaltyTier) ?>">
       <div class="pr-mc-top">
-        <div class="pr-mc-avatar"><?= $initials ?></div>
+        <div class="pr-mc-avatar">
+          <?php if ($avatarUrl): ?>
+            <img src="<?= $avatarUrl ?>" alt="<?= $fullName ?>" class="pr-avatar-img">
+          <?php else: ?>
+            <?= $initials ?>
+          <?php endif; ?>
+        </div>
         <div class="pr-mc-info">
           <div class="pr-mc-name"><?= $fullName ?></div>
           <div class="pr-mc-email"><?= $email ?></div>
@@ -511,7 +516,6 @@ function fmtMoney(float $v): string {
   </aside>
 </main>
 
-<!-- ══ FOOTER ══ -->
 <footer class="pr-footer" role="contentinfo">
   <div class="pr-footer-inner">
     <span>&copy; <?= date('Y') ?> QuickBook. All rights reserved.</span>
@@ -527,6 +531,29 @@ function togglePw(id, btn) {
   btn.innerHTML = hidden
     ? '<i class="fa-solid fa-eye-slash"></i>'
     : '<i class="fa-solid fa-eye"></i>';
+}
+
+function checkPasswordMatch() {
+  const newPw  = document.getElementById('new_password').value;
+  const confPw = document.getElementById('confirm_password').value;
+  const msg    = document.getElementById('pwMatchMsg');
+  const confInput = document.getElementById('confirm_password');
+  if (!confPw) {
+    msg.style.display = 'none';
+    confInput.style.borderColor = '';
+    return;
+  }
+  if (newPw === confPw) {
+    msg.style.display = 'flex';
+    msg.style.color = '#4ADE80';
+    msg.innerHTML = '<i class="fa-solid fa-circle-check"></i> Passwords match';
+    confInput.style.borderColor = 'rgba(74,222,128,.5)';
+  } else {
+    msg.style.display = 'flex';
+    msg.style.color = '#FB7185';
+    msg.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> Passwords do not match';
+    confInput.style.borderColor = 'rgba(244,63,94,.5)';
+  }
 }
 
 function checkStrength(val) {
@@ -554,6 +581,62 @@ function checkStrength(val) {
   label.textContent = lvl.text;
   label.className  = 'pr-strength-label ' + lvl.cls;
 }
+
+// Avatar instant preview 
+(function () {
+  const input    = document.getElementById('avatarInput');
+  const heroAv   = document.getElementById('heroAv');
+  const navAv    = document.getElementById('navAv');
+
+  if (!input || !heroAv) return;
+
+  input.addEventListener('change', function () {
+    const file = this.files[0];
+    if (!file) return;
+
+    const allowed = ['image/jpeg','image/png','image/webp'];
+    if (!allowed.includes(file.type)) {
+      alert('Only JPG, PNG or WEBP images are allowed.');
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      alert('Image must be under 3 MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      // Update hero avatar
+      let heroImg = document.getElementById('heroAvImg');
+      const heroInitials = document.getElementById('heroAvInitials');
+      if (heroInitials) heroInitials.remove();
+      if (!heroImg) {
+        heroImg = document.createElement('img');
+        heroImg.id = 'heroAvImg';
+        heroAv.appendChild(heroImg);
+      }
+      heroImg.src = e.target.result;
+
+      // Update nav avatar
+      if (navAv) {
+        let navImg = document.getElementById('navAvImg');
+        const navInitials = document.getElementById('navAvInitials');
+        if (navInitials) navInitials.remove();
+        if (!navImg) {
+          navImg = document.createElement('img');
+          navImg.id = 'navAvImg';
+          navImg.style.cssText = 'width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;';
+          navAv.appendChild(navImg);
+        }
+        navImg.src = e.target.result;
+      }
+    };
+    reader.readAsDataURL(file);
+
+    // Submit the form
+    document.getElementById('avatarForm').submit();
+  });
+})();
 </script>
 </body>
 </html>
