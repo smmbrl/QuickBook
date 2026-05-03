@@ -1,8 +1,3 @@
-/* ============================================================
-   QUICKBOOK — Provider Services Page
-   Dark gold luxury theme · Syne + DM Sans + DM Mono
-   ============================================================ */
-
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
 
 :root {
@@ -81,7 +76,7 @@ body {
 a { text-decoration: none; color: inherit; }
 button { font-family: inherit; cursor: pointer; border: none; background: none; }
 
-/* ── GRAIN ── */
+/* GRAIN */
 .grain {
   pointer-events: none;
   position: fixed; inset: 0; z-index: 900;
@@ -89,9 +84,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   opacity: .028; mix-blend-mode: overlay;
 }
 
-/* ══════════════════════════════════════
-   NAV
-══════════════════════════════════════ */
+/* NAV */
 .pv-nav {
   position: sticky; top: 0; z-index: 800;
   background: rgba(10,11,13,.92);
@@ -153,6 +146,12 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   color: #1a1200; font-family: var(--font-h); font-weight: 800; font-size: .68rem;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   box-shadow: 0 0 0 2px rgba(201,168,76,.2);
+  overflow: hidden;
+}
+.pv-nav-av img {
+  width: 34px; height: 34px; min-width: 34px; min-height: 34px;
+  max-width: 34px; max-height: 34px;
+  object-fit: cover; display: block; border-radius: 99px;
 }
 .pv-nav-logout {
   font-size: .77rem; font-weight: 500; color: var(--faint);
@@ -160,12 +159,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   border: 1px solid transparent;
   display: inline-flex; align-items: center; gap: .4rem;
   transition: color .2s, background .2s, border-color .2s, box-shadow .2s, transform .15s var(--ease-out);
-}
-.pv-nav-logout::before {
-  content: ''; display: inline-block;
-  width: 6px; height: 6px; border-radius: 99px;
-  background: currentColor; opacity: .5;
-  transition: opacity .2s, background .2s;
 }
 .pv-nav-logout:hover {
   color: #FB7185; background: rgba(244,63,94,.10);
@@ -175,9 +168,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .pv-nav-logout:hover::before { background: var(--red); opacity: 1; }
 
-/* ══════════════════════════════════════
-   HERO
-══════════════════════════════════════ */
+/* HERO */
 .pv-hero {
   position: relative;
   background-image: var(--hero-img);
@@ -225,7 +216,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .pv-hero-title em { font-style: italic; color: var(--gold); }
 .pv-hero-sub { font-size: .82rem; color: var(--faint); max-width: 460px; line-height: 1.55; }
 
-/* ── STAT STRIP ── */
+/*  STAT STRIP  */
 .pv-hero-stats {
   position: relative; z-index: 2;
   max-width: 1380px; width: 100%; margin: 0 auto; padding: 0 1.75rem;
@@ -252,12 +243,10 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .pv-hs-div { width: 1px; background: var(--border); margin: .8rem 2.25rem .8rem 0; flex-shrink: 0; }
 
-/* ══════════════════════════════════════
-   PAGE WRAPPER
-══════════════════════════════════════ */
+/*  PAGE WRAPPER */
 .sv-page { max-width: 1380px; margin: 0 auto; padding: 2rem 1.75rem 5rem; }
 
-/* ── FLASH ── */
+/* FLASH */
 .pv-flash {
   display: flex; align-items: center; gap: .6rem;
   padding: .85rem 1.2rem; border-radius: var(--r-md);
@@ -269,7 +258,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .pv-flash--success { background: var(--green-soft); border: 1px solid var(--green-border); color: #4ADE80; }
 .pv-flash--error   { background: var(--red-soft);   border: 1px solid var(--red-border);   color: #FB7185; }
 
-/* ── TOOLBAR ── */
+/* TOOLBAR */
 .sv-toolbar {
   display: flex; align-items: center; justify-content: space-between;
   gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;
@@ -294,14 +283,17 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .sv-search:focus { border-color: var(--gold-border-md); box-shadow: 0 0 0 3px rgba(201,168,76,.08); }
 
 .sv-filter-select {
-  background: var(--surface-md); border: 1px solid var(--border-md);
+  background: #0d0d0d; border: 1px solid var(--border-md);
   color: var(--off); font-family: var(--font-b); font-size: .83rem;
   padding: .6rem 1rem; border-radius: var(--r-sm); outline: none; cursor: pointer;
   transition: border-color .2s;
 }
 .sv-filter-select:focus { border-color: var(--gold-border-md); }
+.sv-filter-select option {
+  background: #0d0d0d; color: #e5e5e5;
+}
 
-/* ── ADD SERVICE BUTTON ── */
+/* ADD SERVICE BUTTON */
 .sv-add-btn {
   display: inline-flex; align-items: center; gap: .5rem;
   background: linear-gradient(135deg, var(--gold-dim), var(--gold));
@@ -316,7 +308,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .sv-add-btn:active { transform: translateY(0); }
 .sv-add-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
 
-/* ── VIEW TOGGLE ── */
+/* VIEW TOGGLE */
 .sv-view-toggle {
   display: flex; align-items: center;
   background: var(--surface); border: 1px solid var(--border);
@@ -331,9 +323,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .sv-view-btn:hover:not(.is-active) { color: var(--off); background: var(--surface-md); }
 .sv-view-btn svg { width: 15px; height: 15px; }
 
-/* ══════════════════════════════════════
-   SERVICE CARDS GRID
-══════════════════════════════════════ */
+/* SERVICE CARDS GRID */
 .sv-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -431,15 +421,21 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 
 .sv-card-meta {
-  display: flex; flex-wrap: wrap; gap: .5rem;
+  display: flex; flex-wrap: nowrap; gap: 0;
   padding-top: .75rem; border-top: 1px solid var(--border);
 }
 .sv-meta-chip {
-  display: inline-flex; align-items: center; gap: .35rem;
+  display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
+  flex: 1;
   font-size: .72rem; font-weight: 500; color: var(--off);
   background: var(--surface-md); border: 1px solid var(--border);
-  padding: .28rem .65rem; border-radius: 99px;
+  padding: .28rem .65rem; border-radius: 0;
 }
+.sv-meta-chip:first-child { border-radius: 99px 0 0 99px; }
+.sv-meta-chip:last-child,
+.sv-meta-chip:has(+ .sv-status-badge) { border-radius: 0 99px 99px 0; }
+.sv-card-meta .sv-status-badge { margin-left: .4rem; }
+.sv-meta-chip:not(:first-child) { border-left: none; }
 .sv-meta-chip svg { width: 11px; height: 11px; color: var(--faint); flex-shrink: 0; }
 .sv-meta-chip.is-price { color: var(--gold-bright); background: var(--gold-soft); border-color: var(--gold-border); }
 
@@ -452,7 +448,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .sv-status-badge.is-inactive { background: var(--surface-md); border: 1px solid var(--border-md);   color: var(--faint); }
 .sv-status-badge::before { content: ''; width: 5px; height: 5px; border-radius: 99px; background: currentColor; }
 
-/* ── EMPTY STATE ── */
+/*  EMPTY STATE  */
 .sv-empty {
   grid-column: 1 / -1;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -472,9 +468,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .sv-empty p { font-size: .83rem; color: var(--muted); max-width: 320px; }
 
-/* ══════════════════════════════════════
-   LIST VIEW TABLE
-══════════════════════════════════════ */
+/*  LIST VIEW TABLE */
 .sv-table-wrap {
   background: var(--surface); border: 1px solid var(--border-md); border-radius: var(--r-lg);
   overflow: hidden;
@@ -508,9 +502,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 /* Card & table image */
 .sv-card-img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; display: block; }
 
-/* ══════════════════════════════════════
-   MODAL  (Add / Edit Service)
-══════════════════════════════════════ */
+/* MODAL  (Add / Edit Service) */
 .sv-modal-backdrop {
   display: none;
   position: fixed; inset: 0; z-index: 950;
@@ -525,19 +517,26 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   border: 1px solid var(--border-md);
   border-radius: 20px;
   width: 100%; max-width: 540px;
+  max-height: 90vh;
+  display: flex; flex-direction: column;
   overflow: hidden;
   box-shadow: 0 32px 96px rgba(0,0,0,.8), 0 0 0 1px rgba(201,168,76,.06);
   animation: modalIn .28s var(--ease-out);
 }
+.sv-modal > form {
+  display: flex; flex-direction: column;
+  flex: 1; min-height: 0; overflow: hidden;
+}
 @keyframes modalIn { from { opacity:0; transform:scale(.95) translateY(12px); } to { opacity:1; transform:none; } }
 
-/* ── Header ── */
+/*  Header  */
 .sv-modal-header {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;
   padding: 1.6rem 1.75rem 1.4rem;
   background: linear-gradient(135deg, rgba(201,168,76,.06) 0%, transparent 60%);
   border-bottom: 1px solid transparent;
   position: relative;
+  flex-shrink: 0;
 }
 .sv-modal-header::after {
   content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
@@ -564,8 +563,14 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .sv-modal-close:hover { color: var(--white); background: var(--surface-md); border-color: var(--border-md); }
 .sv-modal-close svg { width: 14px; height: 14px; }
 
-/* ── Body ── */
-.sv-modal-body { padding: 1.5rem 1.75rem 1.25rem; }
+/*  Body  */
+.sv-modal-body { padding: 1.5rem 1.75rem 1.25rem; overflow-y: auto; flex: 1; min-height: 0; }
+
+.sv-modal-body::-webkit-scrollbar { width: 4px; }
+.sv-modal-body::-webkit-scrollbar-track { background: transparent; }
+.sv-modal-body::-webkit-scrollbar-thumb { background: rgba(201,168,76,.3); border-radius: 99px; }
+.sv-modal-body::-webkit-scrollbar-thumb:hover { background: rgba(201,168,76,.55); }
+.sv-modal-body { scrollbar-width: thin; scrollbar-color: rgba(201,168,76,.3) transparent; }
 
 /* Section label */
 .sv-section-label {
@@ -590,7 +595,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .sv-label span { color: #FB7185; margin-left: 2px; }
 
-/* ── Inputs ── */
+/*  Inputs  */
 .sv-input, .sv-select, .sv-textarea {
   background: rgba(255,255,255,.04);
   border: 1px solid var(--border-md);
@@ -607,7 +612,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   box-shadow: 0 0 0 3px rgba(201,168,76,.1);
 }
 
-/* ── Fix: autofill background ── */
+/*  Fix: autofill background  */
 .sv-input:-webkit-autofill,
 .sv-input:-webkit-autofill:hover,
 .sv-input:-webkit-autofill:focus,
@@ -619,11 +624,11 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   transition: background-color 9999s ease-in-out 0s;
 }
 
-/* ── Fix: remove duplicate arrow inside icon-wrapped selects ── */
+/*  Fix: remove duplicate arrow inside icon-wrapped selects  */
 .sv-select-wrap .sv-select {
-  background-image: none;   /* kills the CSS chevron */
-  padding-left: 2.35rem;    /* keep icon spacing */
-  padding-right: 1rem;      /* no need for right padding without arrow */
+  background-image: none;  
+  padding-left: 2.35rem;    
+  padding-right: 1rem;     
 }
 
 .sv-select-wrap .sv-select {
@@ -634,7 +639,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .sv-select {
   appearance: none;
   -webkit-appearance: none;
-  /* ... */
 }
 
 /* ── Fix: dark background for native option dropdown ── */
@@ -660,7 +664,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .sv-select-wrap .sv-select { padding-left: 2.35rem; }
 
-/* ── Input addon wrapper: unified gold-bordered box ── */
 .sv-input-addon-wrap {
   display: flex; align-items: stretch;
   border: 1px solid var(--gold-border);
@@ -701,7 +704,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   background: rgba(255,255,255,.06);
 }
 
-/* ── Custom number spinner (hide native) ── */
+/*  Custom number spinner (hide native)  */
 .sv-input[type="number"]::-webkit-outer-spin-button,
 .sv-input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .sv-input[type="number"] { -moz-appearance: textfield;   appearance: textfield;        /* ← add this (standard) */ }
@@ -726,7 +729,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .sv-spin-btn:hover { background: var(--gold-soft); color: var(--gold-bright); }
 .sv-spin-btn:active { background: var(--gold-soft-md); }
 
-/* ── Duration unit selector ── */
+/*  Duration unit selector  */
 .sv-duration-unit {
   appearance: none; -webkit-appearance: none;
   cursor: pointer; outline: none;
@@ -742,18 +745,17 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .sv-duration-unit:focus { color: var(--gold); background: var(--gold-soft); outline: none; }
 .sv-duration-unit option { background: #0D0E10; color: var(--white); }
 
-/* Char counter */
 .sv-char-hint {
   text-align: right; font-family: var(--font-m); font-size: .64rem;
   color: var(--faint); margin-top: .28rem;
 }
 
-/* ── Footer ── */
 .sv-modal-footer {
   display: flex; align-items: center; justify-content: flex-end; gap: .75rem;
   padding: 1.1rem 1.75rem 1.5rem;
   border-top: 1px solid var(--border);
   background: rgba(255,255,255,.015);
+  flex-shrink: 0;
 }
 .sv-btn-ghost {
   display: inline-flex; align-items: center; gap: .4rem;
@@ -763,7 +765,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .sv-btn-ghost:hover { color: var(--white); background: var(--surface-md); border-color: var(--border-hi); }
 
-/* ── Fix: hide icons from Cancel and Save buttons ── */
+/*  Fix: hide icons from Cancel and Save buttons  */
 .sv-btn-ghost svg,
 .sv-btn-primary svg { display: none; }
 
@@ -779,7 +781,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .sv-btn-primary:hover { opacity: .9; transform: translateY(-1px); box-shadow: 0 4px 24px rgba(201,168,76,.4); }
 .sv-btn-primary:active { transform: translateY(0); }
 
-/* ── DELETE CONFIRM ── */
+/*  DELETE CONFIRM  */
 .sv-confirm-modal {
   background: #111214;
   border: 1px solid var(--red-border);
@@ -811,7 +813,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .sv-btn-danger:hover { opacity: .88; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(244,63,94,.4); }
 
-/* ── RESPONSIVE ── */
+/*  RESPONSIVE  */
 @media (max-width: 900px) {
   .sv-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
   .pv-nav-links { display: none; }
@@ -822,4 +824,27 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   .sv-page { padding: 1.25rem 1rem 4rem; }
   .sv-toolbar { flex-direction: column; align-items: stretch; }
   .sv-search { width: 100%; }
+}
+
+/*  Location type notices in modal  */
+.sv-loc-notice {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .6rem .85rem;
+  border-radius: 8px;
+  font-size: .75rem;
+  line-height: 1.5;
+  margin-top: .4rem;
+  border: 1px solid transparent;
+}
+.sv-loc-notice--onsite {
+  background: rgba(251,191,36,.08);
+  border-color: rgba(251,191,36,.2);
+  color: #fbbf24;
+}
+.sv-loc-notice--remote {
+  background: rgba(96,165,250,.08);
+  border-color: rgba(96,165,250,.2);
+  color: #60a5fa;
 }

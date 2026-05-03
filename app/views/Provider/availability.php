@@ -4,26 +4,26 @@ $db           = Database::getInstance();
 $providerId   = $_SESSION['user_id'] ?? 0;
 $providerName = htmlspecialchars($_SESSION['user_name'] ?? 'Provider');
 
-/* ── Provider profile ── */
+/*  Provider profile  */
 $stmt = $db->prepare("SELECT * FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
 $stmt->execute([$providerId]);
 $profile   = $stmt->fetch();
 $profileId = $profile['id'] ?? 0;
 $initials  = strtoupper(substr($providerName, 0, 1));
 
-/* ── Pending bookings count (for nav badge) ── */
+/* Pending bookings count (for nav badge) */
 $stmt = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ? AND status = 'pending'");
 $stmt->execute([$profileId]);
 $pendingBookings = (int)$stmt->fetchColumn();
 
-/* ── Flash ── */
+/* Flash */
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
 
-/* ── Days config ── */
+/* Days config */
 $days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
-/* ── Fetch existing availability ── */
+/* Fetch existing availability */
 $stmt = $db->prepare("SELECT * FROM tbl_provider_availability WHERE provider_id = ?");
 $stmt->execute([$profileId]);
 $rows = $stmt->fetchAll();
@@ -33,7 +33,7 @@ foreach ($rows as $row) {
     $availability[$row['day_of_week']] = $row;
 }
 
-/* ── Count active days ── */
+/* Count active days */
 $activeDays = count(array_filter($availability, fn($r) => $r['is_available'] ?? 0));
 $totalSlots = 0;
 foreach ($availability as $r) {
@@ -59,9 +59,7 @@ foreach ($availability as $r) {
 
 <div class="grain" aria-hidden="true"></div>
 
-<!-- ══════════════════════════════════════
-     NAV
-══════════════════════════════════════ -->
+<!-- NAV -->
 <nav class="pv-nav" role="navigation" aria-label="Provider navigation">
   <div class="pv-nav-inner">
     <a href="<?= BASE_URL ?>provider/dashboard" class="pv-logo">
@@ -79,7 +77,13 @@ foreach ($availability as $r) {
     </div>
     <div class="pv-nav-end">
       <div class="pv-nav-user">
-        <div class="pv-nav-av" aria-hidden="true"><?= $initials ?></div>
+        <div class="pv-nav-av" aria-hidden="true">
+          <?php if (!empty($profile['profile_photo'])): ?>
+            <img src="<?= BASE_URL ?>assets/uploads/profiles/<?= htmlspecialchars($profile['profile_photo']) ?>" alt="Profile photo" style="width:34px;height:34px;min-width:34px;min-height:34px;max-width:34px;max-height:34px;object-fit:cover;border-radius:99px;display:block;">
+          <?php else: ?>
+            <span><?= $initials ?></span>
+          <?php endif; ?>
+        </div>
         <span><?= $providerName ?></span>
       </div>
       <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout">Sign out</a>
@@ -87,9 +91,7 @@ foreach ($availability as $r) {
   </div>
 </nav>
 
-<!-- ══════════════════════════════════════
-     HERO
-══════════════════════════════════════ -->
+<!-- HERO -->
 <header class="pv-hero" role="banner">
   <div class="pv-hero-bg" aria-hidden="true">
     <div class="pv-hero-bg-img pv-hero-bg-img--1"></div>
@@ -130,9 +132,7 @@ foreach ($availability as $r) {
   </div>
 </header>
 
-<!-- ══════════════════════════════════════
-     PAGE
-══════════════════════════════════════ -->
+<!-- PAGE -->
 <main class="av-page" role="main">
 
   <?php if ($flash): ?>
@@ -144,7 +144,7 @@ foreach ($availability as $r) {
 
   <div class="av-layout">
 
-    <!-- ── LEFT: Weekly Schedule ── -->
+    <!-- Weekly Schedule  -->
     <section class="av-card av-schedule" aria-label="Weekly schedule">
       <div class="av-card-head">
         <div>
@@ -251,7 +251,6 @@ foreach ($availability as $r) {
       </form>
     </section>
 
-    <!-- ── RIGHT: Visual Overview ── -->
     <aside class="av-sidebar" aria-label="Availability overview">
 
       <!-- Weekly heatmap -->
@@ -337,7 +336,7 @@ foreach ($availability as $r) {
 </main>
 
 <script>
-  // ── Track unsaved state ──
+  // Track unsaved state 
   const form = document.getElementById('avForm');
   const changeIndicator = document.getElementById('changeIndicator');
 
@@ -345,7 +344,7 @@ foreach ($availability as $r) {
     changeIndicator.style.opacity = '1';
   });
 
-  // ── Toggle a day on/off ──
+  // Toggle a day on/off 
   function toggleDay(day, active) {
     const row    = document.getElementById('row-' + day);
     const times  = document.getElementById('times-' + day);
@@ -371,7 +370,7 @@ foreach ($availability as $r) {
     changeIndicator.style.opacity = '1';
   }
 
-  // ── Update the status text beneath the day name ──
+  // Update the status text beneath the day name and the hours badge when time inputs change
   function updateStatus(day) {
     const startEl = document.getElementById('start-' + day);
     const endEl   = document.getElementById('end-' + day);
@@ -473,7 +472,7 @@ foreach ($availability as $r) {
     });
   }
 
-  // ── Init badges on load ──
+  // Init badges on load 
   document.addEventListener('DOMContentLoaded', () => {
     const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
     days.forEach(day => {
