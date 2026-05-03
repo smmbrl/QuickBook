@@ -1,9 +1,3 @@
-/* ============================================================
-   QUICKBOOK — Customer Loyalty Page
-   Design system: dark bg · gold accents · Syne + DM Sans + DM Mono
-   Mirrors dashboard/bookings pattern exactly
-   ============================================================ */
-
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
 
 :root {
@@ -68,16 +62,13 @@ body {
 a { text-decoration: none; color: inherit; }
 button { font-family: inherit; cursor: pointer; border: none; background: none; }
 
-/* ── Grain overlay ── */
 .grain {
   pointer-events: none; position: fixed; inset: 0; z-index: 900;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   opacity: .028; mix-blend-mode: overlay;
 }
 
-/* ══════════════════════════════════════
-   NAV — identical to other customer pages
-══════════════════════════════════════ */
+
 .pv-nav {
   position: sticky; top: 0; z-index: 800;
   background: rgba(10,11,13,.92);
@@ -133,13 +124,16 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   font-weight: 600; color: var(--gold-bright);
 }
 .pv-notif-btn {
-  position: relative; width: 36px; height: 36px; border-radius: var(--r-sm);
-  border: 1px solid var(--border); background: var(--surface); color: var(--off);
-  display: flex; align-items: center; justify-content: center; font-size: .95rem; transition: all .2s;
+  position: relative;
+  background: none; border: none;
+  color: var(--faint); font-size: 1.15rem;
+  display: flex; align-items: center; justify-content: center;
+  padding: .3rem; cursor: pointer;
+  transition: color .2s, transform .15s;
 }
-.pv-notif-btn:hover { border-color: var(--border-md); color: var(--white); background: var(--surface-md); }
+.pv-notif-btn:hover { color: var(--gold); transform: scale(1.1); }
 .pv-notif-dot {
-  position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 99px;
+  position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border-radius: 99px;
   background: var(--gold); border: 1.5px solid var(--bg); animation: pulse 1.8s ease infinite;
 }
 .pv-nav-av {
@@ -152,27 +146,33 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .pv-nav-user-name { font-size: .8rem; font-weight: 600; color: var(--white); line-height: 1.2; }
 .pv-nav-user-role { font-family: var(--font-m); font-size: .58rem; color: var(--gold); }
 .pv-nav-logout {
-  font-size: .78rem; font-weight: 500; color: var(--muted);
-  padding: .4rem .85rem; border: 1px solid var(--border); border-radius: var(--r-sm);
-  transition: color .2s, border-color .2s, background .2s;
+  font-size: .77rem; font-weight: 500; color: var(--faint);
+  padding: .32rem .85rem; border-radius: var(--r-xs);
+  border: 1px solid transparent;
+  display: inline-flex; align-items: center;
+  background: transparent;
+  transition: color .2s, background .2s, border-color .2s, box-shadow .2s, transform .15s var(--ease-out);
+  white-space: nowrap;
 }
-.pv-nav-logout:hover { color: var(--white); border-color: var(--border-md); background: var(--surface-md); }
+.pv-nav-logout:hover {
+  color: #FB7185; background: rgba(244,63,94,.10);
+  border-color: rgba(244,63,94,.45); box-shadow: 0 0 12px rgba(244,63,94,.15); transform: translateY(-1px);
+}
+.pv-nav-logout:active { transform: translateY(0); box-shadow: none; }
 
-/* pulse keyframe */
+
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%       { opacity: .6; transform: scale(.85); }
 }
 
-/* dot pulse */
+
 .pv-dot-pulse {
   display: inline-block; width: 7px; height: 7px; border-radius: 99px;
   background: var(--gold); animation: pulse 1.4s ease infinite; flex-shrink: 0;
 }
 
-/* ══════════════════════════════════════
-   HERO
-══════════════════════════════════════ */
+
 .ly-hero {
   position: relative; overflow: hidden;
   background:
@@ -206,7 +206,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   font-size: .9rem; color: var(--off); max-width: 42ch;
 }
 
-/* Tier hero card */
+
 .ly-tier-hero-card {
   display: flex; align-items: center; gap: 1.25rem;
   padding: 1.25rem 1.75rem; border-radius: var(--r-xl);
@@ -240,9 +240,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   text-transform: uppercase; letter-spacing: .08em;
 }
 
-/* ══════════════════════════════════════
-   FLASH
-══════════════════════════════════════ */
 .ly-flash {
   max-width: 1380px; margin: 1rem auto; padding: .85rem 1.5rem;
   border-radius: var(--r-md); font-size: .85rem; font-weight: 500;
@@ -250,16 +247,13 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .ly-flash--success { background: var(--green-soft); border: 1px solid var(--green-border); color: var(--green); }
 .ly-flash--error   { background: var(--red-soft);   border: 1px solid var(--red-border);   color: var(--red); }
 
-/* ══════════════════════════════════════
-   PAGE LAYOUT
-══════════════════════════════════════ */
+
 .ly-page {
   max-width: 1380px; margin: 0 auto;
   padding: 2rem 1.75rem 4rem;
   display: flex; flex-direction: column; gap: 2.5rem;
 }
 
-/* ── Section wrapper ── */
 .ly-section { display: flex; flex-direction: column; gap: 1.25rem; }
 .ly-section-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
 .ly-section-title {
@@ -269,9 +263,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .ly-section-sub { font-family: var(--font-m); font-size: .72rem; color: var(--muted); }
 .ly-section-sub strong { color: var(--gold-bright); }
 
-/* ══════════════════════════════════════
-   STATS ROW
-══════════════════════════════════════ */
+
 .ly-stats-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr) 1.6fr;
@@ -296,7 +288,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .ly-stat-label { font-size: .72rem; color: var(--muted); margin-top: .18rem; }
 
-/* Tier progress card */
+
 .ly-tier-progress-card {
   background: var(--gold-soft); border: 1px solid var(--gold-border);
   border-radius: var(--r-lg); padding: 1.2rem 1.5rem;
@@ -337,9 +329,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .ly-tier-hint strong { color: var(--gold-bright); }
 
-/* ══════════════════════════════════════
-   TIER JOURNEY CARDS
-══════════════════════════════════════ */
+
 .ly-tiers-grid {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;
 }
@@ -393,9 +383,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .tier-silver .ly-tier-card-perks li::before { color: var(--silver); }
 .tier-bronze .ly-tier-card-perks li::before { color: var(--bronze); }
 
-/* ══════════════════════════════════════
-   REWARDS GRID
-══════════════════════════════════════ */
 .ly-rewards-grid {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;
 }
@@ -435,9 +422,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   font-family: var(--font-m); font-size: .63rem; color: var(--faint);
 }
 
-/* ══════════════════════════════════════
-   HISTORY TABLE
-══════════════════════════════════════ */
+
 .ly-history-table-wrap {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-xl); overflow: hidden;
@@ -484,9 +469,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .ly-pts-pill.is-earn   { background: var(--green-soft); color: var(--green); border: 1px solid var(--green-border); }
 .ly-pts-pill.is-redeem { background: var(--red-soft);   color: var(--red);   border: 1px solid var(--red-border); }
 
-/* ══════════════════════════════════════
-   EMPTY STATE
-══════════════════════════════════════ */
+
 .ly-empty {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-xl); padding: 3.5rem 2rem;
@@ -502,9 +485,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .ly-empty-cta:hover { background: var(--gold-soft); box-shadow: var(--shadow-gold); }
 
-/* ══════════════════════════════════════
-   HOW IT WORKS
-══════════════════════════════════════ */
 .ly-how-grid {
   display: grid;
   grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
@@ -526,9 +506,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   align-self: center; flex-shrink: 0;
 }
 
-/* ══════════════════════════════════════
-   FOOTER
-══════════════════════════════════════ */
 .ly-footer {
   border-top: 1px solid var(--border);
   margin-top: 1rem;
@@ -542,9 +519,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .ly-footer-inner a { color: var(--gold); transition: opacity .15s; }
 .ly-footer-inner a:hover { opacity: .75; }
 
-/* ══════════════════════════════════════
-   RESPONSIVE
-══════════════════════════════════════ */
 @media (max-width: 1100px) {
   .ly-stats-row   { grid-template-columns: repeat(3, 1fr); }
   .ly-stats-row .ly-tier-progress-card { grid-column: 1 / -1; }
