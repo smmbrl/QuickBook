@@ -1,5 +1,5 @@
 <?php
-// app/views/customer/dashboard.php
+
 $name   = htmlspecialchars($_SESSION['user_name']  ?? 'Customer');
 $email  = htmlspecialchars($_SESSION['user_email'] ?? '');
 $userId = (int)($_SESSION['user_id'] ?? 0);
@@ -7,7 +7,6 @@ $userId = (int)($_SESSION['user_id'] ?? 0);
 require_once __DIR__ . '/../../../config/database.php';
 $db = Database::getInstance();
 
-/* ── Stats ── */
 $stTotal = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE customer_id = ?");
 $stTotal->execute([$userId]);
 $totalBookings = (int)$stTotal->fetchColumn();
@@ -36,7 +35,6 @@ $stMonthSpent = $db->prepare("SELECT COALESCE(SUM(s.price),0) FROM tbl_bookings 
 $stMonthSpent->execute([$userId]);
 $monthSpent = (float)$stMonthSpent->fetchColumn();
 
-/* ── Loyalty ── */
 $loyaltyTier = match(true) {
     $loyaltyPoints >= 2000 => 'Gold',
     $loyaltyPoints >= 1000 => 'Silver',
@@ -46,9 +44,10 @@ $nextLevel = 500;
 $progress  = min(100, round(($loyaltyPoints % $nextLevel) / $nextLevel * 100));
 $ptsToNext = $nextLevel - ($loyaltyPoints % $nextLevel);
 
-/* ── Recent bookings ── */
 $stRecent = $db->prepare("
-    SELECT b.*, pp.business_name, s.name AS service_name, s.price
+    SELECT b.*, pp.business_name, pp.profile_photo,
+           s.name AS service_name, s.price,
+           s.service_type, s.duration_minutes, s.location_type
     FROM tbl_bookings b
     JOIN tbl_provider_profiles pp ON b.provider_id = pp.id
     JOIN tbl_services s           ON b.service_id  = s.id
@@ -58,7 +57,6 @@ $stRecent = $db->prepare("
 $stRecent->execute([$userId]);
 $recentBookings = $stRecent->fetchAll();
 
-/* ── Upcoming ── */
 $stUpcomingList = $db->prepare("
     SELECT b.*, pp.business_name, s.name AS service_name, s.price
     FROM tbl_bookings b
@@ -70,7 +68,6 @@ $stUpcomingList = $db->prepare("
 $stUpcomingList->execute([$userId]);
 $upcomingBookings = $stUpcomingList->fetchAll();
 
-/* ── Monthly chart ── */
 $stMonthly = $db->prepare("
     SELECT DATE_FORMAT(b.booking_date,'%b') AS month,
            DATE_FORMAT(b.booking_date,'%Y-%m') AS month_key,
@@ -83,7 +80,7 @@ $stMonthly = $db->prepare("
 $stMonthly->execute([$userId]);
 $monthlyData = $stMonthly->fetchAll();
 
-/* ── Pending review ── */
+
 $stLastCompleted = $db->prepare("
     SELECT b.*, pp.business_name, s.name AS service_name
     FROM tbl_bookings b
@@ -96,10 +93,28 @@ $stLastCompleted = $db->prepare("
 $stLastCompleted->execute([$userId]);
 $pendingReview = $stLastCompleted->fetch();
 
-/* ── Helpers ── */
 $hour     = (int)date('H');
 $greeting = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good evening');
 $initials = strtoupper(substr($name, 0, 2));
+$stAv = $db->prepare("SELECT avatar_url FROM tbl_users WHERE id = ? LIMIT 1");
+$stAv->execute([$userId]);
+$avatarUrl = ($av = $stAv->fetchColumn()) ? BASE_URL . 'assets/uploads/profiles/' . htmlspecialchars($av) : null;
+
+$imageMap = [
+    'Barber'        => 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=80&h=80&fit=crop&q=70',
+    'Hair Stylist'  => 'https://images.unsplash.com/photo-1562322140-8baeececf3df?w=80&h=80&fit=crop&q=70',
+    'Nail Tech'     => 'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=80&h=80&fit=crop&q=70',
+    'Massage'       => 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=80&h=80&fit=crop&q=70',
+    'Skincare'      => 'https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=80&h=80&fit=crop&q=70',
+    'Fitness'       => 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=80&h=80&fit=crop&q=70',
+    'Home Cleaning' => 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=80&h=80&fit=crop&q=70',
+    'Pet Groomer'   => 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=80&h=80&fit=crop&q=70',
+    'Event Stylist' => 'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=80&h=80&fit=crop&q=70',
+    'Makeup'        => 'https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?w=80&h=80&fit=crop&q=70',
+];
+function pvServiceImage(string $type, array $map): string {
+    return $map[$type] ?? 'https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?w=80&h=80&fit=crop&q=70';
+}
 
 $chartLabels   = array_column($monthlyData, 'month');
 $chartSpend    = array_map(fn($r) => (float)$r['total'], $monthlyData);
@@ -130,13 +145,11 @@ $spentDisplay = fmtMoney($totalSpent);
   <title>QuickBook — Dashboard</title>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_dashboard.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
 
-<!-- ══════════════════════════════════════
-     NAV — identical to provider
-══════════════════════════════════════ -->
 <nav class="pv-nav" role="navigation" aria-label="Customer navigation">
   <div class="pv-nav-inner">
 
@@ -157,12 +170,17 @@ $spentDisplay = fmtMoney($totalSpent);
     </div>
 
     <div class="pv-nav-end">
-      <div class="pv-points-badge">⭐ <?= number_format($loyaltyPoints) ?> pts</div>
       <button class="pv-notif-btn" aria-label="Notifications">
-        🔔
+        <i class="fa-solid fa-bell"></i>
         <span class="pv-notif-dot" aria-hidden="true"></span>
       </button>
-      <div class="pv-nav-av" aria-hidden="true"><?= $initials ?></div>
+      <div class="pv-nav-av" aria-hidden="true">
+        <?php if ($avatarUrl): ?>
+          <img src="<?= $avatarUrl ?>" alt="<?= $name ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
+        <?php else: ?>
+          <?= $initials ?>
+        <?php endif; ?>
+      </div>
       <div class="pv-nav-user">
         <div class="pv-nav-user-name"><?= $name ?></div>
         <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
@@ -173,9 +191,7 @@ $spentDisplay = fmtMoney($totalSpent);
   </div>
 </nav>
 
-<!-- ══════════════════════════════════════
-     HERO — identical structure to provider
-══════════════════════════════════════ -->
+
 <header class="pv-hero" role="banner">
   <div class="pv-hero-overlay" aria-hidden="true"></div>
 
@@ -205,7 +221,6 @@ $spentDisplay = fmtMoney($totalSpent);
     <?php endif; ?>
   </div>
 
-  <!-- Stat strip — mirrors provider exactly -->
   <div class="pv-hero-stats" role="region" aria-label="Quick stats">
     <div class="pv-hs-item">
       <span class="pv-hs-val"><?= $totalBookings ?></span>
@@ -239,37 +254,29 @@ $spentDisplay = fmtMoney($totalSpent);
   </div>
 </header>
 
-<!-- ══════════════════════════════════════
-     MAIN CONTENT
-══════════════════════════════════════ -->
 <main class="pv-page" role="main">
 
-  <!-- KPI Cards — same pattern as provider -->
   <div class="pv-kpi-row" role="region" aria-label="Performance overview">
 
     <div class="pv-kpi pv-kpi--gold">
-      <div class="pv-kpi-icon">📋</div>
       <div class="pv-kpi-val"><?= $totalBookings ?></div>
       <div class="pv-kpi-label">Total Bookings</div>
       <div class="pv-kpi-sub">All time</div>
     </div>
 
     <div class="pv-kpi pv-kpi--green">
-      <div class="pv-kpi-icon">📅</div>
       <div class="pv-kpi-val"><?= $upcomingCount ?></div>
       <div class="pv-kpi-label">Upcoming</div>
       <div class="pv-kpi-sub">Pending &amp; confirmed</div>
     </div>
 
     <div class="pv-kpi pv-kpi--blue">
-      <div class="pv-kpi-icon">⭐</div>
       <div class="pv-kpi-val"><?= number_format($loyaltyPoints) ?></div>
       <div class="pv-kpi-label">Loyalty Points</div>
       <div class="pv-kpi-sub"><?= $loyaltyTier ?> tier</div>
     </div>
 
     <div class="pv-kpi pv-kpi--indigo">
-      <div class="pv-kpi-icon">💸</div>
       <div class="pv-kpi-val"><?= $spentDisplay ?></div>
       <div class="pv-kpi-label">Total Spent</div>
       <div class="pv-kpi-sub"><?= $completedCount ?> completed</div>
@@ -277,13 +284,11 @@ $spentDisplay = fmtMoney($totalSpent);
 
   </div>
 
-  <!-- 2-col layout — identical to provider -->
   <div class="pv-layout">
 
-    <!-- LEFT COLUMN -->
+
     <div class="pv-main">
 
-      <!-- Spending chart -->
       <div class="pv-card">
         <div class="pv-card-head">
           <div>
@@ -303,42 +308,69 @@ $spentDisplay = fmtMoney($totalSpent);
         </div>
       </div>
 
-      <!-- Recent Bookings -->
-      <div class="pv-card">
+      <div class="pv-card pv-card--table">
         <div class="pv-card-head">
           <h2>Recent Bookings</h2>
           <a href="<?= BASE_URL ?>bookings" class="pv-link">View all →</a>
         </div>
-        <div class="pv-booking-list">
-          <?php if (empty($recentBookings)): ?>
-          <div class="pv-empty-state">
-            <div class="pv-empty-icon" aria-hidden="true">📭</div>
-            <p>No bookings yet — find a service to get started.</p>
-            <a href="<?= BASE_URL ?>browse" class="pv-empty-cta">Browse Services →</a>
-          </div>
-          <?php else: foreach ($recentBookings as $b): ?>
-          <div class="pv-booking-item">
-            <div class="pv-booking-av"><?= serviceIcon($b['service_name']) ?></div>
-            <div class="pv-booking-info">
-              <div class="pv-booking-service"><?= htmlspecialchars($b['service_name']) ?></div>
-              <div class="pv-booking-provider"><?= htmlspecialchars($b['business_name']) ?></div>
-            </div>
-            <div class="pv-booking-right">
-              <span class="pv-pill pv-pill--<?= $b['status'] ?>"><?= ucfirst(str_replace('_',' ',$b['status'])) ?></span>
-              <div class="pv-booking-date"><?= date('M d, Y', strtotime($b['booking_date'])) ?></div>
-              <div class="pv-booking-price">₱<?= number_format($b['price'],2) ?></div>
-            </div>
-          </div>
-          <?php endforeach; endif; ?>
+        <?php if (empty($recentBookings)): ?>
+        <div class="pv-empty-state">
+          <div class="pv-empty-icon" aria-hidden="true">📭</div>
+          <p>No bookings yet — find a service to get started.</p>
+          <a href="<?= BASE_URL ?>browse" class="pv-empty-cta">Browse Services →</a>
         </div>
+        <?php else: ?>
+        <div class="pv-rb-table-wrap">
+          <table class="pv-rb-table">
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th>Type</th>
+                <th>Price</th>
+                <th>Duration</th>
+                <th>Location</th>
+                <th>Status</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($recentBookings as $b):
+                $dm      = (int)($b['duration_minutes'] ?? 0);
+                $dLabel  = $dm ? (($dm >= 60 && $dm % 60 === 0) ? ($dm/60).' hr' : $dm.' min') : '—';
+                $imgSrc  = pvServiceImage($b['service_type'] ?? '', $imageMap);
+              ?>
+              <tr>
+                <td>
+                  <div class="pv-rb-name">
+                    <div class="pv-rb-icon">
+                      <img src="<?= $imgSrc ?>" alt="">
+                    </div>
+                    <?= htmlspecialchars($b['service_name']) ?>
+                  </div>
+                </td>
+                <td><?= htmlspecialchars($b['service_type'] ?? '—') ?></td>
+                <td class="pv-rb-price">₱<?= number_format((float)$b['price'], 2) ?></td>
+                <td><?= $dLabel ?></td>
+                <td><?= htmlspecialchars($b['location_type'] ?? '—') ?></td>
+                <td>
+                  <span class="pv-rb-badge pv-rb-badge--<?= $b['status'] ?>">
+                    <?= ucfirst(str_replace('_', ' ', $b['status'])) ?>
+                  </span>
+                </td>
+                <td class="pv-rb-date"><?= date('M d, Y', strtotime($b['booking_date'])) ?></td>
+              </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+        <?php endif; ?>
       </div>
 
-    </div><!-- /pv-main -->
+    </div>
 
-    <!-- SIDEBAR -->
     <aside class="pv-sidebar" aria-label="Sidebar">
 
-      <!-- Quick Actions — gold primary CTA like provider -->
+  
       <div class="pv-card">
         <div class="pv-card-head"><h2>Quick Actions</h2></div>
         <div class="pv-actions">
@@ -364,7 +396,6 @@ $spentDisplay = fmtMoney($totalSpent);
         </div>
       </div>
 
-      <!-- Today's Snapshot -->
       <div class="pv-card">
         <div class="pv-card-head"><h2>Today's Snapshot</h2></div>
         <div class="pv-snap">
@@ -392,7 +423,6 @@ $spentDisplay = fmtMoney($totalSpent);
         </div>
       </div>
 
-      <!-- Upcoming Bookings -->
       <div class="pv-card">
         <div class="pv-card-head">
           <h2>Upcoming</h2>
@@ -426,7 +456,6 @@ $spentDisplay = fmtMoney($totalSpent);
         </div>
       </div>
 
-      <!-- Loyalty -->
       <div class="pv-card">
         <div class="pv-card-head">
           <h2>Loyalty Status</h2>
@@ -455,9 +484,8 @@ $spentDisplay = fmtMoney($totalSpent);
 
     </aside>
 
-  </div><!-- /pv-layout -->
+  </div>
 
-  <!-- Review banner -->
   <?php if ($pendingReview): ?>
   <div class="pv-review-banner">
     <div class="pv-review-icon" aria-hidden="true">⭐</div>
@@ -537,7 +565,6 @@ $spentDisplay = fmtMoney($totalSpent);
     }
   });
 
-  /* Tab switching */
   document.querySelectorAll('.pv-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       tab.closest('.pv-tabs').querySelectorAll('.pv-tab').forEach(t => t.classList.remove('active'));
