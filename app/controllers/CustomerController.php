@@ -223,7 +223,7 @@ class CustomerController
         $userId = (int)$_SESSION['user_id'];
         $action = $_POST['action'] ?? '';
 
-        // Upload avatar
+        //  Upload avatar 
         if ($action === 'upload_avatar') {
             if (empty($_FILES['avatar']) || $_FILES['avatar']['error'] !== UPLOAD_ERR_OK) {
                 $_SESSION['flash'] = ['type' => 'error', 'msg' => 'No file uploaded or upload error occurred.'];
@@ -271,7 +271,7 @@ class CustomerController
             header('Location: ' . BASE_URL . 'profile'); exit;
         }
 
-        // Update profile info
+        // Update profile info 
         if ($action === 'update_profile') {
             $newFirst   = trim($_POST['first_name']    ?? '');
             $newLast    = trim($_POST['last_name']     ?? '');
@@ -309,7 +309,7 @@ class CustomerController
             header('Location: ' . BASE_URL . 'profile'); exit;
         }
 
-        // Change password 
+        //  Change password 
         if ($action === 'change_password') {
             $currentPw = $_POST['current_password'] ?? '';
             $newPw     = $_POST['new_password']     ?? '';

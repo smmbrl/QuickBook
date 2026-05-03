@@ -1,6 +1,5 @@
 <?php
-// Screen 2b — Register Page
-// View: app/views/register.php
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -15,9 +14,7 @@
 
 <div class="register-page">
 
-  <!-- ════════════════════════════════════════════
-       LEFT PANEL
-  ════════════════════════════════════════════ -->
+  <!-- LEFT PANEL -->
   <div class="register-left">
 
     <div class="register-left-bg"></div>
@@ -79,9 +76,7 @@
 
   </div>
 
-  <!-- ════════════════════════════════════════════
-       RIGHT PANEL
-  ════════════════════════════════════════════ -->
+  <!-- RIGHT PANEL -->
   <div class="register-right">
     <div class="register-form-box">
 
@@ -148,6 +143,26 @@
         <div class="form-group">
           <label class="form-label">Mobile Number</label>
           <input type="tel" name="phone" class="form-control" placeholder="+63 917 000 0000" required autocomplete="off">
+        </div>
+
+        <!-- Gender & Date of Birth Row -->
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Gender</label>
+            <select name="gender" class="form-control" style="background:#1a1d2e;color:#fff;border:1px solid rgba(255,255,255,.12);padding:.65rem 1rem;border-radius:10px;width:100%;font-size:.9rem;-webkit-appearance:none;appearance:none">
+              <option value="" disabled selected style="color:rgba(255,255,255,.4)">Select gender</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="non_binary">Non-binary</option>
+              <option value="prefer_not_to_say">Prefer not to say</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date of Birth</label>
+            <input type="date" name="date_of_birth" class="form-control" autocomplete="off"
+              style="color-scheme:dark"
+              max="<?= date('Y-m-d', strtotime('-13 years')) ?>">
+          </div>
         </div>
 
         <!-- Password -->
@@ -230,10 +245,9 @@
 
 </div>
 
-<div class="screen-label">Screen 2b / 10 — Register</div>
 
 <script>
-  /* ── Prevent browser autofill (Edge/Chrome trick) ────────── */
+  /*  Prevent browser autofill (Edge/Chrome trick)  */
   document.querySelectorAll('.register-right .form-control').forEach(input => {
     input.setAttribute('readonly', true);
     input.addEventListener('focus', function () {
@@ -241,7 +255,7 @@
     });
   });
 
-  /* ── Role selector ───────────────────────────── */
+  /*  Role selector  */
   function selectRole(role) {
     document.getElementById('role-customer').classList.remove('selected');
     document.getElementById('role-provider').classList.remove('selected');
@@ -249,7 +263,7 @@
     document.getElementById('role-input').value = role;
   }
 
-  /* ── Password visibility toggle ──────────────── */
+  /* Password visibility toggle */
   function togglePw() {
     const input   = document.getElementById('reg-pw');
     const eyeOn   = document.getElementById('eye-icon');
@@ -260,7 +274,7 @@
     eyeOff.style.display = isHidden ? ''        : 'none';
   }
 
-  /* ── Password strength checker ───────────────── */
+  /* Password strength checker */
   function checkStrength(value) {
     const segs  = ['seg1','seg2','seg3','seg4'].map(id => document.getElementById(id));
     const label = document.getElementById('strength-label');
