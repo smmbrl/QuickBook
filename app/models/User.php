@@ -14,14 +14,17 @@ class User
     {
         $hash = password_hash($data['password'], PASSWORD_BCRYPT, ['cost' => 12]);
         $stmt = $this->db->prepare(
-            "INSERT INTO tbl_users (first_name, last_name, email, phone, password_hash, role)
-             VALUES (:first_name, :last_name, :email, :phone, :password_hash, :role)"
+            "INSERT INTO tbl_users (first_name, last_name, email, phone, gender, date_of_birth, address, password_hash, role)
+             VALUES (:first_name, :last_name, :email, :phone, :gender, :date_of_birth, :address, :password_hash, :role)"
         );
         $ok = $stmt->execute([
             ':first_name'    => $data['first_name'],
             ':last_name'     => $data['last_name'],
             ':email'         => $data['email'],
             ':phone'         => $data['phone'] ?? null,
+            ':gender'        => $data['gender'] ?? null,
+            ':date_of_birth' => !empty($data['date_of_birth']) ? $data['date_of_birth'] : null,
+            ':address'       => $data['address'] ?? null,
             ':password_hash' => $hash,
             ':role'          => $data['role'] ?? 'customer',
         ]);
