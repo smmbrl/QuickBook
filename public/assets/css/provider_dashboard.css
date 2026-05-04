@@ -1,9 +1,3 @@
-/* ============================================================
-   QUICKBOOK — Provider Dashboard  (Enhanced)
-   Dark gold luxury theme
-   Fonts: Syne + DM Sans + DM Mono
-   ============================================================ */
-
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
 
 :root {
@@ -79,7 +73,7 @@ body {
 a { text-decoration: none; color: inherit; }
 button { font-family: inherit; cursor: pointer; border: none; background: none; }
 
-/* ── GRAIN ── */
+/* GRAIN */
 .grain {
   pointer-events: none;
   position: fixed; inset: 0; z-index: 900;
@@ -87,9 +81,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   opacity: .028; mix-blend-mode: overlay;
 }
 
-/* ══════════════════════════════════════
-   NAV
-══════════════════════════════════════ */
+/* NAV */
 .pv-nav {
   position: sticky; top: 0; z-index: 800;
   background: rgba(10,11,13,.92);
@@ -183,6 +175,12 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   font-family: var(--font-h); font-weight: 800; font-size: .68rem;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   box-shadow: 0 0 0 2px rgba(201,168,76,.2);
+  overflow: hidden;
+}
+.pv-nav-av img {
+  width: 34px; height: 34px; min-width: 34px; min-height: 34px;
+  max-width: 34px; max-height: 34px;
+  object-fit: cover; display: block; border-radius: 99px;
 }
 .pv-nav-logout {
   font-size: .77rem; font-weight: 500; color: var(--faint);
@@ -190,15 +188,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   border: 1px solid transparent;
   display: inline-flex; align-items: center; gap: .4rem;
   transition: color .2s, background .2s, border-color .2s, box-shadow .2s, transform .15s var(--ease-out);
-}
-.pv-nav-logout::before {
-  content: '';
-  display: inline-block;
-  width: 6px; height: 6px;
-  border-radius: 99px;
-  background: currentColor;
-  opacity: .5;
-  transition: opacity .2s, background .2s;
 }
 .pv-nav-logout:hover {
   color: #FB7185;
@@ -216,9 +205,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   box-shadow: none;
 }
 
-/* ══════════════════════════════════════
-   HERO
-══════════════════════════════════════ */
+/* HERO */
 .pv-hero {
   position: relative;
   background-image: var(--hero-img);
@@ -301,7 +288,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   background: var(--gold); animation: pulse 1.4s ease infinite; flex-shrink: 0;
 }
 
-/* ── STAT STRIP ── */
+/* STAT STRIP */
 .pv-hero-stats {
   position: relative; z-index: 2;
   max-width: 1380px; width: 100%; margin: 0 auto; padding: 0 1.75rem;
@@ -340,9 +327,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   width: 1px; background: var(--border); margin: .8rem 2.5rem .8rem 0; flex-shrink: 0;
 }
 
-/* ══════════════════════════════════════
-   PAGE + LAYOUT
-══════════════════════════════════════ */
+/* PAGE + LAYOUT */
 .pv-page {
   max-width: 1380px; margin: 0 auto;
   padding: 1.75rem 1.75rem 4rem;
@@ -357,9 +342,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 
 .pv-main { display: flex; flex-direction: column; gap: 1.5rem; }
 
-/* ══════════════════════════════════════
-   CARD BASE
-══════════════════════════════════════ */
+/* CARD BASE */
 .pv-card {
   background: rgba(255,255,255,.04);
   border: 1px solid rgba(255,255,255,.08);
@@ -391,9 +374,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .pv-link:hover { background: var(--gold-soft); border-color: var(--gold-border-md); }
 
-/* ══════════════════════════════════════
-   TOP KPI STRIP (new)
-══════════════════════════════════════ */
+/* TOP KPI STRIP (new) */
 .pv-kpi-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -450,9 +431,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 /* Indigo KPI */
 .pv-kpi--indigo { --kpi-color: var(--indigo); --kpi-soft: var(--indigo-soft); --kpi-border: rgba(129,140,248,.2); }
 
-/* ══════════════════════════════════════
-   CHARTS ROW
-══════════════════════════════════════ */
+/* CHARTS ROW */
 .pv-row2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1.5rem; }
 
 /* Revenue Chart */
@@ -560,9 +539,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 
 .pv-bd-n { font-family: var(--font-m); font-size: .77rem; color: var(--white); text-align: right; }
 
-/* ══════════════════════════════════════
-   RECENT BOOKINGS TABLE
-══════════════════════════════════════ */
+/* RECENT BOOKINGS TABLE */
 .pv-table-wrap { overflow-x: auto; }
 
 .pv-table {
@@ -598,6 +575,12 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   font-family: var(--font-h); font-size: .6rem; font-weight: 800;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   border: 1px solid var(--gold-border);
+  overflow: hidden; padding: 0;
+}
+.pv-cust-av img {
+  width: 30px; height: 30px; min-width: 30px; min-height: 30px;
+  object-fit: cover; display: block;
+  border-radius: 0; margin: 0; padding: 0;
 }
 .pv-cust-name { font-weight: 500; font-size: .84rem; }
 .pv-trunc { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--off); font-size: .82rem; }
@@ -610,7 +593,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 
 .pv-empty { text-align: center; padding: 3rem !important; color: var(--faint); font-size: .85rem; }
 
-/* ── STATUS PILLS ── */
+/* STATUS PILLS */
 .pv-pill {
   display: inline-flex; align-items: center; gap: .38rem;
   font-size: .65rem; font-weight: 700;
@@ -646,12 +629,10 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   border-color: var(--gold-border);
 }
 
-/* ══════════════════════════════════════
-   SIDEBAR
-══════════════════════════════════════ */
+/* SIDEBAR */
 .pv-sidebar { display: flex; flex-direction: column; gap: 1.5rem; }
 
-/* ── Quick Actions ── */
+/* Quick Actions */
 .pv-actions { display: flex; flex-direction: column; gap: .4rem; padding: .8rem 1rem 1rem; }
 
 .pv-action {
@@ -700,7 +681,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   min-width: 22px; text-align: center;
 }
 
-/* ── Snapshot ── */
+/* Snapshot */
 .pv-snap { display: flex; flex-direction: column; }
 
 .pv-snap-item {
@@ -732,7 +713,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   padding: .18rem .5rem; border-radius: 99px;
 }
 
-/* ── Rating Card (new sidebar widget) ── */
+/* Rating Card (new sidebar widget) */
 .pv-rating-body { padding: 1.1rem 1.4rem; }
 
 .pv-rating-score {
@@ -756,9 +737,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .pv-rbar-fill { height: 100%; border-radius: 99px; background: var(--gold); opacity: .65; }
 .pv-rbar-n { font-family: var(--font-m); font-size: .6rem; color: var(--faint); text-align: right; }
 
-/* ══════════════════════════════════════
-   RESPONSIVE
-══════════════════════════════════════ */
+/* RESPONSIVE */
 @media (max-width: 1180px) {
   .pv-layout { grid-template-columns: 1fr; }
   .pv-sidebar { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
@@ -788,7 +767,5 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   .pv-kpi-row   { grid-template-columns: 1fr; }
 }
 
-/* ══════════════════════════════════════
-   UTILITY
-══════════════════════════════════════ */
+/* UTILITY */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
