@@ -9,7 +9,7 @@ $profile->execute([$providerId]);
 $profile   = $profile->fetch();
 $profileId = $profile['id'] ?? 0;
 
-/* Core counts */
+/* ── Core counts ── */
 $stmt = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ?");
 $stmt->execute([$profileId]);
 $totalBookings = (int)$stmt->fetchColumn();
@@ -44,7 +44,7 @@ $lastMonthRevenue = (float)$stmt->fetchColumn();
 $revDelta   = $lastMonthRevenue > 0 ? round(($thisMonthRevenue - $lastMonthRevenue) / $lastMonthRevenue * 100) : null;
 $revDeltaPos = $revDelta !== null && $revDelta >= 0;
 
-/* Status counts */
+/* ── Status counts ── */
 $stmt = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ? AND status = 'pending'");
 $stmt->execute([$profileId]);
 $pendingBookings = (int)$stmt->fetchColumn();
@@ -65,7 +65,7 @@ $stmt = $db->prepare("SELECT COUNT(*) FROM tbl_services WHERE provider_id = ? AN
 $stmt->execute([$profileId]);
 $totalServices = (int)$stmt->fetchColumn();
 
-/* Recent bookings */
+/* ── Recent bookings ── */
 $stmt = $db->prepare("
     SELECT b.id, b.booking_date, b.status, b.total_amount, b.created_at,
            u.first_name, u.last_name, u.avatar_url,
@@ -79,7 +79,7 @@ $stmt = $db->prepare("
 $stmt->execute([$profileId]);
 $recentBookings = $stmt->fetchAll();
 
-/* Status breakdown */
+/* ── Status breakdown ── */
 $stmt = $db->prepare("SELECT status, COUNT(*) AS cnt FROM tbl_bookings WHERE provider_id = ? GROUP BY status");
 $stmt->execute([$profileId]);
 $statusCounts = [];
@@ -87,7 +87,7 @@ foreach ($stmt->fetchAll() as $row) {
     $statusCounts[$row['status']] = (int)$row['cnt'];
 }
 
-/* 6-month revenue trend */
+/* ── 6-month revenue trend ── */
 $stmt = $db->prepare("
     SELECT DATE_FORMAT(booking_date,'%b') AS month,
            DATE_FORMAT(booking_date,'%Y-%m') AS ym,
@@ -103,7 +103,7 @@ $stmt->execute([$profileId]);
 $revTrend = $stmt->fetchAll();
 $currentYM = date('Y-m');
 
-/* Average rating */
+/* ── Average rating ── */
 $stmt = $db->prepare("
     SELECT COALESCE(AVG(rating), 0) AS avg_rating, COUNT(*) AS total_reviews
     FROM tbl_reviews WHERE provider_id = ?
@@ -121,7 +121,22 @@ for ($i = 5; $i >= 1; $i--) {
     $ratingDist[$i] = (int)$s->fetchColumn();
 }
 
-/* Greeting */
+/* ── Recent reviews ── */
+$recentReviewsStmt = $db->prepare("
+    SELECT r.rating, r.comment, r.created_at,
+           r.customer_id AS reviewer_id,
+           TRIM(CONCAT(u.first_name,' ',COALESCE(u.last_name,''))) AS reviewer_name,
+           u.avatar_url AS profile_photo
+    FROM   tbl_reviews r
+    JOIN   tbl_users u ON u.id = r.customer_id
+    WHERE  r.provider_id = ? AND r.is_visible = 1
+    ORDER  BY r.created_at DESC
+    LIMIT  5
+");
+$recentReviewsStmt->execute([$profileId]);
+$recentReviews = $recentReviewsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+/* ── Greeting ── */
 $hour     = (int)date('H');
 $greeting = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good evening');
 $initials = strtoupper(substr($providerName, 0, 2));
@@ -132,15 +147,25 @@ $initials = strtoupper(substr($providerName, 0, 2));
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QuickBook — Provider Dashboard</title>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/provider_dashboard.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <!-- Apply saved theme BEFORE render to prevent flash -->
+  <script>
+    (function(){
+      var t = localStorage.getItem('qb-theme') || 'light';
+      if (t === 'dark') document.documentElement.setAttribute('data-theme','dark');
+    })();
+  </script>
 </head>
 <body>
 
 <!-- GRAIN -->
 <div class="grain" aria-hidden="true"></div>
 
-<!-- NAV -->
+<!-- ══════════════════════════════════════
+     NAV
+══════════════════════════════════════ -->
 <nav class="pv-nav" role="navigation" aria-label="Provider navigation">
   <div class="pv-nav-inner">
 
@@ -163,30 +188,58 @@ $initials = strtoupper(substr($providerName, 0, 2));
 
     <div class="pv-nav-end">
       <!-- Notification bell -->
-      <button class="pv-notif-btn" aria-label="Notifications">
-        🔔
-        <?php if ($pendingBookings): ?>
-          <span class="pv-notif-dot" aria-hidden="true"></span>
-        <?php endif; ?>
+      <?php
+        $notifUserId = (int)($providerId);
+        require __DIR__ . '/../_partials/notification_panel.php';
+      ?>
+
+      <!-- THEME TOGGLE -->
+      <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode" title="Toggle theme">
+        <!-- Moon icon (shown in light mode) -->
+        <svg class="icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+        <!-- Sun icon (shown in dark mode) -->
+        <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1"  x2="12" y2="3"/>
+          <line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22"  y1="4.22"  x2="5.64"  y2="5.64"/>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1"  y1="12" x2="3"  y2="12"/>
+          <line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22"  y1="19.78" x2="5.64"  y2="18.36"/>
+          <line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"/>
+        </svg>
       </button>
 
-      <div class="pv-nav-user">
-        <div class="pv-nav-av" aria-hidden="true">
-          <?php if (!empty($profile['profile_photo'])): ?>
-            <img src="<?= BASE_URL ?>assets/uploads/profiles/<?= htmlspecialchars($profile['profile_photo']) ?>" alt="Profile photo" style="width:34px;height:34px;min-width:34px;min-height:34px;max-width:34px;max-height:34px;object-fit:cover;border-radius:99px;display:block;">
-          <?php else: ?>
-            <span><?= $initials ?></span>
-          <?php endif; ?>
-        </div>
-        <span><?= $providerName ?></span>
+      <div class="pv-nav-av" aria-hidden="true">
+        <?php if (!empty($profile['profile_photo'])): ?>
+          <img src="<?= htmlspecialchars($profile['profile_photo']) ?>" alt="Profile photo" style="width:34px;height:34px;min-width:34px;min-height:34px;max-width:34px;max-height:34px;object-fit:cover;border-radius:99px;display:block;">
+        <?php else: ?>
+          <span><?= $initials ?></span>
+        <?php endif; ?>
       </div>
-      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout">Sign out</a>
+      <div class="pv-nav-user">
+        <div class="pv-nav-user-name"><?= $providerName ?></div>
+        <div class="pv-nav-user-role">Provider</div>
+      </div>
+      <!-- Sign out icon button -->
+      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout-icon" title="Sign out" aria-label="Sign out">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i>
+      </a>
     </div>
 
   </div>
 </nav>
 
-<!-- HERO -->
+<!-- ══════════════════════════════════════
+     HERO
+══════════════════════════════════════ -->
 <header class="pv-hero" role="banner">
   <div class="pv-hero-overlay" aria-hidden="true"></div>
 
@@ -258,135 +311,138 @@ $initials = strtoupper(substr($providerName, 0, 2));
     <div class="pv-hs-div" aria-hidden="true"></div>
 
     <div class="pv-hs-item">
-      <span class="pv-hs-val">+<?= $todayBookings ?></span>
-      <span class="pv-hs-label">Today</span>
+      <?php $cancelRate = $totalBookings > 0 ? round($cancelledBookings / $totalBookings * 100) : 0; ?>
+      <span class="pv-hs-val <?= $cancelRate > 25 ? 'accent' : '' ?>"><?= $cancelRate ?>%</span>
+      <span class="pv-hs-label">Cancellation Rate</span>
     </div>
   </div>
 </header>
 
-<!-- MAIN CONTENT -->
+<!-- ══════════════════════════════════════
+     MAIN CONTENT
+══════════════════════════════════════ -->
 <main class="pv-page" role="main">
   <div class="pv-layout">
 
+    <!-- ── LEFT COLUMN ── -->
     <div class="pv-main">
 
-      <!-- KPI Cards Row -->
-      <div class="pv-kpi-row" role="region" aria-label="Performance overview">
-
-        <!-- Revenue this month -->
-        <div class="pv-kpi pv-kpi--gold">
-          
-          <?php if ($revDelta !== null): ?>
-          <span class="pv-kpi-delta <?= $revDeltaPos ? '' : 'neg' ?>">
-            <?= $revDeltaPos ? '+' : '' ?><?= $revDelta ?>%
-          </span>
-          <?php endif; ?>
-          <div class="pv-kpi-val">₱<?= number_format($thisMonthRevenue, 0) ?></div>
-          <div class="pv-kpi-label">This Month's Revenue</div>
-        </div>
-
-        <!-- Completed -->
-        <div class="pv-kpi pv-kpi--green">
-          
-          <div class="pv-kpi-val"><?= $completedBookings ?></div>
-          <div class="pv-kpi-label">Completed Bookings</div>
-        </div>
-
-        <!-- Pending -->
-        <div class="pv-kpi pv-kpi--indigo">
-          
-          <div class="pv-kpi-val"><?= $pendingBookings ?></div>
-          <div class="pv-kpi-label">Awaiting Confirmation</div>
-        </div>
-
-        <!-- Cancellation rate -->
-        <?php $cancelRate = $totalBookings > 0 ? round($cancelledBookings / $totalBookings * 100) : 0; ?>
-        <div class="pv-kpi pv-kpi--blue">
-          
-          <div class="pv-kpi-val"><?= $cancelRate ?>%</div>
-          <div class="pv-kpi-label">Cancellation Rate</div>
-        </div>
-
-      </div>
-
-      <!-- Charts Row -->
-      <div class="pv-row2">
-
-        <!-- Revenue Trend -->
+      <!-- Revenue Trend (full width) -->
         <div class="pv-card">
           <div class="pv-card-head">
-            <div>
-              <h2>Revenue Trend</h2>
-              <span class="pv-card-sub">Last 6 months · completed bookings</span>
-            </div>
+            <h2>Revenue Trend</h2>
+            <span class="pv-card-sub">Last 6 months · completed bookings</span>
           </div>
-          <div class="pv-chart-area">
-            <div class="pv-chart-legend">
-              <span class="pv-chart-legend-item">
-                <span class="pv-chart-legend-swatch" style="background:var(--gold)"></span>
-                Revenue
-              </span>
-              <span class="pv-chart-legend-item">
-                <span class="pv-chart-legend-swatch" style="background:var(--faint)"></span>
-                Current month
-              </span>
-            </div>
-            <div class="pv-chart" role="img" aria-label="Revenue bar chart">
-              <?php if (empty($revTrend)): ?>
-                <p class="pv-chart-empty">No revenue data yet — complete your first booking to see trends.</p>
-              <?php else:
-                $maxRev = max(1, max(array_column($revTrend, 'revenue')));
-                foreach ($revTrend as $r):
-                  $h        = round(($r['revenue'] / $maxRev) * 130);
-                  $isCurrent = $r['ym'] === $currentYM;
-              ?>
-              <div class="pv-bar-col <?= $isCurrent ? 'is-current' : '' ?>">
-                <span class="pv-bar-val">₱<?= number_format($r['revenue'] / 1000, 1) ?>k</span>
-                <div class="pv-bar" style="height:<?= max($h, 6) ?>px"
-                     role="presentation"
-                     title="<?= $r['month'] ?>: ₱<?= number_format($r['revenue'], 0) ?>"></div>
-                <span class="pv-bar-mo"><?= $r['month'] ?></span>
-              </div>
-              <?php endforeach; endif; ?>
-            </div>
+          <div class="pv-linechart-area">
+            <?php if (empty($revTrend)): ?>
+              <p class="pv-chart-empty">No revenue data yet — complete your first booking to see trends.</p>
+            <?php else: ?>
+            <canvas id="revChart" aria-label="Revenue line chart"></canvas>
+            <script>
+            (function(){
+              var labels  = <?= json_encode(array_column($revTrend, 'month')) ?>;
+              var data    = <?= json_encode(array_map(fn($r) => (float)$r['revenue'], $revTrend)) ?>;
+              var currentIdx = <?= array_search($currentYM, array_column($revTrend, 'ym')) !== false ? array_search($currentYM, array_column($revTrend, 'ym')) : -1 ?>;
+              var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+              var gold   = '#C9A84C';
+              var gridC  = isDark ? 'rgba(255,255,255,.10)' : 'rgba(201,168,76,.18)';
+              var textC  = isDark ? 'rgba(237,227,204,.85)' : 'rgba(28,23,16,.75)';
+
+              function buildChart() {
+                var ctx = document.getElementById('revChart').getContext('2d');
+                var gradient = ctx.createLinearGradient(0, 0, 0, 300);
+                gradient.addColorStop(0,   'rgba(201,168,76,.30)');
+                gradient.addColorStop(0.6, 'rgba(201,168,76,.08)');
+                gradient.addColorStop(1,   'rgba(201,168,76,0)');
+
+                var pointColors = data.map(function(_, i) {
+                  return i === currentIdx ? '#C9A84C' : 'transparent';
+                });
+                var pointBorder = data.map(function(_, i) {
+                  return i === currentIdx ? '#fff' : 'transparent';
+                });
+                var pointRadius = data.map(function(_, i) {
+                  return i === currentIdx ? 5 : 3;
+                });
+
+                window._revChart = new Chart(ctx, {
+                  type: 'line',
+                  data: {
+                    labels: labels,
+                    datasets: [{
+                      data: data,
+                      borderColor: gold,
+                      borderWidth: 2.2,
+                      backgroundColor: gradient,
+                      fill: true,
+                      tension: 0.45,
+                      pointBackgroundColor: pointColors,
+                      pointBorderColor: pointBorder,
+                      pointBorderWidth: 2,
+                      pointRadius: pointRadius,
+                      pointHoverRadius: 6,
+                      pointHoverBackgroundColor: gold,
+                      pointHoverBorderColor: '#fff',
+                      pointHoverBorderWidth: 2,
+                    }]
+                  },
+                  options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                      legend: { display: false },
+                      tooltip: {
+                        backgroundColor: isDark ? 'rgba(20,16,8,.95)' : 'rgba(255,252,245,.97)',
+                        borderColor: 'rgba(201,168,76,.35)',
+                        borderWidth: 1,
+                        titleColor: isDark ? '#e2d5a0' : '#1C1710',
+                        bodyColor:  isDark ? 'rgba(237,227,204,.65)' : 'rgba(28,23,16,.60)',
+                        padding: 10,
+                        titleFont: { family: "'DM Mono', monospace", size: 11, weight: '500' },
+                        bodyFont:  { family: "'DM Mono', monospace", size: 12, weight: '600' },
+                        callbacks: {
+                          label: function(ctx) {
+                            return ' ₱' + Number(ctx.raw).toLocaleString('en-PH', {minimumFractionDigits:0});
+                          }
+                        }
+                      }
+                    },
+                    scales: {
+                      x: {
+                        grid: { color: gridC, drawBorder: false },
+                        ticks: { color: textC, font: { family: "'DM Mono', monospace", size: 11 } },
+                        border: { display: false }
+                      },
+                      y: {
+                        grid: { color: gridC, drawBorder: false },
+                        ticks: {
+                          color: textC,
+                          font: { family: "'DM Mono', monospace", size: 11 },
+                          callback: function(v) { return v >= 1000 ? '₱' + (v/1000).toFixed(1) + 'k' : '₱' + v; }
+                        },
+                        border: { display: false }
+                      }
+                    }
+                  }
+                });
+              }
+
+              if (window.Chart) {
+                buildChart();
+              } else {
+                var s = document.createElement('script');
+                s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+                s.onload = buildChart;
+                document.head.appendChild(s);
+              }
+            })();
+            </script>
+            <?php endif; ?>
           </div>
         </div>
 
-        <!-- Booking Breakdown -->
-        <div class="pv-card">
-          <div class="pv-card-head">
-            <h2>Booking Status</h2>
-            <a href="<?= BASE_URL ?>provider/bookings" class="pv-link">View all →</a>
-          </div>
-          <div class="pv-breakdown">
-            <?php
-            $bsMeta = [
-              'pending'     => ['Pending',     '#C9A84C'],
-              'confirmed'   => ['Confirmed',   '#22C55E'],
-              'in_progress' => ['In Progress', '#818CF8'],
-              'completed'   => ['Completed',   '#38BDF8'],
-              'cancelled'   => ['Cancelled',   '#F43F5E'],
-            ];
-            $total = max(1, $totalBookings);
-            foreach ($bsMeta as $key => [$label, $color]):
-              $count = $statusCounts[$key] ?? 0;
-              $pct   = round($count / $total * 100);
-            ?>
-            <div class="pv-bd-row">
-              <div class="pv-bd-left">
-                <span class="pv-bd-dot" style="background:<?= $color ?>" aria-hidden="true"></span>
-                <span class="pv-bd-lbl"><?= $label ?></span>
-              </div>
-              <div class="pv-bd-track" role="progressbar" aria-valuenow="<?= $pct ?>" aria-valuemin="0" aria-valuemax="100">
-                <div class="pv-bd-fill" style="width:<?= max($pct, 1) ?>%;background:<?= $color ?>"></div>
-              </div>
-              <span class="pv-bd-n"><?= $count ?></span>
-            </div>
-            <?php endforeach; ?>
-          </div>
-        </div>
 
-      </div>
 
       <!-- Recent Bookings Table -->
       <div class="pv-card">
@@ -421,7 +477,7 @@ $initials = strtoupper(substr($providerName, 0, 2));
                   <div class="pv-cust">
                     <div class="pv-cust-av" aria-hidden="true">
                       <?php if (!empty($b['avatar_url'])): ?>
-                        <img src="<?= BASE_URL ?>assets/uploads/profiles/<?= htmlspecialchars($b['avatar_url']) ?>"
+                        <img src="<?= htmlspecialchars($b['avatar_url']) ?>"
                              alt="<?= htmlspecialchars($b['first_name'] . ' ' . $b['last_name']) ?>">
                       <?php else: ?>
                         <?= strtoupper(substr($b['first_name'], 0, 1) . substr($b['last_name'], 0, 1)) ?>
@@ -449,9 +505,143 @@ $initials = strtoupper(substr($providerName, 0, 2));
         </div>
       </div>
 
-    </div>
-    
+
+      <!-- Customer Reviews -->
+      <?php if ($totalReviews > 0): ?>
+      <div class="pv-card pv-reviews-card">
+
+        <!-- Card header -->
+        <div class="pv-card-head">
+          <h2>Customer Reviews</h2>
+        </div>
+
+        <!-- Summary row: big score left + bar chart right -->
+        <div class="pv-cr-summary">
+
+          <!-- Left: big score -->
+          <div class="pv-cr-score-col">
+            <div class="pv-cr-big"><?= $avgRating ?></div>
+            <div class="pv-cr-stars">
+              <?php
+              $full = floor($avgRating);
+              $half = ($avgRating - $full) >= 0.5;
+              for ($i = 1; $i <= 5; $i++):
+                if ($i <= $full): ?>
+                  <span class="star filled">★</span>
+                <?php elseif ($i === $full + 1 && $half): ?>
+                  <span class="star half">½</span>
+                <?php else: ?>
+                  <span class="star empty">☆</span>
+                <?php endif;
+              endfor; ?>
+            </div>
+            <div class="pv-cr-count"><?= $totalReviews ?> rating<?= $totalReviews !== 1 ? 's' : '' ?></div>
+          </div>
+
+          <!-- Right: star breakdown bars -->
+          <div class="pv-cr-bars">
+            <?php for ($star = 5; $star >= 1; $star--):
+              $cnt = $ratingDist[$star] ?? 0;
+              $pct = $totalReviews > 0 ? round($cnt / $totalReviews * 100) : 0;
+            ?>
+            <div class="pv-cr-bar-row">
+              <span class="pv-cr-bar-star">★ <?= $star ?></span>
+              <div class="pv-cr-bar-track">
+                <div class="pv-cr-bar-fill" style="width:<?= max($pct, $cnt > 0 ? 3 : 0) ?>%"></div>
+              </div>
+              <span class="pv-cr-bar-n"><?= $cnt ?></span>
+            </div>
+            <?php endfor; ?>
+          </div>
+
+        </div><!-- /pv-cr-summary -->
+
+        <!-- Reviews list -->
+        <?php if (!empty($recentReviews)): ?>
+        <div class="pv-cr-list">
+          <?php foreach ($recentReviews as $rv):
+            $rvName   = htmlspecialchars($rv['reviewer_name'] ?? 'Anonymous');
+            $rvInit   = strtoupper(substr(strip_tags($rvName), 0, 2));
+            $rvDate   = !empty($rv['created_at']) ? date('M j, Y', strtotime($rv['created_at'])) : '';
+            $rvRate   = (int)$rv['rating'];
+            $isYou    = isset($rv['reviewer_id']) && $rv['reviewer_id'] == ($currentUserId ?? null);
+          ?>
+          <div class="pv-cr-review">
+            <div class="pv-cr-av">
+              <?php if (!empty($rv['profile_photo'])): ?>
+                <img src="<?= htmlspecialchars($rv['profile_photo']) ?>"
+                     alt="<?= $rvName ?>" loading="lazy">
+              <?php else: ?>
+                <?= $rvInit ?>
+              <?php endif; ?>
+            </div>
+            <div class="pv-cr-content">
+              <div class="pv-cr-top">
+                <div class="pv-cr-name-row">
+                  <span class="pv-cr-name"><?= $rvName ?></span>
+                  <?php if ($isYou): ?>
+                  <span class="pv-cr-you">You</span>
+                  <?php endif; ?>
+                  <span class="pv-cr-rstars">
+                    <?php for ($s=1;$s<=5;$s++): ?>
+                      <span class="<?= $s<=$rvRate ? 'star filled' : 'star empty' ?>"><?= $s<=$rvRate ? "★" : "☆" ?></span>
+                    <?php endfor; ?>
+                  </span>
+                </div>
+                <span class="pv-cr-date"><?= $rvDate ?></span>
+              </div>
+              <?php if (!empty($rv['comment'])): ?>
+              <p class="pv-cr-comment"><?= htmlspecialchars($rv['comment']) ?></p>
+              <?php endif; ?>
+            </div>
+          </div>
+          <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+
+      </div>
+      <?php endif; ?>
+
+
+    </div><!-- /pv-main -->
+
+    <!-- ── SIDEBAR ── -->
     <aside class="pv-sidebar" aria-label="Sidebar">
+
+      <!-- Booking Status -->
+      <div class="pv-card">
+        <div class="pv-card-head">
+          <h2>Booking Status</h2>
+          <a href="<?= BASE_URL ?>provider/bookings" class="pv-link">View all →</a>
+        </div>
+        <div class="pv-breakdown">
+          <?php
+          $bsMeta = [
+            'pending'     => ['Pending',     '#C9A84C'],
+            'confirmed'   => ['Confirmed',   '#22C55E'],
+            'in_progress' => ['In Progress', '#818CF8'],
+            'completed'   => ['Completed',   '#38BDF8'],
+            'cancelled'   => ['Cancelled',   '#F43F5E'],
+          ];
+          $total = max(1, $totalBookings);
+          foreach ($bsMeta as $key => [$label, $color]):
+            $count = $statusCounts[$key] ?? 0;
+            $pct   = round($count / $total * 100);
+          ?>
+          <div class="pv-bd-row">
+            <div class="pv-bd-left">
+              <span class="pv-bd-dot" style="background:<?= $color ?>" aria-hidden="true"></span>
+              <span class="pv-bd-lbl"><?= $label ?></span>
+            </div>
+            <div class="pv-bd-track" role="progressbar" aria-valuenow="<?= $pct ?>" aria-valuemin="0" aria-valuemax="100">
+              <div class="pv-bd-fill" style="width:<?= max($pct, 1) ?>%;background:<?= $color ?>"></div>
+            </div>
+            <span class="pv-bd-n"><?= $count ?></span>
+          </div>
+          <?php endforeach; ?>
+        </div>
+      </div>
+
 
       <!-- Quick Actions -->
       <div class="pv-card">
@@ -543,54 +733,41 @@ $initials = strtoupper(substr($providerName, 0, 2));
         </div>
       </div>
 
-      <!-- Rating Widget -->
-      <?php if ($totalReviews > 0): ?>
-      <div class="pv-card">
-        <div class="pv-card-head">
-          <h2>Rating</h2>
-          <span class="pv-card-sub"><?= $totalReviews ?> review<?= $totalReviews !== 1 ? 's' : '' ?></span>
-        </div>
-        <div class="pv-rating-body">
-          <div class="pv-rating-score">
-            <span class="pv-rating-big"><?= $avgRating ?></span>
-            <span class="pv-rating-max">/ 5.0</span>
-          </div>
-          <div class="pv-stars" aria-label="<?= $avgRating ?> out of 5 stars">
-            <?php
-            $full  = floor($avgRating);
-            $half  = ($avgRating - $full) >= 0.5;
-            for ($i = 1; $i <= 5; $i++):
-              if ($i <= $full)          echo '★';
-              elseif ($i === $full + 1 && $half) echo '⭐';
-              else                      echo '<span style="opacity:.25">★</span>';
-            endfor;
-            ?>
-          </div>
-          <div class="pv-rating-bars">
-            <?php for ($star = 5; $star >= 1; $star--):
-              $cnt = $ratingDist[$star] ?? 0;
-              $pct = $totalReviews > 0 ? round($cnt / $totalReviews * 100) : 0;
-            ?>
-            <div class="pv-rbar-row">
-              <span class="pv-rbar-lbl"><?= $star ?></span>
-              <div class="pv-rbar-track">
-                <div class="pv-rbar-fill" style="width:<?= $pct ?>%"></div>
-              </div>
-              <span class="pv-rbar-n"><?= $cnt ?></span>
-            </div>
-            <?php endfor; ?>
-          </div>
-        </div>
-      </div>
-      <?php endif; ?>
-
     </aside>
 
   </div>
 </main>
 
 <script>
+  /* ── Theme toggle ── */
+  (function () {
+    const html   = document.documentElement;
+    const btn    = document.getElementById('themeToggle');
+    const moon   = btn ? btn.querySelector('.icon-moon') : null;
+    const sun    = btn ? btn.querySelector('.icon-sun')  : null;
 
-  
+    function applyTheme(t) {
+      if (t === 'dark') {
+        html.setAttribute('data-theme', 'dark');
+        if (moon) moon.style.display = 'block';
+        if (sun)  sun.style.display  = 'none';
+      } else {
+        html.removeAttribute('data-theme');
+        if (moon) moon.style.display = 'none';
+        if (sun)  sun.style.display  = 'block';
+      }
+    }
+
+    applyTheme(localStorage.getItem('qb-theme') || 'light');
+
+    if (btn) {
+      btn.addEventListener('click', () => {
+        const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('qb-theme', next);
+        applyTheme(next);
+      });
+    }
+  })();
+</script>
 </body>
 </html>

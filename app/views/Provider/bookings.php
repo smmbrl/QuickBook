@@ -17,7 +17,7 @@ $perPage      = 12;
 $validStatuses = ['all','pending','confirmed','in_progress','completed','cancelled'];
 if (!in_array($statusFilter, $validStatuses)) $statusFilter = 'all';
 
-/* Counts per status */
+/* ── Counts per status ── */
 $statuses = ['pending','confirmed','in_progress','completed','cancelled'];
 $counts   = [];
 foreach ($statuses as $s) {
@@ -29,12 +29,12 @@ $stTotal = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ?
 $stTotal->execute([$profileId]);
 $counts['all'] = (int)$stTotal->fetchColumn();
 
-/* Revenue */
+/* ── Revenue ── */
 $stRev = $db->prepare("SELECT COALESCE(SUM(total_amount),0) FROM tbl_bookings WHERE provider_id = ? AND status = 'completed'");
 $stRev->execute([$profileId]);
 $totalRevenue = (float)$stRev->fetchColumn();
 
-/* Filtered query */
+/* ── Filtered query ── */
 $where  = "b.provider_id = :pid";
 $params = [':pid' => $profileId];
 if ($statusFilter !== 'all') {
@@ -92,14 +92,18 @@ $tabLabels = [
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QuickBook — My Bookings</title>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/provider_bookings.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script>(function(){ var t=localStorage.getItem('qb-theme')||'light'; if(t==='dark') document.documentElement.setAttribute('data-theme','dark'); })();</script>
 </head>
 <body>
 
 <div class="grain" aria-hidden="true"></div>
 
-<!-- NAV -->
+<!-- ══════════════════════════════════════
+     NAV
+══════════════════════════════════════ -->
 <nav class="pv-nav" role="navigation" aria-label="Provider navigation">
   <div class="pv-nav-inner">
 
@@ -122,23 +126,35 @@ $tabLabels = [
     </div>
 
     <div class="pv-nav-end">
-      <div class="pv-nav-user">
-        <div class="pv-nav-av" aria-hidden="true">
-          <?php if (!empty($profile['profile_photo'])): ?>
-            <img src="<?= BASE_URL ?>assets/uploads/profiles/<?= htmlspecialchars($profile['profile_photo']) ?>" alt="Profile photo" style="width:34px;height:34px;min-width:34px;min-height:34px;max-width:34px;max-height:34px;object-fit:cover;border-radius:99px;display:block;">
-          <?php else: ?>
-            <span><?= $initials ?></span>
-          <?php endif; ?>
-        </div>
-        <span><?= $providerName ?></span>
+      <?php $notifUserId = (int)$providerId; require __DIR__ . '/../_partials/notification_panel.php'; ?>
+
+      <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode" title="Toggle theme">
+        <svg class="icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+
+      <div class="pv-nav-av" aria-hidden="true">
+        <?php if (!empty($profile['profile_photo'])): ?>
+          <img src="<?= htmlspecialchars($profile['profile_photo']) ?>" alt="Profile photo" style="width:34px;height:34px;min-width:34px;min-height:34px;max-width:34px;max-height:34px;object-fit:cover;border-radius:99px;display:block;">
+        <?php else: ?>
+          <span><?= $initials ?></span>
+        <?php endif; ?>
       </div>
-      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout">Sign out</a>
+      <div class="pv-nav-user">
+        <div class="pv-nav-user-name"><?= $providerName ?></div>
+        <div class="pv-nav-user-role">Provider</div>
+      </div>
+      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout-icon" title="Sign out" aria-label="Sign out">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i>
+      </a>
     </div>
 
   </div>
 </nav>
 
-<!-- HERO -->
+<!-- ══════════════════════════════════════
+     HERO
+══════════════════════════════════════ -->
 <header class="pv-hero" role="banner">
   <div class="pv-hero-overlay" aria-hidden="true"></div>
 
@@ -158,45 +174,16 @@ $tabLabels = [
 
   </div>
 
-  <!-- Stat strip -->
-  <div class="pv-hero-stats" role="region" aria-label="Booking metrics">
-    <div class="pv-hs-item">
-      <span class="pv-hs-val">₱<?= number_format($totalRevenue, 0) ?></span>
-      <span class="pv-hs-label">Revenue Earned</span>
-    </div>
-    <div class="pv-hs-div" aria-hidden="true"></div>
-    <div class="pv-hs-item">
-      <span class="pv-hs-val"><?= $counts['all'] ?></span>
-      <span class="pv-hs-label">All Bookings</span>
-    </div>
-    <div class="pv-hs-div" aria-hidden="true"></div>
-    <div class="pv-hs-item">
-      <span class="pv-hs-val pv-hs-amber"><?= $counts['pending'] ?></span>
-      <span class="pv-hs-label">Pending</span>
-    </div>
-    <div class="pv-hs-div" aria-hidden="true"></div>
-    <div class="pv-hs-item">
-      <span class="pv-hs-val pv-hs-green"><?= $counts['confirmed'] ?></span>
-      <span class="pv-hs-label">Confirmed</span>
-    </div>
-    <div class="pv-hs-div" aria-hidden="true"></div>
-    <div class="pv-hs-item">
-      <span class="pv-hs-val pv-hs-blue"><?= $counts['completed'] ?></span>
-      <span class="pv-hs-label">Completed</span>
-    </div>
-    <div class="pv-hs-div" aria-hidden="true"></div>
-    <div class="pv-hs-item">
-      <span class="pv-hs-val pv-hs-red"><?= $counts['cancelled'] ?></span>
-      <span class="pv-hs-label">Cancelled</span>
-    </div>
-  </div>
 </header>
 
-<!-- MAIN -->
+<!-- ══════════════════════════════════════
+     MAIN
+══════════════════════════════════════ -->
 <main class="pv-page" role="main">
 
+  <!-- Flash is now shown as a toast via JS below -->
 
-  <!-- STATUS CARDS -->
+  <!-- ── STATUS CARDS ── -->
   <div class="bk-cards" role="region" aria-label="Filter by status">
 
     <a href="?status=all<?= $search ? '&q='.urlencode($search) : '' ?>"
@@ -296,7 +283,7 @@ $tabLabels = [
 
   </div>
 
-  <!-- TABLE PANEL  -->
+  <!-- ── TABLE PANEL ── -->
   <div class="pv-panel">
     <div class="pv-panel-head">
       <div>
@@ -311,7 +298,7 @@ $tabLabels = [
     <div class="pv-table-wrap">
       <table class="pv-table" aria-label="Bookings list">
         <colgroup>
-          <col><!-- ID -->
+          <col><!-- REF -->
           <col><!-- CUSTOMER -->
           <col><!-- SERVICE -->
           <col><!-- DATE -->
@@ -322,7 +309,7 @@ $tabLabels = [
         </colgroup>
         <thead>
           <tr>
-            <th scope="col">ID</th>
+            <th scope="col">Ref</th>
             <th scope="col">Customer</th>
             <th scope="col">Service</th>
             <th scope="col">Date</th>
@@ -347,7 +334,7 @@ $tabLabels = [
               <div class="pv-cust">
                 <div class="pv-cust-av" aria-hidden="true">
                   <?php if (!empty($b['avatar_url'])): ?>
-                    <img src="<?= BASE_URL ?>assets/uploads/profiles/<?= htmlspecialchars($b['avatar_url']) ?>"
+                    <img src="<?= htmlspecialchars($b['avatar_url']) ?>"
                          alt="<?= htmlspecialchars($b['first_name'] . ' ' . $b['last_name']) ?>">
                   <?php else: ?>
                     <?= strtoupper(substr($b['first_name'],0,1) . substr($b['last_name'],0,1)) ?>
@@ -411,11 +398,13 @@ $tabLabels = [
     </nav>
     <?php endif; ?>
 
-  </div>
+  </div><!-- /pv-panel -->
 
 </main>
 
-<!-- DELETE BOOKING MODAL -->
+<!-- ══════════════════════════════════════
+     DELETE BOOKING MODAL
+══════════════════════════════════════ -->
 <div class="pv-modal-overlay" id="deleteModal" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
   <div class="pv-modal pv-modal--delete">
 
@@ -460,7 +449,9 @@ $tabLabels = [
   </div>
 </div>
 
-<!-- CONFIRM BOOKING MODAL -->
+<!-- ══════════════════════════════════════
+     CONFIRM BOOKING MODAL
+══════════════════════════════════════ -->
 <div class="pv-modal-overlay" id="confirmModal" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
   <div class="pv-modal pv-modal--confirm">
 
@@ -495,7 +486,9 @@ $tabLabels = [
   </div>
 </div>
 
-<!-- RESCHEDULE MODAL -->
+<!-- ══════════════════════════════════════
+     RESCHEDULE MODAL
+══════════════════════════════════════ -->
 <div class="pv-modal-overlay" id="reschedModal" role="dialog" aria-modal="true" aria-labelledby="reschedModalTitle">
   <div class="pv-modal pv-modal--resched">
 
@@ -550,11 +543,13 @@ $tabLabels = [
   </div>
 </div>
 
-<!-- TOAST CONTAINER -->
+<!-- ══════════════════════════════════════
+     TOAST CONTAINER
+══════════════════════════════════════ -->
 <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
 <script>
-/* Delete modal */
+/* ── Delete modal ── */
 function openDeleteModal(id, customerName, serviceName) {
   document.getElementById('deleteForm').action = '<?= BASE_URL ?>provider/bookings/' + id;
   document.getElementById('delCustomerName').textContent  = customerName;
@@ -582,7 +577,7 @@ document.getElementById('deleteModal').addEventListener('click', function(e) {
   if (e.target === this) closeDeleteModal();
 });
 
-/* Confirm modal */
+/* ── Confirm modal ── */
 function openConfirmModal(id, customerName, serviceName) {
   document.getElementById('confirmForm').action = '<?= BASE_URL ?>provider/bookings/' + id;
   document.getElementById('confCustomerName').textContent = customerName;
@@ -598,7 +593,7 @@ document.getElementById('confirmModal').addEventListener('click', function(e) {
   if (e.target === this) closeConfirmModal();
 });
 
-/* Reschedule modal */
+/* ── Reschedule modal ── */
 function openReschedModal(id, customerName, serviceName, currentDate) {
   document.getElementById('reschedForm').action = '<?= BASE_URL ?>provider/bookings/' + id;
   document.getElementById('reschedCustomerName').textContent = customerName;
@@ -651,7 +646,7 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
-/* Toast helper */
+/* ── Toast helper ── */
 function showToast(message, type) {
   type = type || 'success';
   var container = document.getElementById('toastContainer');
@@ -686,5 +681,32 @@ showToast(
 <?php endif; ?>
 </script>
 
+<script>
+  (function () {
+    const html = document.documentElement;
+    const btn  = document.getElementById('themeToggle');
+    const moon = btn ? btn.querySelector('.icon-moon') : null;
+    const sun  = btn ? btn.querySelector('.icon-sun')  : null;
+    function applyTheme(t) {
+      if (t === 'dark') {
+        html.setAttribute('data-theme', 'dark');
+        if (moon) moon.style.display = 'block';
+        if (sun)  sun.style.display  = 'none';
+      } else {
+        html.removeAttribute('data-theme');
+        if (moon) moon.style.display = 'none';
+        if (sun)  sun.style.display  = 'block';
+      }
+    }
+    applyTheme(localStorage.getItem('qb-theme') || 'light');
+    if (btn) {
+      btn.addEventListener('click', function() {
+        const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('qb-theme', next);
+        applyTheme(next);
+      });
+    }
+  })();
+</script>
 </body>
 </html>

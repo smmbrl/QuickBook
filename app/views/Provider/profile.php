@@ -1,4 +1,6 @@
 <?php
+// app/views/Provider/profile.php
+// Provider's own profile management page
 
 require_once __DIR__ . '/../../../config/database.php';
 $db           = Database::getInstance();
@@ -6,7 +8,7 @@ $userId       = (int)($_SESSION['user_id'] ?? 0);
 $providerName = htmlspecialchars($_SESSION['user_name'] ?? 'Provider');
 $initials     = strtoupper(substr($providerName, 0, 2));
 
-// Fetch provider profile details, including category and approval status
+// ── Fetch provider profile ────────────────────────────────────
 $stmt = $db->prepare("
     SELECT pp.*, u.first_name, u.last_name, u.email, u.phone,
            c.name AS category_name, c.slug AS category_slug
@@ -25,7 +27,7 @@ if (!$profile) {
 
 $profileId = (int)$profile['id'];
 
-// Stats for header strip and sidebar 
+// ── Stats for header strip ────────────────────────────────────
 $stTotal = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ?");
 $stTotal->execute([$profileId]);
 $totalBookings = (int)$stTotal->fetchColumn();
@@ -42,19 +44,19 @@ $stServices = $db->prepare("SELECT COUNT(*) FROM tbl_services WHERE provider_id 
 $stServices->execute([$profileId]);
 $totalServices = (int)$stServices->fetchColumn();
 
-// Fetch pending bookings count (nav badge) 
+// ── Fetch pending bookings count (nav badge) ──────────────────
 $stPending = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ? AND status = 'pending'");
 $stPending->execute([$profileId]);
 $pendingCount = (int)$stPending->fetchColumn();
 
-// All categories for select options (if we add category editing later) 
+// ── All categories for select ─────────────────────────────────
 $cats = $db->query("SELECT * FROM tbl_categories ORDER BY name")->fetchAll();
 
-//  Flash message (from redirects after form submissions)
+// ── Flash message ─────────────────────────────────────────────
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
 
-//  Category icon map
+// ── Category icon map ────────────────────────────────────────
 $catEmojiMap = [
     'barbershop'       => '<i class="fa-solid fa-scissors"></i>',
     'hair-salon'       => '<i class="fa-solid fa-spa"></i>',
@@ -70,7 +72,7 @@ $catEmojiMap = [
 ];
 $catEmoji = $catEmojiMap[$profile['category_slug']] ?? '<i class="fa-solid fa-briefcase"></i>';
 
-// Approval status helper 
+// ── Approval status helper ────────────────────────────────────
 $statusMap = [
     1  => ['label' => 'Approved',  'cls' => 'pp-status--approved',  'icon' => '<i class="fa-solid fa-circle-check"></i>'],
     0  => ['label' => 'Pending',   'cls' => 'pp-status--pending',   'icon' => '<i class="fa-solid fa-clock"></i>'],
@@ -84,17 +86,18 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QuickBook — My Provider Profile</title>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/provider_profile.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script>(function(){ var t=localStorage.getItem('qb-theme')||'light'; if(t==='dark') document.documentElement.setAttribute('data-theme','dark'); })();</script>
 </head>
 <body>
 
 <div class="grain" aria-hidden="true"></div>
-<div class="bg-orb bg-orb-1" aria-hidden="true"></div>
-<div class="bg-orb bg-orb-2" aria-hidden="true"></div>
 
-<!--NAV -->
+<!-- ══════════════════════════════════════
+     NAV
+══════════════════════════════════════ -->
 <nav class="pp-nav" role="navigation" aria-label="Provider navigation">
   <div class="pp-nav-inner">
     <a href="<?= BASE_URL ?>provider/dashboard" class="pp-logo">
@@ -111,12 +114,15 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
       <a href="<?= BASE_URL ?>provider/profile"      class="pp-nav-link is-active">Profile</a>
     </div>
     <div class="pp-nav-end">
-      <div class="pp-nav-status <?= $approvalStatus['cls'] ?>">
-        <?= $approvalStatus['icon'] ?> <?= $approvalStatus['label'] ?>
-      </div>
+      <?php $notifUserId = (int)$userId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
+      <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <svg class="icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+      <div class="pp-nav-status <?= $approvalStatus['cls'] ?>"><?= $approvalStatus['icon'] ?> <?= $approvalStatus['label'] ?></div>
       <div class="pp-nav-av" id="navAv" aria-hidden="true">
         <?php if (!empty($profile['profile_photo'])): ?>
-          <img id="navAvImg" src="<?= BASE_URL ?>assets/uploads/profiles/<?= htmlspecialchars($profile['profile_photo']) ?>" alt="Profile photo" style="width:34px;height:34px;min-width:34px;min-height:34px;max-width:34px;max-height:34px;object-fit:cover;border-radius:99px;display:block;">
+          <img id="navAvImg" src="<?= htmlspecialchars($profile['profile_photo']) ?>" alt="Profile photo" style="width:34px;height:34px;min-width:34px;min-height:34px;max-width:34px;max-height:34px;object-fit:cover;border-radius:99px;display:block;">
         <?php else: ?>
           <span id="navAvInitials"><?= $initials ?></span>
         <?php endif; ?>
@@ -125,12 +131,14 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
         <div class="pp-nav-user-name"><?= $providerName ?></div>
         <div class="pp-nav-user-role"><?= htmlspecialchars($profile['category_name'] ?? 'Service Provider') ?></div>
       </div>
-      <a href="<?= BASE_URL ?>auth/logout" class="pp-nav-logout">Sign out</a>
+      <a href="<?= BASE_URL ?>auth/logout" class="pp-nav-logout-icon" title="Sign out"><i class="fa-solid fa-arrow-right-from-bracket"></i></a>
     </div>
   </div>
 </nav>
 
-<!-- FLASH MESSAGE -->
+<!-- ══════════════════════════════════════
+     FLASH MESSAGE
+══════════════════════════════════════ -->
 <?php if ($flash): ?>
 <div class="pp-flash pp-flash--<?= $flash['type'] ?>" role="alert">
   <span><?= $flash['type'] === 'success' ? '<i class="fa-solid fa-circle-check"></i>' : '<i class="fa-solid fa-triangle-exclamation"></i>' ?></span>
@@ -139,14 +147,16 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
 </div>
 <?php endif; ?>
 
-<!-- HERO BANNER -->
+<!-- ══════════════════════════════════════
+     HERO BANNER
+══════════════════════════════════════ -->
 <header class="pp-hero" role="banner">
   <div class="pp-hero-overlay" aria-hidden="true"></div>
   <div class="pp-hero-inner">
 
     <div class="pp-hero-profile-row">
       <!-- Avatar / Profile Photo -->
-      <?php $photoUrl = !empty($profile['profile_photo']) ? BASE_URL . 'assets/uploads/profiles/' . htmlspecialchars($profile['profile_photo']) : null; ?>
+      <?php $photoUrl = !empty($profile['profile_photo']) ? $profile['profile_photo'] : null; ?>
       <div class="pp-hero-av-wrap">
         <div class="pp-hero-av" id="heroAv">
           <?php if ($photoUrl): ?>
@@ -221,11 +231,15 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
   </div>
 </header>
 
-<!-- MAIN CONTENT -->
+<!-- ══════════════════════════════════════
+     MAIN CONTENT
+══════════════════════════════════════ -->
 <main class="pp-page" role="main">
   <div class="pp-layout">
 
-    <!--LEFT COLUMN — edit forms -->
+    <!-- ════════════════════════
+         LEFT COLUMN — edit forms
+    ═════════════════════════ -->
     <div class="pp-main">
 
       <!-- Breadcrumb -->
@@ -235,7 +249,7 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
         <span>My Profile</span>
       </nav>
 
-      <!-- Section tabs -->
+      <!-- ── Section tabs ── -->
       <div class="pp-tabs" role="tablist" aria-label="Profile sections">
         <button class="pp-tab is-active" data-tab="personal" role="tab" aria-selected="true">
           <i class="fa-solid fa-user"></i> Personal Details
@@ -245,7 +259,9 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
         </button>
       </div>
 
-      <!-- TAB: PERSONAL DETAILS -->
+      <!-- ══════════════════════════
+           TAB: PERSONAL DETAILS
+      ══════════════════════════ -->
       <div class="pp-tab-panel is-active" id="tab-personal" role="tabpanel">
         <div class="pp-card">
           <div class="pp-card-head">
@@ -274,7 +290,7 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
 
             <div class="pp-form-row pp-form-row--2">
               <div class="pp-form-group">
-                <label class="pp-form-label" for="first_name">First Name <span class="pp-req"></span></label>
+                <label class="pp-form-label" for="first_name">First Name <span class="pp-req">*</span></label>
                 <div class="pp-input-wrap">
                   <span class="pp-input-icon"><i class="fa-solid fa-user"></i></span>
                   <input type="text" class="pp-form-control pp-form-control--icon"
@@ -284,7 +300,7 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
                 </div>
               </div>
               <div class="pp-form-group">
-                <label class="pp-form-label" for="last_name">Last Name <span class="pp-req"></span></label>
+                <label class="pp-form-label" for="last_name">Last Name <span class="pp-req">*</span></label>
                 <input type="text" class="pp-form-control"
                        id="last_name" name="last_name"
                        value="<?= htmlspecialchars($profile['last_name'] ?? '') ?>"
@@ -294,7 +310,7 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
 
             <div class="pp-form-row pp-form-row--2">
               <div class="pp-form-group">
-                <label class="pp-form-label" for="email">Email Address <span class="pp-req"></span></label>
+                <label class="pp-form-label" for="email">Email Address <span class="pp-req">*</span></label>
                 <div class="pp-input-wrap">
                   <span class="pp-input-icon"><i class="fa-solid fa-envelope"></i></span>
                   <input type="email" class="pp-form-control pp-form-control--icon"
@@ -332,7 +348,9 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
         </div>
       </div><!-- /tab-personal -->
 
-      <!--TAB: SECURITY -->
+      <!-- ══════════════════════════
+           TAB: SECURITY
+      ══════════════════════════ -->
       <div class="pp-tab-panel" id="tab-security" role="tabpanel" hidden>
         <div class="pp-card">
           <div class="pp-card-head">
@@ -347,7 +365,7 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
 
             <div class="pp-form-group">
               <label class="pp-form-label" for="current_password">
-                Current Password <span class="pp-req"></span>
+                Current Password <span class="pp-req">*</span>
               </label>
               <div class="pp-input-wrap">
                 <span class="pp-input-icon"><i class="fa-solid fa-key"></i></span>
@@ -361,7 +379,7 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
             <div class="pp-form-row pp-form-row--2">
               <div class="pp-form-group">
                 <label class="pp-form-label" for="new_password">
-                  New Password <span class="pp-req"></span>
+                  New Password <span class="pp-req">*</span>
                 </label>
                 <div class="pp-input-wrap">
                   <span class="pp-input-icon"><i class="fa-solid fa-lock"></i></span>
@@ -370,7 +388,6 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
                          placeholder="Min 8 characters" minlength="8" required>
                   <button type="button" class="pp-pw-toggle" data-target="new_password" aria-label="Toggle visibility"><i class="fa-solid fa-eye"></i></button>
                 </div>
-
                 <!-- Strength bar -->
                 <div class="pp-pw-strength">
                   <div class="pp-pw-strength-bar" id="pwStrengthBar"></div>
@@ -379,7 +396,7 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
               </div>
               <div class="pp-form-group">
                 <label class="pp-form-label" for="confirm_password">
-                  Confirm Password <span class="pp-req"></span>
+                  Confirm Password <span class="pp-req">*</span>
                 </label>
                 <div class="pp-input-wrap">
                   <span class="pp-input-icon"><i class="fa-solid fa-lock"></i></span>
@@ -439,11 +456,13 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
             </div>
           </div>
         </div>
-      </div>
+      </div><!-- /tab-security -->
 
-    </div>
+    </div><!-- /pp-main -->
 
-    <!-- RIGHT SIDEBAR -->
+    <!-- ════════════════════════
+         RIGHT SIDEBAR
+    ═════════════════════════ -->
     <aside class="pp-sidebar" aria-label="Profile overview">
 
       <!-- Profile completeness -->
@@ -535,10 +554,12 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
       </div>
 
     </aside>
-  </div>
+  </div><!-- /pp-layout -->
 </main>
 
-<!-- DEACTIVATION CONFIRM MODAL -->
+<!-- ══════════════════════════════════════
+     DEACTIVATION CONFIRM MODAL
+══════════════════════════════════════ -->
 <div class="pp-modal-overlay" id="deactivateModal" role="dialog" aria-modal="true" aria-labelledby="deactivateTitle" hidden>
   <div class="pp-modal pp-modal--danger">
     <div class="pp-modal-head">
@@ -558,9 +579,12 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
   </div>
 </div>
 
-<!-- SCRIPTS -->
+<!-- ══════════════════════════════════════
+     SCRIPTS
+══════════════════════════════════════ -->
 <script>
 (function () {
+  // ── Tab switching ─────────────────────────────────────────
   const tabs   = document.querySelectorAll('.pp-tab');
   const panels = document.querySelectorAll('.pp-tab-panel');
 
@@ -575,7 +599,7 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
     });
   });
 
-  // Bio character counter 
+  // ── Bio character counter ─────────────────────────────────
   const bio   = document.getElementById('bio');
   const count = document.getElementById('bioCount');
   if (bio && count) {
@@ -587,6 +611,7 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
     });
   }
 
+  // ── Password toggle ───────────────────────────────────────
   document.querySelectorAll('.pp-pw-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
       const input = document.getElementById(btn.dataset.target);
@@ -596,7 +621,7 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
     });
   });
 
-  // Password strength and match checking 
+  // ── Password strength ─────────────────────────────────────
   const pwInput     = document.getElementById('new_password');
   const confirmInput = document.getElementById('confirm_password');
   const strengthBar  = document.getElementById('pwStrengthBar');
@@ -656,7 +681,7 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
     });
   }
 
-  // Profile photo upload 
+  // ── Profile photo upload ─────────────────────────────────
   const photoInput = document.getElementById('profilePhotoInput');
   const photoForm  = document.getElementById('photoUploadForm');
   const heroAv     = document.getElementById('heroAv');
@@ -742,7 +767,7 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
     setTimeout(() => { toast.classList.remove('pp-photo-toast--show'); setTimeout(() => toast.remove(), 400); }, 3500);
   }
 
-  // Deactivate modal 
+  // ── Deactivate modal ──────────────────────────────────────
   window.confirmDeactivate = function () {
     document.getElementById('deactivateModal').hidden = false;
   };
@@ -756,7 +781,7 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
     if (e.key === 'Escape' && m && !m.hidden) m.hidden = true;
   });
 
-  // Prevent double submit on forms 
+  // ── Prevent double submit ─────────────────────────────────
   document.querySelectorAll('.pp-form').forEach(form => {
     form.addEventListener('submit', function () {
       const btn = this.querySelector('[type="submit"]');
@@ -777,5 +802,17 @@ $approvalStatus = $statusMap[(int)$profile['is_approved']] ?? $statusMap[0];
 })();
 </script>
 
+<script>
+(function(){
+  var html=document.documentElement,btn=document.getElementById('themeToggle');
+  var moon=btn?btn.querySelector('.icon-moon'):null,sun=btn?btn.querySelector('.icon-sun'):null;
+  function applyTheme(t){
+    if(t==='dark'){ html.setAttribute('data-theme','dark'); if(moon)moon.style.display='block'; if(sun)sun.style.display='none'; }
+    else{ html.removeAttribute('data-theme'); if(moon)moon.style.display='none'; if(sun)sun.style.display='block'; }
+  }
+  applyTheme(localStorage.getItem('qb-theme')||'light');
+  if(btn) btn.addEventListener('click',function(){ var n=html.getAttribute('data-theme')==='dark'?'light':'dark'; localStorage.setItem('qb-theme',n); applyTheme(n); });
+})();
+</script>
 </body>
 </html>
