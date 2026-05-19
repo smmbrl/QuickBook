@@ -4,26 +4,26 @@ $db           = Database::getInstance();
 $providerId   = $_SESSION['user_id'] ?? 0;
 $providerName = htmlspecialchars($_SESSION['user_name'] ?? 'Provider');
 
-/*  Provider profile  */
+/* ── Provider profile ── */
 $stmt = $db->prepare("SELECT * FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
 $stmt->execute([$providerId]);
 $profile   = $stmt->fetch();
 $profileId = $profile['id'] ?? 0;
 $initials  = strtoupper(substr($providerName, 0, 1));
 
-/* Pending bookings count (for nav badge) */
+/* ── Pending bookings count (for nav badge) ── */
 $stmt = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ? AND status = 'pending'");
 $stmt->execute([$profileId]);
 $pendingBookings = (int)$stmt->fetchColumn();
 
-/* Flash */
+/* ── Flash ── */
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
 
-/* Days config */
+/* ── Days config ── */
 $days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
-/* Fetch existing availability */
+/* ── Fetch existing availability ── */
 $stmt = $db->prepare("SELECT * FROM tbl_provider_availability WHERE provider_id = ?");
 $stmt->execute([$profileId]);
 $rows = $stmt->fetchAll();
@@ -33,7 +33,7 @@ foreach ($rows as $row) {
     $availability[$row['day_of_week']] = $row;
 }
 
-/* Count active days */
+/* ── Count active days ── */
 $activeDays = count(array_filter($availability, fn($r) => $r['is_available'] ?? 0));
 $totalSlots = 0;
 foreach ($availability as $r) {
@@ -52,14 +52,18 @@ foreach ($availability as $r) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QuickBook — Availability</title>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/provider_availability.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script>(function(){ var t=localStorage.getItem('qb-theme')||'light'; if(t==='dark') document.documentElement.setAttribute('data-theme','dark'); })();</script>
 </head>
 <body>
 
 <div class="grain" aria-hidden="true"></div>
 
-<!-- NAV -->
+<!-- ══════════════════════════════════════
+     NAV
+══════════════════════════════════════ -->
 <nav class="pv-nav" role="navigation" aria-label="Provider navigation">
   <div class="pv-nav-inner">
     <a href="<?= BASE_URL ?>provider/dashboard" class="pv-logo">
@@ -76,22 +80,34 @@ foreach ($availability as $r) {
       <a href="<?= BASE_URL ?>provider/profile"      class="pv-nav-link">Profile</a>
     </div>
     <div class="pv-nav-end">
-      <div class="pv-nav-user">
-        <div class="pv-nav-av" aria-hidden="true">
-          <?php if (!empty($profile['profile_photo'])): ?>
-            <img src="<?= BASE_URL ?>assets/uploads/profiles/<?= htmlspecialchars($profile['profile_photo']) ?>" alt="Profile photo" style="width:34px;height:34px;min-width:34px;min-height:34px;max-width:34px;max-height:34px;object-fit:cover;border-radius:99px;display:block;">
-          <?php else: ?>
-            <span><?= $initials ?></span>
-          <?php endif; ?>
-        </div>
-        <span><?= $providerName ?></span>
+      <?php $notifUserId = (int)$providerId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
+
+      <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">
+        <svg class="icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+
+      <div class="pv-nav-av" aria-hidden="true">
+        <?php if (!empty($profile['profile_photo'])): ?>
+          <img src="<?= htmlspecialchars($profile['profile_photo']) ?>" alt="Profile photo" style="width:34px;height:34px;min-width:34px;min-height:34px;max-width:34px;max-height:34px;object-fit:cover;border-radius:99px;display:block;">
+        <?php else: ?>
+          <span><?= $initials ?></span>
+        <?php endif; ?>
       </div>
-      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout">Sign out</a>
+      <div class="pv-nav-user">
+        <div class="pv-nav-user-name"><?= $providerName ?></div>
+        <div class="pv-nav-user-role">Provider</div>
+      </div>
+      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout-icon" title="Sign out" aria-label="Sign out">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i>
+      </a>
     </div>
   </div>
 </nav>
 
-<!-- HERO -->
+<!-- ══════════════════════════════════════
+     HERO
+══════════════════════════════════════ -->
 <header class="pv-hero" role="banner">
   <div class="pv-hero-bg" aria-hidden="true">
     <div class="pv-hero-bg-img pv-hero-bg-img--1"></div>
@@ -132,7 +148,9 @@ foreach ($availability as $r) {
   </div>
 </header>
 
-<!-- PAGE -->
+<!-- ══════════════════════════════════════
+     PAGE
+══════════════════════════════════════ -->
 <main class="av-page" role="main">
 
   <?php if ($flash): ?>
@@ -144,7 +162,7 @@ foreach ($availability as $r) {
 
   <div class="av-layout">
 
-    <!-- Weekly Schedule  -->
+    <!-- ── LEFT: Weekly Schedule ── -->
     <section class="av-card av-schedule" aria-label="Weekly schedule">
       <div class="av-card-head">
         <div>
@@ -251,6 +269,7 @@ foreach ($availability as $r) {
       </form>
     </section>
 
+    <!-- ── RIGHT: Visual Overview ── -->
     <aside class="av-sidebar" aria-label="Availability overview">
 
       <!-- Weekly heatmap -->
@@ -336,7 +355,7 @@ foreach ($availability as $r) {
 </main>
 
 <script>
-  // Track unsaved state 
+  // ── Track unsaved state ──
   const form = document.getElementById('avForm');
   const changeIndicator = document.getElementById('changeIndicator');
 
@@ -344,7 +363,7 @@ foreach ($availability as $r) {
     changeIndicator.style.opacity = '1';
   });
 
-  // Toggle a day on/off 
+  // ── Toggle a day on/off ──
   function toggleDay(day, active) {
     const row    = document.getElementById('row-' + day);
     const times  = document.getElementById('times-' + day);
@@ -370,7 +389,7 @@ foreach ($availability as $r) {
     changeIndicator.style.opacity = '1';
   }
 
-  // Update the status text beneath the day name and the hours badge when time inputs change
+  // ── Update the status text beneath the day name ──
   function updateStatus(day) {
     const startEl = document.getElementById('start-' + day);
     const endEl   = document.getElementById('end-' + day);
@@ -472,7 +491,7 @@ foreach ($availability as $r) {
     });
   }
 
-  // Init badges on load 
+  // ── Init badges on load ──
   document.addEventListener('DOMContentLoaded', () => {
     const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
     days.forEach(day => {
@@ -492,5 +511,17 @@ foreach ($availability as $r) {
   });
 </script>
 
+<script>
+  (function(){
+    var html=document.documentElement,btn=document.getElementById('themeToggle');
+    var moon=btn?btn.querySelector('.icon-moon'):null,sun=btn?btn.querySelector('.icon-sun'):null;
+    function applyTheme(t){
+      if(t==='dark'){ html.setAttribute('data-theme','dark'); if(moon)moon.style.display='block'; if(sun)sun.style.display='none'; }
+      else{ html.removeAttribute('data-theme'); if(moon)moon.style.display='none'; if(sun)sun.style.display='block'; }
+    }
+    applyTheme(localStorage.getItem('qb-theme')||'light');
+    if(btn) btn.addEventListener('click',function(){ var n=html.getAttribute('data-theme')==='dark'?'light':'dark'; localStorage.setItem('qb-theme',n); applyTheme(n); });
+  })();
+</script>
 </body>
 </html>

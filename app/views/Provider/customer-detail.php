@@ -1,4 +1,6 @@
 <?php
+// app/views/Provider/customer-detail.php
+// $booking is pre-loaded by ProviderDashController::bookingDetail()
 
 require_once __DIR__ . '/../../../config/database.php';
 $db     = Database::getInstance();
@@ -77,11 +79,64 @@ $currentIdx  = array_search($status, $statusOrder);
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QuickBook — Booking #<?= str_pad((int)$booking['id'], 4, '0', STR_PAD_LEFT) ?></title>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/provider_bookings.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_booking_detail.css">
-  <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/provider_customer_detail.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script>(function(){ var t=localStorage.getItem('qb-theme')||'light'; if(t==='dark') document.documentElement.setAttribute('data-theme','dark'); })();</script>
+  <style>
+    [hidden] { display: none !important; }
+    :root { --yellow:#fbbf24; --yellow-soft:rgba(251,191,36,.10); --yellow-border:rgba(251,191,36,.28); }
+
+    .pv-nav { position:sticky;top:0;z-index:100; }
+    .pv-nav-logout-icon { width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--text-dim);border:1px solid transparent;font-size:1.25rem;transition:color .2s,background .2s,border-color .2s; }
+    .pv-nav-logout-icon:hover { color:var(--red);background:var(--red-soft);border-color:var(--red-border); }
+
+    .pv-hero { min-height:260px; }
+    .pv-hero-inner { display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;padding-bottom:2rem; }
+
+    .pv-status-badge { display:inline-flex;align-items:center;gap:.5rem;padding:.38rem .9rem;border-radius:999px;font-size:.73rem;font-weight:700;letter-spacing:.04em;border:1px solid transparent; }
+    .pv-status-badge--amber  { background:var(--orange-soft);  color:var(--orange); border-color:var(--orange-border); }
+    .pv-status-badge--green  { background:var(--green-soft);   color:var(--green);  border-color:var(--green-border); }
+    .pv-status-badge--blue   { background:var(--blue-soft);    color:var(--blue);   border-color:var(--blue-border); }
+    .pv-status-badge--red    { background:var(--red-soft);     color:var(--red);    border-color:var(--red-border); }
+    .pv-status-badge--muted  { background:var(--surface);      color:var(--text-muted); border-color:var(--border); }
+
+    .pv-tier-badge { display:inline-flex;align-items:center;gap:.4rem;padding:.35rem .85rem;border-radius:999px;font-size:.73rem;font-weight:600;background:var(--gold-soft);color:var(--gold);border:1px solid var(--gold-border); }
+
+    .pv-card { background:rgba(255,255,255,.55);backdrop-filter:blur(22px) saturate(1.6);-webkit-backdrop-filter:blur(22px) saturate(1.6);border:1.5px solid rgba(255,255,255,.70);border-radius:var(--r-xl);box-shadow:0 4px 28px rgba(139,110,60,.09),0 1px 0 rgba(255,255,255,.85) inset; }
+
+    .cd-btn { display:flex;align-items:center;justify-content:center;gap:.5rem;width:100%;padding:.65rem 1rem;border-radius:var(--r-sm);font-size:.82rem;font-weight:700;cursor:pointer;border:1px solid transparent;text-decoration:none;transition:background .18s; }
+    .cd-btn--confirm { background:var(--green-soft); color:var(--green); border-color:var(--green-border); }
+    .cd-btn--confirm:hover { background:rgba(22,163,74,.18); }
+    .cd-btn--start   { background:var(--blue-soft);  color:var(--blue);  border-color:var(--blue-border); }
+    .cd-btn--start:hover { background:rgba(37,99,235,.18); }
+    .cd-btn--complete{ background:var(--gold-lt);    color:var(--gold-dim); border-color:var(--gold-border); }
+    .cd-btn--complete:hover { background:var(--gold-soft-md); }
+    .cd-btn--delete  { background:var(--red-soft);   color:var(--red);   border-color:var(--red-border); }
+    .cd-btn--delete:hover { background:rgba(220,38,38,.18); }
+    .cd-btn--ghost   { background:var(--surface);    color:var(--text-muted); border-color:var(--border); }
+    .cd-btn--ghost:hover { background:var(--surface-md); color:var(--text-primary); }
+
+    /* Delete modal */
+    .cd-btn--resched { background:rgba(245,158,11,.1);color:#f59e0b;border-color:rgba(245,158,11,.25); }
+    .resch-row  { display:flex;gap:.6rem;margin-bottom:.75rem; }
+    .resch-field{ flex:1; }
+
+    /* Cancel reason box */
+    .cancel-reason-box { background:var(--red-soft);border:1px solid var(--red-border);border-radius:10px;padding:.85rem 1rem;margin-top:.75rem;font-size:.82rem;color:var(--text-muted);line-height:1.55; }
+    .cancel-reason-lbl { font-size:.62rem;font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--red);margin-bottom:.3rem; }
+
+    /* Toast */
+    .toast-container{ position:fixed;bottom:1.5rem;right:1.5rem;display:flex;flex-direction:column;gap:.6rem;z-index:9999;pointer-events:none; }
+    .toast{ display:flex;align-items:center;gap:.65rem;padding:.7rem 1rem;border-radius:10px;min-width:260px;max-width:380px;font-size:.82rem;font-weight:500;backdrop-filter:blur(12px);box-shadow:0 8px 30px rgba(0,0,0,.35);transform:translateX(120%);opacity:0;transition:transform .32s cubic-bezier(.22,1,.36,1),opacity .28s;pointer-events:auto; }
+    .toast.is-visible{ transform:translateX(0);opacity:1; }
+    .toast--success{ background:rgba(255,252,240,.97);border:1px solid var(--green-border);color:var(--green); }
+    .toast--error  { background:rgba(255,252,240,.97);border:1px solid var(--red-border);color:var(--red); }
+
+    @media(max-width:900px){ .bd-grid{grid-template-columns:1fr} .bd-sidebar{order:-1} }
+    @media(max-width:540px){ .bd-detail-grid{grid-template-columns:1fr} .bd-card{padding:1.2rem 1.1rem} }
+  </style>
 </head>
 <body>
 
@@ -105,17 +160,27 @@ $currentIdx  = array_search($status, $statusOrder);
       <a href="<?= BASE_URL ?>provider/profile"      class="pv-nav-link">Profile</a>
     </div>
     <div class="pv-nav-end">
-      <div class="pv-nav-user">
-        <div class="pv-nav-av" aria-hidden="true">
-          <?php if (!empty($navRow['nav_photo'])): ?>
-            <img src="<?= BASE_URL ?>assets/uploads/profiles/<?= htmlspecialchars($navRow['nav_photo']) ?>" alt="Profile photo" style="width:34px;height:34px;min-width:34px;min-height:34px;object-fit:cover;border-radius:99px;display:block;">
-          <?php else: ?>
-            <?= $initials ?>
-          <?php endif; ?>
-        </div>
-        <span><?= $userName ?></span>
+      <?php $notifUserId = (int)$userId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
+
+      <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">
+        <svg class="icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+
+      <div class="pv-nav-av" aria-hidden="true">
+        <?php if (!empty($navRow['nav_photo'])): ?>
+          <img src="<?= htmlspecialchars($navRow['nav_photo']) ?>" alt="Profile photo" style="width:34px;height:34px;min-width:34px;min-height:34px;max-width:34px;max-height:34px;object-fit:cover;border-radius:99px;display:block;">
+        <?php else: ?>
+          <span><?= $initials ?></span>
+        <?php endif; ?>
       </div>
-      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout">Sign out</a>
+      <div class="pv-nav-user">
+        <div class="pv-nav-user-name"><?= $userName ?></div>
+        <div class="pv-nav-user-role">Provider</div>
+      </div>
+      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout-icon" title="Sign out" aria-label="Sign out">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i>
+      </a>
     </div>
   </div>
 </nav>
@@ -137,8 +202,8 @@ $currentIdx  = array_search($status, $statusOrder);
         </span>
       </div>
     </div>
-    <a href="<?= BASE_URL ?>provider/bookings" class="pv-back-btn">
-      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+    <a href="<?= BASE_URL ?>provider/bookings" style="display:inline-flex;align-items:center;gap:.5rem;padding:.55rem 1.1rem;border-radius:99px;background:rgba(255,255,255,.60);backdrop-filter:blur(12px);border:1px solid var(--gold-border);color:var(--gold-dim);font-family:var(--font-mono);font-size:.68rem;font-weight:500;letter-spacing:.04em;text-decoration:none;transition:background .2s,box-shadow .2s;" onmouseover="this.style.background='rgba(255,255,255,.85)';this.style.boxShadow='0 4px 16px rgba(201,168,76,.20)'" onmouseout="this.style.background='rgba(255,255,255,.60)';this.style.boxShadow='none'">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
       Back to Bookings
     </a>
   </div>
@@ -158,19 +223,19 @@ $currentIdx  = array_search($status, $statusOrder);
 
         <!-- Identity Row -->
         <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem">
-          <div style="width:56px;height:56px;border-radius:50%;background:var(--gold);color:#000;font-weight:800;font-size:1.1rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 0 3px rgba(251,191,36,.2);overflow:hidden;">
+          <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--gold-dim),var(--gold));color:#fff8e8;font-family:var(--font-display);font-weight:700;font-size:1.1rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 0 3px var(--gold-border),0 2px 12px rgba(201,168,76,.25);overflow:hidden;">
             <?php if (!empty($booking['customer_avatar'])): ?>
-              <img src="<?= BASE_URL ?>assets/uploads/profiles/<?= htmlspecialchars($booking['customer_avatar']) ?>" alt="<?= htmlspecialchars(($booking['customer_first'] ?? '') . ' ' . ($booking['customer_last'] ?? '')) ?>" style="width:100%;height:100%;object-fit:cover;display:block;">
+              <img src="<?= htmlspecialchars($booking['customer_avatar']) ?>" alt="<?= htmlspecialchars(($booking['customer_first'] ?? '') . ' ' . ($booking['customer_last'] ?? '')) ?>" style="width:100%;height:100%;object-fit:cover;display:block;">
             <?php else: ?>
               <?= strtoupper(substr($booking['customer_first'] ?? 'C', 0, 1) . substr($booking['customer_last'] ?? 'U', 0, 1)) ?>
             <?php endif; ?>
           </div>
           <div>
-            <div style="font-weight:800;font-size:1.05rem;color:#fff">
+            <div style="font-weight:700;font-size:1.05rem;color:var(--text-primary);font-family:var(--font-display);font-style:italic;">
               <?= htmlspecialchars(($booking['customer_first'] ?? '') . ' ' . ($booking['customer_last'] ?? '')) ?>
             </div>
             <?php if ($custSince): ?>
-            <div style="font-size:.73rem;color:var(--muted);margin-top:.2rem">
+            <div style="font-size:.73rem;color:var(--text-dim);margin-top:.2rem">
               <i class="fa-solid fa-calendar-plus" style="margin-right:.3rem"></i>Member since <?= $custSince ?>
             </div>
             <?php endif; ?>
@@ -181,47 +246,47 @@ $currentIdx  = array_search($status, $statusOrder);
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem 1rem">
 
           <!-- Email -->
-          <div style="grid-column:1/-1;display:flex;align-items:flex-start;gap:.65rem;padding:.7rem .9rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px">
+          <div style="grid-column:1/-1;display:flex;align-items:flex-start;gap:.65rem;padding:.7rem .9rem;background:rgba(255,255,255,.55);border:1px solid var(--gold-border);border-radius:10px">
             <i class="fa-solid fa-envelope" style="color:var(--gold);margin-top:.15rem;font-size:.85rem;flex-shrink:0"></i>
             <div>
               <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.2rem">Email</div>
-              <div style="font-size:.88rem;color:#fff;font-weight:500"><?= htmlspecialchars($booking['customer_email'] ?? '—') ?></div>
+              <div style="font-size:.88rem;color:var(--text-primary);font-weight:500"><?= htmlspecialchars($booking['customer_email'] ?? '—') ?></div>
             </div>
           </div>
 
           <!-- Phone -->
-          <div style="display:flex;align-items:flex-start;gap:.65rem;padding:.7rem .9rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px">
+          <div style="display:flex;align-items:flex-start;gap:.65rem;padding:.7rem .9rem;background:rgba(255,255,255,.55);border:1px solid var(--gold-border);border-radius:10px">
             <i class="fa-solid fa-phone" style="color:#4ade80;margin-top:.15rem;font-size:.85rem;flex-shrink:0"></i>
             <div>
               <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.2rem">Phone</div>
-              <div style="font-size:.88rem;color:#fff;font-weight:500">
-                <?= $custPhone ? htmlspecialchars($custPhone) : '<span style="color:var(--muted);font-style:italic">Not provided</span>' ?>
+              <div style="font-size:.88rem;color:var(--text-primary);font-weight:500">
+                <?= $custPhone ? htmlspecialchars($custPhone) : '<span style="color:var(--text-dim);font-style:italic">Not provided</span>' ?>
               </div>
             </div>
           </div>
 
           <!-- Gender -->
-          <div style="display:flex;align-items:flex-start;gap:.65rem;padding:.7rem .9rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px">
+          <div style="display:flex;align-items:flex-start;gap:.65rem;padding:.7rem .9rem;background:rgba(255,255,255,.55);border:1px solid var(--gold-border);border-radius:10px">
             <i class="fa-solid fa-venus-mars" style="color:#a78bfa;margin-top:.15rem;font-size:.85rem;flex-shrink:0"></i>
             <div>
               <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.2rem">Gender</div>
-              <div style="font-size:.88rem;color:#fff;font-weight:500">
-                <?= ($custGender && isset($genderLabels[$custGender])) ? $genderLabels[$custGender] : '<span style="color:var(--muted);font-style:italic">Not provided</span>' ?>
+              <div style="font-size:.88rem;color:var(--text-primary);font-weight:500">
+                <?= ($custGender && isset($genderLabels[$custGender])) ? $genderLabels[$custGender] : '<span style="color:var(--text-dim);font-style:italic">Not provided</span>' ?>
               </div>
             </div>
           </div>
 
           <!-- Date of Birth -->
-          <div style="display:flex;align-items:flex-start;gap:.65rem;padding:.7rem .9rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px">
+          <div style="display:flex;align-items:flex-start;gap:.65rem;padding:.7rem .9rem;background:rgba(255,255,255,.55);border:1px solid var(--gold-border);border-radius:10px">
             <i class="fa-solid fa-cake-candles" style="color:#f472b6;margin-top:.15rem;font-size:.85rem;flex-shrink:0"></i>
             <div>
               <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.2rem">Date of Birth</div>
-              <div style="font-size:.88rem;color:#fff;font-weight:500">
+              <div style="font-size:.88rem;color:var(--text-primary);font-weight:500">
                 <?php if ($custDob): ?>
                   <?= htmlspecialchars($custDob) ?>
                   <?php if ($custAge !== null): ?><span style="font-size:.75rem;color:var(--muted);margin-left:.4rem">(<?= $custAge ?> yrs)</span><?php endif; ?>
                 <?php else: ?>
-                  <span style="color:var(--muted);font-style:italic">Not provided</span>
+                  <span style="color:var(--text-dim);font-style:italic">Not provided</span>
                 <?php endif; ?>
               </div>
             </div>
@@ -254,7 +319,7 @@ $currentIdx  = array_search($status, $statusOrder);
             <i class="fa-solid fa-location-dot" style="color:#fbbf24;font-size:1.1rem"></i>
           </div>
           <div style="flex:1">
-            <div style="font-size:1rem;font-weight:700;color:#fff;line-height:1.5;margin-bottom:.35rem">
+            <div style="font-size:1rem;font-weight:700;color:var(--text-primary);line-height:1.5;margin-bottom:.35rem">
               <?= htmlspecialchars($custAddr) ?>
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:.5rem">
@@ -277,13 +342,13 @@ $currentIdx  = array_search($status, $statusOrder);
         <div class="bd-section-title" style="color:#f43f5e">
           <i class="fa-solid fa-triangle-exclamation"></i> Home Service Address Missing
         </div>
-        <p style="font-size:.84rem;color:rgba(255,255,255,.55);margin:.5rem 0 0">
+        <p style="font-size:.84rem;color:var(--text-muted);margin:.5rem 0 0">
           This booking is marked as Home Service but the customer did not provide a service address.
           Please contact the customer to confirm the location before proceeding.
         </p>
         <?php if ($custProfAddr): ?>
         <div style="margin-top:.75rem;padding:.7rem .9rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;font-size:.84rem;color:#fff">
-          <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.4);margin-bottom:.25rem">Profile home address (may be used as reference)</div>
+          <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;color:var(--text-dim);font-family:var(--font-mono);margin-bottom:.25rem">Profile home address (may be used as reference)</div>
           <?= htmlspecialchars($custProfAddr) ?>
         </div>
         <?php endif; ?>
@@ -329,8 +394,14 @@ $currentIdx  = array_search($status, $statusOrder);
           <i class="fa-solid fa-map-pin" style="color:#4ade80;margin-top:.1rem;flex-shrink:0"></i>
           <div>
             <div style="font-size:.7rem;font-family:var(--font-m);letter-spacing:.08em;text-transform:uppercase;color:#4ade80;margin-bottom:.25rem">Shop Address</div>
-            <div style="font-size:.9rem;font-weight:700;color:#fff;line-height:1.4"><?= htmlspecialchars($shopAddr) ?></div>
-            <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem"><i class="fa-solid fa-circle-info"></i> Customer will come to your shop</div>
+            <div style="font-size:.9rem;font-weight:700;color:var(--text-primary);line-height:1.4;margin-bottom:.4rem"><?= htmlspecialchars($shopAddr) ?></div>
+            <a href="https://www.google.com/maps/search/<?= urlencode($shopAddr) ?>"
+               target="_blank" rel="noopener noreferrer"
+               style="display:inline-flex;align-items:center;gap:.4rem;padding:.32rem .75rem;background:rgba(22,163,74,.10);border:1px solid rgba(22,163,74,.25);border-radius:999px;font-size:.72rem;font-weight:700;color:var(--green);text-decoration:none;transition:background .18s;margin-bottom:.4rem"
+               onmouseover="this.style.background='rgba(22,163,74,.20)'" onmouseout="this.style.background='rgba(22,163,74,.10)'">
+              <i class="fa-solid fa-map"></i> Open in Google Maps
+            </a>
+            <div style="font-size:.72rem;color:var(--text-dim);margin-top:.1rem"><i class="fa-solid fa-circle-info"></i> Customer will come to your shop</div>
           </div>
         </div>
         <?php elseif ($locType === 'Remote'): ?>
@@ -617,7 +688,7 @@ $currentIdx  = array_search($status, $statusOrder);
 </div>
 
 <script>
-/* Confirm modal */
+/* ── Confirm modal ── */
 function openConfirmModal() {
   document.getElementById('confirmModal').classList.add('is-open');
 }
@@ -628,7 +699,7 @@ document.getElementById('confirmModal').addEventListener('click', function(e) {
   if (e.target === this) closeConfirmModal();
 });
 
-/* Delete modal */
+/* ── Delete modal ── */
 function openDeleteModal() {
   document.getElementById('delReason').value = '';
   document.getElementById('delCharCount').textContent = '0';
@@ -647,7 +718,7 @@ document.getElementById('delReason').addEventListener('input', function() {
   document.getElementById('delSubmitBtn').disabled = this.value.trim().length < 5;
 });
 
-/* Reschedule modal */
+/* ── Reschedule modal ── */
 function openReschedModal() {
   document.getElementById('reschedDate').value = '';
   document.getElementById('reschedTime').value = '';
@@ -676,6 +747,7 @@ document.getElementById('reschedNote').addEventListener('input', function() {
 document.getElementById('reschedDate').addEventListener('change', validateReschedForm);
 document.getElementById('reschedTime').addEventListener('change', validateReschedForm);
 
+/* ── Escape key ── */
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     closeConfirmModal();
@@ -684,6 +756,7 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
+/* ── Toast ── */
 function showToast(msg, type) {
   var c = document.getElementById('toastContainer'), t = document.createElement('div');
   t.className = 'toast toast--' + (type || 'success');
@@ -698,6 +771,18 @@ function showToast(msg, type) {
 <?php if ($flash): ?>
 showToast('<?= addslashes(htmlspecialchars_decode($flash['msg'])) ?>', '<?= $flash['type'] === 'success' ? 'success' : 'error' ?>');
 <?php endif; ?>
+</script>
+<script>
+  (function(){
+    var html=document.documentElement,btn=document.getElementById('themeToggle');
+    var moon=btn?btn.querySelector('.icon-moon'):null,sun=btn?btn.querySelector('.icon-sun'):null;
+    function applyTheme(t){
+      if(t==='dark'){ html.setAttribute('data-theme','dark'); if(moon)moon.style.display='block'; if(sun)sun.style.display='none'; }
+      else{ html.removeAttribute('data-theme'); if(moon)moon.style.display='none'; if(sun)sun.style.display='block'; }
+    }
+    applyTheme(localStorage.getItem('qb-theme')||'light');
+    if(btn) btn.addEventListener('click',function(){ var n=html.getAttribute('data-theme')==='dark'?'light':'dark'; localStorage.setItem('qb-theme',n); applyTheme(n); });
+  })();
 </script>
 </body>
 </html>
