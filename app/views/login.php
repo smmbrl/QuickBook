@@ -7,8 +7,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QuickBook — Sign In</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,800;0,900;1,700;1,800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/style.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/login.css">
+  <!-- Force light/cream theme for auth pages regardless of user preference -->
+  <style>
+    body { background: #F9F7F2 !important; color: #1A1410 !important; }
+  </style>
 </head>
 <body>
 
@@ -83,13 +89,8 @@
         <a href="<?= BASE_URL ?>register">Create one free</a>
       </p>
 
-      <div class="alert alert-error" id="login-error" style="display:none">
-        ✗ &nbsp; Invalid email or password. Please try again.
-      </div>
-
-      <div class="alert alert-success" id="login-success" style="display:none">
-        ✓ &nbsp; Email verified! You can now log in.
-      </div>
+      <!-- Toast container (inline, inside the form card) -->
+      <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
 
       <form action="<?= BASE_URL ?>auth/login" method="POST">
 
@@ -139,7 +140,7 @@
         </div>
 
         <button type="submit" class="btn btn-primary btn-submit">
-          Sign In →
+          Sign In
         </button>
 
       </form>
@@ -168,7 +169,6 @@
 
 </div>
 
-<div class="screen-label">Screen 2a / 10 — Login</div>
 
 <script>
   function togglePw() {
@@ -180,6 +180,39 @@
     eyeOn.style.display  = isHidden ? 'none'    : '';
     eyeOff.style.display = isHidden ? ''        : 'none';
   }
+
+  function showToast(message, type) {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-' + type;
+
+    toast.innerHTML = `<span class="toast-message">${message}</span>`;
+
+    container.appendChild(toast);
+
+    // Trigger slide-in animation
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => toast.classList.add('toast-visible'));
+    });
+
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => dismissToast(toast), 5000);
+  }
+
+  function dismissToast(toast) {
+    if (!toast || toast.classList.contains('toast-hiding')) return;
+    toast.classList.add('toast-hiding');
+    toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+  }
+
+  // Fire toasts from PHP flash messages
+  <?php if (!empty($error)): ?>
+  showToast(<?= json_encode(htmlspecialchars($error)) ?>, 'error');
+  <?php endif; ?>
+
+  <?php if (!empty($success)): ?>
+  showToast(<?= json_encode(htmlspecialchars($success)) ?>, 'success');
+  <?php endif; ?>
 </script>
 
 </body>
