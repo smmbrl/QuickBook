@@ -2,29 +2,31 @@
 
 session_start();
 
-//  Base URL (auto-detected) 
+//  Base URL (auto-detected)
 $scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));
 define('BASE_URL', rtrim($scriptDir, '/') . '/');   // e.g. /quickbook/public/
 
-//  Autoload helpers 
+//  Autoload helpers
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../app/helpers/NotificationHelper.php';
+require_once __DIR__ . '/../app/controllers/TwoFactorController.php';
 
 
-//  Parse URI 
+//  Parse URI
 $basePath    = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
-$uri         = $_GET['url'] ?? '';                 
-$uri         = trim($uri, '/');                    
-$method      = $_SERVER['REQUEST_METHOD'];         
+$uri         = $_GET['url'] ?? '';
+$uri         = trim($uri, '/');
+$method      = $_SERVER['REQUEST_METHOD'];
 
 
 
 $routes = [
 
-    //  Public pages 
+    //  Public pages
     'GET:'          => ['HomeController',  'index'],
     'GET:home'      => ['HomeController',  'index'],
 
-    //  Auth views (GET shows the page) 
+    //  Auth views (GET shows the page)
     'GET:login'                => ['AuthViewController', 'showLogin'],
     'GET:auth/login'           => ['AuthViewController', 'showLogin'],
     'GET:register'             => ['AuthViewController', 'showRegister'],
@@ -45,24 +47,27 @@ $routes = [
     'POST:auth/reset-password'  => ['AuthController', 'resetPassword'],
 
     //  Customer dashboard
-    'GET:dashboard'                  => ['CustomerController', 'dashboard'],
-    'GET:bookings'                   => ['CustomerController', 'bookings'],
-    'GET:bookings/{any}'             => ['CustomerController', 'bookingDetail'],
-    'POST:bookings/{any}/cancel'           => ['CustomerController', 'cancelBooking'],
-    'GET:bookings/{any}/cancel'            => ['CustomerController', 'cancelBooking'],
-    'POST:bookings/{any}/accept-reschedule'=> ['CustomerController', 'acceptReschedule'],
-    'GET:loyalty'                    => ['CustomerController', 'loyalty'],
-    'GET:profile'                    => ['CustomerController', 'profile'],
-    'POST:profile'                   => ['CustomerController', 'updateProfile'],
+    'GET:dashboard'                         => ['CustomerController', 'dashboard'],
+    'GET:bookings'                          => ['CustomerController', 'bookings'],
+    'GET:bookings/{any}'                    => ['CustomerController', 'bookingDetail'],
+    'POST:bookings/{any}/cancel'            => ['CustomerController', 'cancelBooking'],
+    'GET:bookings/{any}/cancel'             => ['CustomerController', 'cancelBooking'],
+    'POST:bookings/{any}/accept-reschedule' => ['CustomerController', 'acceptReschedule'],
+    'GET:bookings/{any}/review'             => ['CustomerController', 'review'],
+    'POST:bookings/{any}/review'            => ['CustomerController', 'review'],
+    'GET:loyalty'                           => ['CustomerController', 'loyalty'],
+    'POST:loyalty/redeem'                   => ['CustomerController', 'redeemLoyalty'],
+    'GET:profile'                           => ['CustomerController', 'profile'],
+    'POST:profile'                          => ['CustomerController', 'updateProfile'],
 
-    // Browse & booking flow 
-'GET:browse'                     => ['BrowseController',    'index'],
-'GET:browse/{any}'               => ['BrowseController',    'category'],
-'GET:services/{any}'             => ['CustomerController',  'serviceDetail'],  // ← ADD THIS
-'GET:providers/{any}'            => ['ProviderController',  'show'],
-'POST:book'                      => ['BookingController',   'store'],
+    // Browse & booking flow
+    'GET:browse'         => ['BrowseController',   'index'],
+    'GET:browse/{any}'   => ['BrowseController',   'category'],
+    'GET:services/{any}' => ['CustomerController', 'serviceDetail'],
+    'GET:providers/{any}'=> ['ProviderController', 'show'],
+    'POST:book'          => ['BookingController',  'store'],
 
-    // Provider dashboard 
+    // Provider dashboard
     'GET:provider/dashboard'                  => ['ProviderDashController', 'index'],
     'GET:provider/bookings'                   => ['ProviderDashController', 'bookings'],
     'GET:provider/bookings/{any}'             => ['ProviderDashController', 'bookingDetail'],
@@ -76,22 +81,34 @@ $routes = [
     'POST:provider/availability/store'        => ['ProviderDashController', 'storeAvailability'],
     'POST:provider/availability/update/{any}' => ['ProviderDashController', 'updateAvailability'],
     'POST:provider/availability/delete/{any}' => ['ProviderDashController', 'deleteAvailability'],
-    'GET:provider/profile'                          => ['ProviderDashController', 'profile'],
-    'POST:provider/profile'                         => ['ProviderDashController', 'updateProfile'],
-    'POST:provider/profile/update-business'         => ['ProviderDashController', 'updateProfile'],
-    'POST:provider/profile/update-personal'         => ['ProviderDashController', 'updatePersonalInfo'],
-    'POST:provider/profile/update-password'         => ['ProviderDashController', 'updatePassword'],
-    'POST:provider/profile/upload-photo'            => ['ProviderDashController', 'uploadProfilePhoto'],
+    'GET:provider/profile'                    => ['ProviderDashController', 'profile'],
+    'POST:provider/profile'                   => ['ProviderDashController', 'updateProfile'],
+    'POST:provider/profile/update-business'   => ['ProviderDashController', 'updateProfile'],
+    'POST:provider/profile/update-personal'   => ['ProviderDashController', 'updatePersonalInfo'],
+    'POST:provider/profile/update-password'   => ['ProviderDashController', 'updatePassword'],
+    'POST:provider/profile/upload-photo'      => ['ProviderDashController', 'uploadProfilePhoto'],
 
-    // Admin 
-    'GET:admin/dashboard'       => ['AdminController', 'dashboard'],
+    // Notifications (all roles)
+    'POST:notifications/mark-read'     => ['NotificationController', 'markRead'],
+    'POST:notifications/mark-all-read' => ['NotificationController', 'markAllRead'],
+
+    // Admin
+    'GET:admin/dashboard'              => ['AdminController', 'dashboard'],
     'GET:admin/bookings'               => ['AdminController', 'bookings'],
     'POST:admin/bookings/{any}'        => ['AdminController', 'updateBooking'],
     'POST:admin/bookings/{any}/delete' => ['AdminController', 'deleteBooking'],
-    'GET:admin/providers'       => ['AdminController', 'providers'],
-    'POST:admin/providers/{any}'=> ['AdminController', 'updateProvider'],
-    'GET:admin/users'           => ['AdminController', 'users'],
-    'GET:admin/reports'         => ['AdminController', 'reports'],
+    'GET:admin/providers'              => ['AdminController', 'providers'],
+    'POST:admin/providers/{any}'       => ['AdminController', 'updateProvider'],
+    'GET:admin/users'                  => ['AdminController', 'users'],
+    'GET:admin/reports'                => ['AdminController', 'reports'],
+    'GET:admin/logs'                   => ['AdminController', 'logs'],
+
+    // 2FA routes
+    'GET:auth/2fa/setup'    => ['TwoFactorController', 'setup'],
+    'POST:auth/2fa/enable'  => ['TwoFactorController', 'enable'],
+    'GET:auth/2fa/verify'   => ['TwoFactorController', 'showVerify'],
+    'POST:auth/2fa/verify'  => ['TwoFactorController', 'verify'],
+    'POST:auth/2fa/disable' => ['TwoFactorController', 'disable'],
 ];
 
 // Dispatcher
@@ -105,21 +122,18 @@ foreach ($routes as $pattern => $handler) {
         continue;
     }
 
-    
     $regex = '#^' . preg_replace('#\{any\}#', '([^/]+)', $routeUri) . '$#';
 
     if (preg_match($regex, $uri, $matches)) {
-        array_shift($matches);      
+        array_shift($matches);
         $params  = $matches;
         $matched = true;
 
         [$controllerName, $action] = $handler;
 
-      
         $file = __DIR__ . '/../app/controllers/' . $controllerName . '.php';
 
         if (!file_exists($file)) {
-          
             renderPlaceholder($controllerName, $action, $uri);
             exit;
         }
@@ -171,7 +185,6 @@ function renderError(int $code, string $uri = ''): void
     }
     exit;
 }
-
 
 function renderPlaceholder(string $ctrl, string $action, string $uri): void
 {
