@@ -7,7 +7,7 @@ $userName = htmlspecialchars($_SESSION['user_name'] ?? 'Customer');
 $initials = strtoupper(substr($userName, 0, 2));
 $stAv = $db->prepare("SELECT avatar_url FROM tbl_users WHERE id = ? LIMIT 1");
 $stAv->execute([$userId]);
-$avatarUrl = ($av = $stAv->fetchColumn()) ? BASE_URL . 'assets/uploads/profiles/' . htmlspecialchars($av) : null;
+$avatarUrl = ($av = $stAv->fetchColumn()) ? ($av) : null;
 
 
 $statusFilter = $_GET['status'] ?? 'all';
@@ -150,6 +150,12 @@ $filterCards = [
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_bookings.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script>
+    (function(){
+      var t = localStorage.getItem('qb-theme') || 'light';
+      if (t === 'dark') document.documentElement.setAttribute('data-theme','dark');
+    })();
+  </script>
 </head>
 <body>
 
@@ -177,10 +183,30 @@ $filterCards = [
     </div>
 
     <div class="pv-nav-end">
-      <button class="pv-notif-btn" aria-label="Notifications">
-        <i class="fa-solid fa-bell"></i>
-        <span class="pv-notif-dot" aria-hidden="true"></span>
+      <?php $notifUserId = (int)$userId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
+
+      <!-- THEME TOGGLE -->
+      <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode" title="Toggle theme">
+        <svg class="icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+        <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1"  x2="12" y2="3"/>
+          <line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22"  y1="4.22"  x2="5.64"  y2="5.64"/>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1"  y1="12" x2="3"  y2="12"/>
+          <line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22"  y1="19.78" x2="5.64"  y2="18.36"/>
+          <line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"/>
+        </svg>
       </button>
+
       <div class="pv-nav-av" aria-hidden="true">
         <?php if ($avatarUrl): ?>
           <img src="<?= $avatarUrl ?>" alt="<?= $userName ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
@@ -192,7 +218,10 @@ $filterCards = [
         <div class="pv-nav-user-name"><?= $userName ?></div>
         <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
       </div>
-      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout">Sign out</a>
+
+      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout-icon" title="Sign out" aria-label="Sign out">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i>
+      </a>
     </div>
 
   </div>
@@ -214,7 +243,7 @@ $filterCards = [
           <span class="pv-status-dot" aria-hidden="true"></span>
           Active Member
         </span>
-        <span class="pv-tier-badge"> <?= $loyaltyTier ?></span>
+        <span class="pv-tier-badge">⭐ <?= $loyaltyTier ?></span>
       </div>
     </div>
 
@@ -296,7 +325,7 @@ $filterCards = [
 
     <?php if (empty($bookings)): ?>
     <div class="pv-empty-state">
-      <div class="pv-empty-icon" aria-hidden="true"></div>
+      <div class="pv-empty-icon" aria-hidden="true">📭</div>
       <p>No bookings found<?= $search ? ' for "<strong>' . htmlspecialchars($search) . '</strong>"' : '' ?>.</p>
       <a href="<?= BASE_URL ?>browse" class="pv-empty-cta">Browse Services →</a>
     </div>
@@ -321,7 +350,7 @@ $filterCards = [
 
         <div class="pv-booking-info">
           <div class="pv-booking-service"><?= htmlspecialchars($b['service_name']) ?></div>
-          <div class="pv-booking-provider"> <?= htmlspecialchars($b['business_name']) ?></div>
+          <div class="pv-booking-provider">📍 <?= htmlspecialchars($b['business_name']) ?></div>
           <div class="pv-booking-tags">
             <?php if ($b['category_name']): ?>
               <span class="pv-tag pv-tag--cat"><?= htmlspecialchars($b['category_name']) ?></span>
@@ -341,16 +370,10 @@ $filterCards = [
           <a href="<?= BASE_URL ?>bookings/<?= (int)$b['id'] ?>" class="pv-btn pv-btn--sm pv-btn--primary">
             View
           </a>
-          <?php if ($isCancellable): ?>
-            <a href="<?= BASE_URL ?>bookings/<?= (int)$b['id'] ?>/cancel"
-               class="pv-btn pv-btn--sm pv-btn--ghost"
-               onclick="return confirm('Are you sure you want to cancel this booking?')">
-              Cancel
-            </a>
-          <?php elseif ($isCompleted && !$b['has_review']): ?>
+          <?php if ($isCompleted && !$b['has_review']): ?>
             <a href="<?= BASE_URL ?>bookings/<?= (int)$b['id'] ?>/review"
                class="pv-btn pv-btn--sm pv-btn--review">
-              Review
+              ⭐ Review
             </a>
           <?php endif; ?>
         </div>
@@ -396,5 +419,36 @@ $filterCards = [
 
 </main>
 
+<script>
+(function () {
+  var btn  = document.getElementById('themeToggle');
+  var moon = document.querySelector('.icon-moon');
+  var sun  = document.querySelector('.icon-sun');
+
+  function applyTheme(theme) {
+    if (theme === 'light') {
+      document.documentElement.removeAttribute('data-theme');
+      if (moon) moon.style.display = 'none';
+      if (sun)  sun.style.display  = 'block';
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      if (moon) moon.style.display = 'block';
+      if (sun)  sun.style.display  = 'none';
+    }
+  }
+
+  var saved = localStorage.getItem('qb-theme') || 'light';
+  applyTheme(saved);
+
+  if (btn) {
+    btn.addEventListener('click', function () {
+      var current = document.documentElement.getAttribute('data-theme');
+      var next = current === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('qb-theme', next);
+      applyTheme(next);
+    });
+  }
+})();
+</script>
 </body>
 </html>
