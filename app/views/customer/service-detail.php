@@ -8,7 +8,7 @@ $initials = strtoupper(substr($userName, 0, 2));
 
 $stAv = $db->prepare("SELECT avatar_url FROM tbl_users WHERE id = ? LIMIT 1");
 $stAv->execute([$userId]);
-$avatarUrl = ($av = $stAv->fetchColumn()) ? BASE_URL . 'assets/uploads/profiles/' . htmlspecialchars($av) : null;
+$avatarUrl = ($av = $stAv->fetchColumn()) ? ($av) : null;
 
 $stPoints = $db->prepare("SELECT COALESCE(SUM(points),0) FROM tbl_loyalty_points WHERE user_id = ?");
 $stPoints->execute([$userId]);
@@ -76,10 +76,13 @@ $shopAddr = $service['address'] ?? '';
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QuickBook — <?= htmlspecialchars($service['name']) ?></title>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_browse.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_service_detail.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script>
+    (function(){ var t=localStorage.getItem('qb-theme')||'light'; if(t==='dark') document.documentElement.setAttribute('data-theme','dark'); })();
+  </script>
 </head>
 <body>
 
@@ -105,10 +108,24 @@ $shopAddr = $service['address'] ?? '';
       <a href="<?= BASE_URL ?>profile"    class="pv-nav-link">Profile</a>
     </div>
     <div class="pv-nav-end">
-      <button class="pv-notif-btn" aria-label="Notifications">
-        <i class="fa-solid fa-bell"></i>
-        <span class="pv-notif-dot" aria-hidden="true"></span>
+      <?php $notifUserId = (int)$userId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
+
+      <!-- THEME TOGGLE -->
+      <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode" title="Toggle theme">
+        <svg class="icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+        <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
       </button>
+
       <div class="pv-nav-av" aria-hidden="true">
         <?php if ($avatarUrl): ?>
           <img src="<?= $avatarUrl ?>" alt="<?= $userName ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
@@ -120,7 +137,9 @@ $shopAddr = $service['address'] ?? '';
         <div class="pv-nav-user-name"><?= $userName ?></div>
         <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
       </div>
-      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout">Sign out</a>
+      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout-icon" title="Sign out" aria-label="Sign out">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i>
+      </a>
     </div>
   </div>
 </nav>
@@ -154,6 +173,9 @@ $shopAddr = $service['address'] ?? '';
           <i class="fa-solid fa-circle-check"></i> Available
         </span>
       </div>
+      <?php if (!empty($service['description'])): ?>
+      <p class="sd-hero-description"><?= htmlspecialchars($service['description']) ?></p>
+      <?php endif; ?>
     </div>
     <a href="<?= BASE_URL ?>browse" class="sd-back-btn">
       <i class="fa-solid fa-arrow-left"></i> Back to Browse
@@ -161,7 +183,7 @@ $shopAddr = $service['address'] ?? '';
   </div>
 </header>
 
-
+<!-- BREADCRUMB -->
 <div class="sd-breadcrumb-wrap">
   <nav class="sd-breadcrumb" aria-label="Breadcrumb">
     <a href="<?= BASE_URL ?>browse">Browse</a>
@@ -183,83 +205,8 @@ $shopAddr = $service['address'] ?? '';
 
   <div class="sd-grid">
 
+    <!-- ═══════════════ LEFT COLUMN ═══════════════ -->
     <div class="sd-main">
-
-      <!-- SERVICE OVERVIEW CARD -->
-      <div class="sd-card">
-        <div class="sd-card-head">
-          <div class="sd-svc-av"><?= $icon ?></div>
-          <div class="sd-svc-identity">
-            <div class="sd-svc-title"><?= htmlspecialchars($service['name']) ?></div>
-            <?php if ((float)$service['avg_rating'] > 0): ?>
-            <div class="sd-svc-rating-row">
-              <span class="sd-stars">
-                <?php
-                  $r = round((float)$service['avg_rating'] * 2) / 2;
-                  for ($i = 1; $i <= 5; $i++) {
-                      echo $r >= $i ? '★' : ($r >= $i - 0.5 ? '½' : '☆');
-                  }
-                ?>
-              </span>
-              <span class="sd-rating-val"><?= number_format((float)$service['avg_rating'], 1) ?></span>
-              <span class="sd-review-count">(<?= (int)$service['total_reviews'] ?> review<?= $service['total_reviews'] != 1 ? 's' : '' ?>)</span>
-            </div>
-            <?php else: ?>
-              <div style="font-size:.76rem;color:var(--faint);">No reviews yet</div>
-            <?php endif; ?>
-          </div>
-          <div class="sd-price-badge">
-            <div class="sd-price-val">₱<?= number_format((float)$service['price'], 2) ?></div>
-            <?php if (!empty($durationLabel)): ?>
-              <div class="sd-price-per">per <?= $durationLabel ?></div>
-            <?php endif; ?>
-          </div>
-        </div>
-
-
-        <div class="sd-detail-chips">
-          <?php if (!empty($durationLabel)): ?>
-          <div class="sd-detail-chip">
-            <div class="sd-detail-chip-text">
-              <span class="sd-detail-chip-label">Duration</span>
-              <span class="sd-detail-chip-val"><?= $durationLabel ?></span>
-            </div>
-            <span class="sd-detail-chip-icon"><i class="fa-regular fa-clock"></i></span>
-          </div>
-          <?php endif; ?>
-          <div class="sd-detail-chip">
-            <div class="sd-detail-chip-text">
-              <span class="sd-detail-chip-label">Service Type</span>
-              <span class="sd-detail-chip-val"><?= htmlspecialchars($svcLocType) ?></span>
-            </div>
-            <span class="sd-detail-chip-icon"><i class="fa-solid fa-location-dot"></i></span>
-          </div>
-          <?php if (!empty($service['service_type'])): ?>
-          <div class="sd-detail-chip">
-            <div class="sd-detail-chip-text">
-              <span class="sd-detail-chip-label">Provider Type</span>
-              <span class="sd-detail-chip-val"><?= htmlspecialchars($service['service_type']) ?></span>
-            </div>
-            <span class="sd-detail-chip-icon"><i class="fa-solid fa-tag"></i></span>
-          </div>
-          <?php endif; ?>
-          <div class="sd-detail-chip">
-            <div class="sd-detail-chip-text">
-              <span class="sd-detail-chip-label">Price</span>
-              <span class="sd-detail-chip-val">₱<?= number_format((float)$service['price'], 2) ?></span>
-            </div>
-            <span class="sd-detail-chip-icon"><i class="fa-solid fa-peso-sign"></i></span>
-          </div>
-        </div>
-
-        <!-- Description -->
-        <?php if (!empty($service['description'])): ?>
-        <div class="sd-description">
-          <div class="sd-section-label">About this service</div>
-          <p><?= nl2br(htmlspecialchars($service['description'])) ?></p>
-        </div>
-        <?php endif; ?>
-      </div>
 
       <!-- PROVIDER CARD -->
       <div class="sd-card">
@@ -268,7 +215,7 @@ $shopAddr = $service['address'] ?? '';
           <div class="sd-provider-row">
             <div class="sd-provider-av" style="overflow:hidden;display:flex;align-items:center;justify-content:center;font-weight:800;">
               <?php if (!empty($service['profile_photo'])): ?>
-                <img src="<?= BASE_URL ?>assets/uploads/profiles/<?= htmlspecialchars($service['profile_photo']) ?>"
+                <img src="<?= htmlspecialchars($service['profile_photo']) ?>"
                      alt="<?= htmlspecialchars($service['provider_first']) ?>"
                      style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;">
               <?php else: ?>
@@ -328,15 +275,177 @@ $shopAddr = $service['address'] ?? '';
       </div>
       <?php endif; ?>
 
+      <!-- CUSTOMER REVIEWS CARD -->
+      <?php
+        // Fetch reviews for this specific service only
+        $sdRevStmt = $db->prepare("
+            SELECT r.rating, r.comment, r.created_at,
+                   r.customer_id,
+                   TRIM(CONCAT(u.first_name,' ',COALESCE(u.last_name,''))) AS reviewer_name,
+                   u.avatar_url AS profile_photo,
+                   u.gender,
+                   u.date_of_birth,
+                   (SELECT COUNT(*) FROM tbl_bookings b2 WHERE b2.customer_id = u.id AND b2.status = 'completed') AS total_bookings
+            FROM   tbl_reviews r
+            JOIN   tbl_users u ON u.id = r.customer_id
+            WHERE  r.service_id = ? AND r.is_visible = 1
+            ORDER  BY r.created_at DESC
+            LIMIT  20
+        ");
+        $sdRevStmt->execute([$service['id']]);
+        $sdAllReviews = $sdRevStmt->fetchAll();
+
+        // Rating breakdown for this service only
+        $sdBrkStmt = $db->prepare("
+            SELECT rating, COUNT(*) AS cnt FROM tbl_reviews
+            WHERE service_id = ? AND is_visible = 1 GROUP BY rating
+        ");
+        $sdBrkStmt->execute([$service['id']]);
+        $sdBreakdown = array_fill(1, 5, 0);
+        foreach ($sdBrkStmt->fetchAll() as $brow) { $sdBreakdown[(int)$brow['rating']] = (int)$brow['cnt']; }
+        $sdTotalRev  = array_sum($sdBreakdown);
+        $sdAvgRating = $sdTotalRev
+            ? round(array_sum(array_map(fn($s,$c)=>$s*$c, array_keys($sdBreakdown), $sdBreakdown)) / $sdTotalRev, 1)
+            : 0;
+
+        // Check if this customer has a completed, un-reviewed booking for this specific service
+        $sdCanReviewStmt = $db->prepare("
+            SELECT b.id FROM tbl_bookings b
+            WHERE  b.customer_id = ? AND b.service_id = ? AND b.status = 'completed'
+              AND  NOT EXISTS (SELECT 1 FROM tbl_reviews r WHERE r.booking_id = b.id)
+            LIMIT 1
+        ");
+        $sdCanReviewStmt->execute([$userId, $service['id']]);
+        $sdReviewableBooking = $sdCanReviewStmt->fetch();
+
+        if (!function_exists('sdRenderStars')) {
+            function sdRenderStars(float $r): string {
+                $f = floor($r); $h = ($r - $f) >= .5 ? 1 : 0; $e = 5 - $f - $h;
+                return str_repeat('★', $f) . ($h ? '½' : '') . str_repeat('☆', $e);
+            }
+        }
+      ?>
+      <div class="sd-card">
+
+        <!-- Card header -->
+        <div class="sd-reviews-head">
+          <div class="sd-reviews-head-left">
+            <h2 class="sd-reviews-title">Customer Reviews</h2>
+            <?php if ($sdTotalRev > 0): ?>
+            <p class="sd-reviews-sub">
+              <span class="sd-rv-gold">⭐ <?= number_format($sdAvgRating, 1) ?></span>
+              · <?= $sdTotalRev ?> review<?= $sdTotalRev !== 1 ? 's' : '' ?>
+            </p>
+            <?php endif; ?>
+          </div>
+          <?php if ($sdReviewableBooking): ?>
+          <a href="<?= BASE_URL ?>bookings/<?= (int)$sdReviewableBooking['id'] ?>/review"
+             class="sd-review-cta-btn">
+            <i class="fa-solid fa-star" style="font-size:.65rem"></i> Leave a Review
+          </a>
+          <?php endif; ?>
+        </div>
+
+        <div class="sd-reviews-body">
+
+          <?php if ($sdTotalRev > 0): ?>
+          <!-- Rating breakdown -->
+          <div class="sd-rb-wrap">
+            <div class="sd-rb-score">
+              <div class="sd-rb-big"><?= number_format($sdAvgRating, 1) ?></div>
+              <div class="sd-rb-stars"><?= sdRenderStars($sdAvgRating) ?></div>
+              <div class="sd-rb-count"><?= $sdTotalRev ?> ratings</div>
+            </div>
+            <div class="sd-rb-bars">
+              <?php foreach ([5,4,3,2,1] as $star):
+                $cnt = $sdBreakdown[$star];
+                $pct = $sdTotalRev ? round($cnt / $sdTotalRev * 100) : 0;
+              ?>
+              <div class="sd-rb-row">
+                <span class="sd-rb-lbl"><i class="fa-solid fa-star" style="font-size:.55rem"></i> <?= $star ?></span>
+                <div class="sd-rb-track"><div class="sd-rb-fill" style="width:<?= $pct ?>%"></div></div>
+                <span class="sd-rb-num"><?= $cnt ?></span>
+              </div>
+              <?php endforeach; ?>
+            </div>
+          </div>
+          <?php endif; ?>
+
+          <?php if (empty($sdAllReviews)): ?>
+          <div class="sd-reviews-empty">
+            <p>No reviews yet. Be the first!</p>
+            <?php if ($sdReviewableBooking): ?>
+            <a href="<?= BASE_URL ?>bookings/<?= (int)$sdReviewableBooking['id'] ?>/review"
+               class="sd-review-cta-btn">
+              <i class="fa-solid fa-star" style="font-size:.65rem"></i> Write the first review
+            </a>
+            <?php endif; ?>
+          </div>
+          <?php else: ?>
+          <div class="sd-review-list">
+            <?php foreach ($sdAllReviews as $r):
+              $rName       = htmlspecialchars($r['reviewer_name'] ?? 'Anonymous');
+              $rInit       = strtoupper(substr($rName, 0, 2));
+              $rDate       = !empty($r['created_at']) ? date('M d, Y', strtotime($r['created_at'])) : '';
+              $isOwnReview = ((int)$r['customer_id'] === (int)$userId);
+              $profileHref = $isOwnReview ? (BASE_URL . 'profile') : null;
+              $totalBooks  = (int)($r['total_bookings'] ?? 0);
+            ?>
+            <div class="sd-review-item">
+
+              <!-- Avatar -->
+              <?php if ($profileHref): ?>
+              <a href="<?= $profileHref ?>" class="sd-review-av" title="View your profile" style="text-decoration:none;">
+              <?php else: ?>
+              <div class="sd-review-av">
+              <?php endif; ?>
+                <?php if (!empty($r['profile_photo'])): ?>
+                  <img src="<?= $r['profile_photo'] ?>" alt="<?= $rName ?>">
+                <?php else: ?>
+                  <?= $rInit ?>
+                <?php endif; ?>
+              <?php if ($profileHref): ?>
+              </a>
+              <?php else: ?>
+              </div>
+              <?php endif; ?>
+
+              <div class="sd-review-content">
+                <div class="sd-review-meta">
+                  <?php if ($profileHref): ?>
+                  <a href="<?= $profileHref ?>" class="sd-review-name" style="text-decoration:none;color:inherit;" title="View your profile">
+                    <?= $rName ?>
+                    <span style="font-size:.68rem;font-weight:400;color:var(--gold-dim);margin-left:.3rem">(You)</span>
+                  </a>
+                  <?php else: ?>
+                  <span class="sd-review-name"><?= $rName ?></span>
+                  <?php endif; ?>
+                  <span class="sd-review-stars"><?= sdRenderStars((float)$r['rating']) ?></span>
+                  <span class="sd-review-date"><?= $rDate ?></span>
+                </div>
+                <?php if ($r['comment']): ?>
+                  <p class="sd-review-text"><?= htmlspecialchars($r['comment']) ?></p>
+                <?php else: ?>
+                  <p class="sd-review-text sd-review-text--empty">No written comment.</p>
+                <?php endif; ?>
+              </div>
+            </div>
+            <?php endforeach; ?>
+          </div>
+          <?php endif; ?>
+
+        </div><!-- /sd-reviews-body -->
+      </div>
+
     </div>
 
-
+    <!-- ═══════════════ SIDEBAR ═══════════════ -->
     <aside class="sd-sidebar">
       <div class="sd-card sd-book-card">
 
         <div class="sd-book-header">
           <div>
-            <div class="sd-book-title">Book Service</div>
+            <div class="sd-book-title">Book this Service</div>
           </div>
           <span class="sd-status-badge">
             <span class="dot"></span> Active
@@ -350,7 +459,7 @@ $shopAddr = $service['address'] ?? '';
           <!-- DATE -->
           <div class="sd-form-group">
             <label class="sd-form-label" for="formDate">
-              <i class="fa-regular fa-calendar"></i> Booking Date <span class="sd-req"></span>
+              <i class="fa-regular fa-calendar"></i> Booking Date <span class="sd-req">*</span>
             </label>
             <input type="date" class="sd-form-control" id="formDate" name="booking_date"
                    min="<?= date('Y-m-d') ?>" required>
@@ -362,7 +471,7 @@ $shopAddr = $service['address'] ?? '';
           <!-- TIME -->
           <div class="sd-form-group">
             <label class="sd-form-label" for="formTime">
-              <i class="fa-regular fa-clock"></i> Preferred Time <span class="sd-req"></span>
+              <i class="fa-regular fa-clock"></i> Preferred Time <span class="sd-req">*</span>
             </label>
             <input type="time" class="sd-form-control" id="formTime" name="booking_time" required>
             <div id="timeHint" style="font-size:.72rem;color:var(--faint);margin-top:.15rem"></div>
@@ -375,7 +484,7 @@ $shopAddr = $service['address'] ?? '';
             <input type="hidden" name="location_type" value="On-site">
             <div class="sd-form-group">
               <label class="sd-form-label" for="customerAddress">
-                <i class="fa-solid fa-location-dot"></i> Your Address <span class="sd-req"></span>
+                <i class="fa-solid fa-location-dot"></i> Your Address <span class="sd-req">*</span>
               </label>
               <div class="sd-loc-panel sd-loc-panel--onsite" style="margin-bottom:.45rem">
                 <div class="panel-icon"><i class="fa-solid fa-house-chimney-medical"></i></div>
@@ -393,7 +502,7 @@ $shopAddr = $service['address'] ?? '';
               </div>
               <?php else: ?>
               <div class="sd-addr-hint sd-addr-hint--faint">
-                <i class="fa-solid fa-circle-info"></i>
+                <i class=""></i>
                 Your address will be saved and the provider will see it for this booking
               </div>
               <?php endif; ?>
@@ -438,28 +547,28 @@ $shopAddr = $service['address'] ?? '';
             <div class="sd-form-group">
               <div class="sd-loc-selector-label">
                 <i class="fa-solid fa-location-dot"></i>
-                Where would you like the service? <span class="sd-req"></span>
+                Where would you like the service? <span class="sd-req">*</span>
               </div>
 
               <div class="sd-loc-tabs">
                 <label class="sd-loc-tab">
                   <input type="radio" name="location_type" value="In-shop" checked onchange="handleFlexLoc(this.value)">
                   <div class="sd-loc-tab-box">
-                    <div class="sd-loc-tab-icon"></div>
+                    <div class="sd-loc-tab-icon">🏪</div>
                     <div class="sd-loc-tab-label">In-shop</div>
                   </div>
                 </label>
                 <label class="sd-loc-tab">
                   <input type="radio" name="location_type" value="On-site" onchange="handleFlexLoc(this.value)">
                   <div class="sd-loc-tab-box">
-                    <div class="sd-loc-tab-icon"></div>
+                    <div class="sd-loc-tab-icon">🏠</div>
                     <div class="sd-loc-tab-label">Home Service</div>
                   </div>
                 </label>
                 <label class="sd-loc-tab">
                   <input type="radio" name="location_type" value="Remote" onchange="handleFlexLoc(this.value)">
                   <div class="sd-loc-tab-box">
-                    <div class="sd-loc-tab-icon"></div>
+                    <div class="sd-loc-tab-icon">💻</div>
                     <div class="sd-loc-tab-label">Remote</div>
                   </div>
                 </label>
@@ -535,7 +644,7 @@ $shopAddr = $service['address'] ?? '';
           <!-- PAYMENT METHOD -->
           <div class="sd-form-group">
             <label class="sd-form-label">
-              <i class="fa-solid fa-credit-card"></i> Payment Method <span class="sd-req"></span>
+              <i class="fa-solid fa-credit-card"></i> Payment Method <span class="sd-req">*</span>
             </label>
             <div class="sd-pay-grid">
               <label class="sd-pay-option">
@@ -695,7 +804,7 @@ document.getElementById('bookingForm').addEventListener('submit', function () {
   submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Submitting…';
 });
 
-
+/* ── Payment method toggle ── */
 document.querySelectorAll('input[name="payment_method"]').forEach(function(radio) {
   radio.addEventListener('change', function() {
     const val = this.value;
@@ -741,7 +850,7 @@ if (cardNumInput) {
   });
 }
 
-
+/* ── Flexible location toggle ── */
 const BASE_PRICE   = <?= $basePrice ?>;
 const SERVICE_FEE  = <?= $serviceFee ?>;
 
@@ -770,5 +879,31 @@ function handleFlexLoc(val) {
 }
 </script>
 
+<script>
+(function () {
+  var btn  = document.getElementById('themeToggle');
+  var moon = document.querySelector('.icon-moon');
+  var sun  = document.querySelector('.icon-sun');
+  function applyTheme(theme) {
+    if (theme === 'light') {
+      document.documentElement.removeAttribute('data-theme');
+      if (moon) moon.style.display = 'none';
+      if (sun)  sun.style.display  = 'block';
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      if (moon) moon.style.display = 'block';
+      if (sun)  sun.style.display  = 'none';
+    }
+  }
+  applyTheme(localStorage.getItem('qb-theme') || 'light');
+  if (btn) {
+    btn.addEventListener('click', function () {
+      var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('qb-theme', next);
+      applyTheme(next);
+    });
+  }
+})();
+</script>
 </body>
 </html>

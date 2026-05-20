@@ -1,5 +1,5 @@
 <?php
-
+// app/views/customer/dashboard.php
 $name   = htmlspecialchars($_SESSION['user_name']  ?? 'Customer');
 $email  = htmlspecialchars($_SESSION['user_email'] ?? '');
 $userId = (int)($_SESSION['user_id'] ?? 0);
@@ -7,6 +7,7 @@ $userId = (int)($_SESSION['user_id'] ?? 0);
 require_once __DIR__ . '/../../../config/database.php';
 $db = Database::getInstance();
 
+/* ── Stats ── */
 $stTotal = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE customer_id = ?");
 $stTotal->execute([$userId]);
 $totalBookings = (int)$stTotal->fetchColumn();
@@ -35,6 +36,7 @@ $stMonthSpent = $db->prepare("SELECT COALESCE(SUM(s.price),0) FROM tbl_bookings 
 $stMonthSpent->execute([$userId]);
 $monthSpent = (float)$stMonthSpent->fetchColumn();
 
+/* ── Loyalty ── */
 $loyaltyTier = match(true) {
     $loyaltyPoints >= 2000 => 'Gold',
     $loyaltyPoints >= 1000 => 'Silver',
@@ -44,6 +46,7 @@ $nextLevel = 500;
 $progress  = min(100, round(($loyaltyPoints % $nextLevel) / $nextLevel * 100));
 $ptsToNext = $nextLevel - ($loyaltyPoints % $nextLevel);
 
+/* ── Recent bookings ── */
 $stRecent = $db->prepare("
     SELECT b.*, pp.business_name, pp.profile_photo,
            s.name AS service_name, s.price,
@@ -57,6 +60,7 @@ $stRecent = $db->prepare("
 $stRecent->execute([$userId]);
 $recentBookings = $stRecent->fetchAll();
 
+/* ── Upcoming ── */
 $stUpcomingList = $db->prepare("
     SELECT b.*, pp.business_name, s.name AS service_name, s.price
     FROM tbl_bookings b
@@ -68,6 +72,7 @@ $stUpcomingList = $db->prepare("
 $stUpcomingList->execute([$userId]);
 $upcomingBookings = $stUpcomingList->fetchAll();
 
+/* ── Monthly chart ── */
 $stMonthly = $db->prepare("
     SELECT DATE_FORMAT(b.booking_date,'%b') AS month,
            DATE_FORMAT(b.booking_date,'%Y-%m') AS month_key,
@@ -80,7 +85,11 @@ $stMonthly = $db->prepare("
 $stMonthly->execute([$userId]);
 $monthlyData = $stMonthly->fetchAll();
 
+$chartLabels = array_column($monthlyData, 'month');
+$chartSpend  = array_map(fn($r) => (float)$r['total'], $monthlyData);
+$chartDates  = array_column($monthlyData, 'month');
 
+/* ── Pending review ── */
 $stLastCompleted = $db->prepare("
     SELECT b.*, pp.business_name, s.name AS service_name
     FROM tbl_bookings b
@@ -93,12 +102,13 @@ $stLastCompleted = $db->prepare("
 $stLastCompleted->execute([$userId]);
 $pendingReview = $stLastCompleted->fetch();
 
+/* ── Helpers ── */
 $hour     = (int)date('H');
 $greeting = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good evening');
 $initials = strtoupper(substr($name, 0, 2));
 $stAv = $db->prepare("SELECT avatar_url FROM tbl_users WHERE id = ? LIMIT 1");
 $stAv->execute([$userId]);
-$avatarUrl = ($av = $stAv->fetchColumn()) ? BASE_URL . 'assets/uploads/profiles/' . htmlspecialchars($av) : null;
+$avatarUrl = ($av = $stAv->fetchColumn()) ? ($av) : null;
 
 $imageMap = [
     'Barber'        => 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=80&h=80&fit=crop&q=70',
@@ -115,10 +125,6 @@ $imageMap = [
 function pvServiceImage(string $type, array $map): string {
     return $map[$type] ?? 'https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?w=80&h=80&fit=crop&q=70';
 }
-
-$chartLabels   = array_column($monthlyData, 'month');
-$chartSpend    = array_map(fn($r) => (float)$r['total'], $monthlyData);
-$chartBookings = array_map(fn($r) => (int)$r['cnt'],     $monthlyData);
 
 function serviceIcon(string $n): string {
     $n = strtolower($n);
@@ -143,37 +149,63 @@ $spentDisplay = fmtMoney($totalSpent);
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QuickBook — Dashboard</title>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_dashboard.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <!-- Apply saved theme BEFORE render to prevent flash -->
+  <script>
+    (function(){
+      var t = localStorage.getItem('qb-theme') || 'light';
+      if (t === 'dark') document.documentElement.setAttribute('data-theme','dark');
+    })();
+  </script>
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
 
 <nav class="pv-nav" role="navigation" aria-label="Customer navigation">
   <div class="pv-nav-inner">
-
     <a href="<?= BASE_URL ?>home" class="pv-logo">
       Quick<span>Book</span>
       <span class="pv-logo-badge">Customer</span>
     </a>
-
     <div class="pv-nav-links">
-      <a href="<?= BASE_URL ?>dashboard"    class="pv-nav-link is-active">Dashboard</a>
-      <a href="<?= BASE_URL ?>bookings"     class="pv-nav-link">
+      <a href="<?= BASE_URL ?>dashboard"  class="pv-nav-link is-active">Dashboard</a>
+      <a href="<?= BASE_URL ?>bookings"   class="pv-nav-link">
         Bookings
         <?php if ($upcomingCount): ?><sup class="pv-sup"><?= $upcomingCount ?></sup><?php endif; ?>
       </a>
-      <a href="<?= BASE_URL ?>browse"       class="pv-nav-link">Browse Services</a>
-      <a href="<?= BASE_URL ?>loyalty"      class="pv-nav-link">Loyalty</a>
-      <a href="<?= BASE_URL ?>profile"      class="pv-nav-link">Profile</a>
+      <a href="<?= BASE_URL ?>browse"     class="pv-nav-link">Browse Services</a>
+      <a href="<?= BASE_URL ?>loyalty"    class="pv-nav-link">Loyalty</a>
+      <a href="<?= BASE_URL ?>profile"    class="pv-nav-link">Profile</a>
     </div>
-
     <div class="pv-nav-end">
-      <button class="pv-notif-btn" aria-label="Notifications">
-        <i class="fa-solid fa-bell"></i>
-        <span class="pv-notif-dot" aria-hidden="true"></span>
+      <?php $notifUserId = (int)$userId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
+
+      <!-- THEME TOGGLE -->
+      <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode" title="Toggle theme">
+        <!-- Moon icon (shown in light mode) -->
+        <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+        <!-- Sun icon (shown in dark mode) -->
+        <svg class="icon-sun" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1"  x2="12" y2="3"/>
+          <line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22"  y1="4.22"  x2="5.64"  y2="5.64"/>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1"  y1="12" x2="3"  y2="12"/>
+          <line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22"  y1="19.78" x2="5.64"  y2="18.36"/>
+          <line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"/>
+        </svg>
       </button>
+
       <div class="pv-nav-av" aria-hidden="true">
         <?php if ($avatarUrl): ?>
           <img src="<?= $avatarUrl ?>" alt="<?= $name ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
@@ -185,16 +217,16 @@ $spentDisplay = fmtMoney($totalSpent);
         <div class="pv-nav-user-name"><?= $name ?></div>
         <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
       </div>
-      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout">Sign out</a>
+      <!-- Sign out icon button -->
+      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout-icon" title="Sign out" aria-label="Sign out">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i>
+      </a>
     </div>
-
   </div>
 </nav>
 
-
 <header class="pv-hero" role="banner">
   <div class="pv-hero-overlay" aria-hidden="true"></div>
-
   <div class="pv-hero-inner">
     <div>
       <p class="pv-hero-eyebrow">
@@ -211,7 +243,6 @@ $spentDisplay = fmtMoney($totalSpent);
         <span class="pv-tier-badge">⭐ <?= $loyaltyTier ?></span>
       </div>
     </div>
-
     <?php if ($upcomingCount > 0): ?>
     <a href="<?= BASE_URL ?>bookings?status=pending" class="pv-points-chip">
       <span class="pv-points-chip-dot" aria-hidden="true"></span>
@@ -220,7 +251,6 @@ $spentDisplay = fmtMoney($totalSpent);
     </a>
     <?php endif; ?>
   </div>
-
   <div class="pv-hero-stats" role="region" aria-label="Quick stats">
     <div class="pv-hs-item">
       <span class="pv-hs-val"><?= $totalBookings ?></span>
@@ -256,58 +286,31 @@ $spentDisplay = fmtMoney($totalSpent);
 
 <main class="pv-page" role="main">
 
-  <div class="pv-kpi-row" role="region" aria-label="Performance overview">
-
-    <div class="pv-kpi pv-kpi--gold">
-      <div class="pv-kpi-val"><?= $totalBookings ?></div>
-      <div class="pv-kpi-label">Total Bookings</div>
-      <div class="pv-kpi-sub">All time</div>
-    </div>
-
-    <div class="pv-kpi pv-kpi--green">
-      <div class="pv-kpi-val"><?= $upcomingCount ?></div>
-      <div class="pv-kpi-label">Upcoming</div>
-      <div class="pv-kpi-sub">Pending &amp; confirmed</div>
-    </div>
-
-    <div class="pv-kpi pv-kpi--blue">
-      <div class="pv-kpi-val"><?= number_format($loyaltyPoints) ?></div>
-      <div class="pv-kpi-label">Loyalty Points</div>
-      <div class="pv-kpi-sub"><?= $loyaltyTier ?> tier</div>
-    </div>
-
-    <div class="pv-kpi pv-kpi--indigo">
-      <div class="pv-kpi-val"><?= $spentDisplay ?></div>
-      <div class="pv-kpi-label">Total Spent</div>
-      <div class="pv-kpi-sub"><?= $completedCount ?> completed</div>
-    </div>
-
-  </div>
-
   <div class="pv-layout">
-
 
     <div class="pv-main">
 
-      <div class="pv-card">
-        <div class="pv-card-head">
-          <div>
-            <h2>Spending Overview</h2>
-            <span class="pv-card-sub">Last 6 months · completed bookings</span>
+      <!-- Spending Chart -->
+      <div class="pv-card pv-card--trend">
+        <div class="pv-trend-head">
+          <div class="pv-trend-meta">
+            <span class="pv-trend-eyebrow">LAST 6 MONTHS</span>
+            <h2 class="pv-trend-title">Spending Overview</h2>
           </div>
-          <div class="pv-tabs">
-            <span class="pv-tab active">6M</span>
-            <span class="pv-tab">1Y</span>
-            <span class="pv-tab">All</span>
+          <div class="pv-trend-right">
+            <div class="pv-tabs">
+              <span class="pv-tab active">6M</span>
+              <span class="pv-tab">1Y</span>
+              <span class="pv-tab">All</span>
+            </div>
           </div>
         </div>
-        <div class="pv-chart-wrap">
-          <div class="pv-chart-canvas">
-            <canvas id="spendChart"></canvas>
-          </div>
+        <div class="pv-trend-canvas-wrap">
+          <canvas id="spendChart"></canvas>
         </div>
       </div>
 
+      <!-- Recent Bookings -->
       <div class="pv-card pv-card--table">
         <div class="pv-card-head">
           <h2>Recent Bookings</h2>
@@ -335,16 +338,14 @@ $spentDisplay = fmtMoney($totalSpent);
             </thead>
             <tbody>
               <?php foreach ($recentBookings as $b):
-                $dm      = (int)($b['duration_minutes'] ?? 0);
-                $dLabel  = $dm ? (($dm >= 60 && $dm % 60 === 0) ? ($dm/60).' hr' : $dm.' min') : '—';
-                $imgSrc  = pvServiceImage($b['service_type'] ?? '', $imageMap);
+                $dm     = (int)($b['duration_minutes'] ?? 0);
+                $dLabel = $dm ? (($dm >= 60 && $dm % 60 === 0) ? ($dm/60).' hr' : $dm.' min') : '—';
+                $imgSrc = pvServiceImage($b['service_type'] ?? '', $imageMap);
               ?>
               <tr>
                 <td>
                   <div class="pv-rb-name">
-                    <div class="pv-rb-icon">
-                      <img src="<?= $imgSrc ?>" alt="">
-                    </div>
+                    <div class="pv-rb-icon"><img src="<?= $imgSrc ?>" alt=""></div>
                     <?= htmlspecialchars($b['service_name']) ?>
                   </div>
                 </td>
@@ -366,36 +367,37 @@ $spentDisplay = fmtMoney($totalSpent);
         <?php endif; ?>
       </div>
 
-    </div>
+    </div><!-- /pv-main -->
 
     <aside class="pv-sidebar" aria-label="Sidebar">
 
-  
+      <!-- Quick Actions -->
       <div class="pv-card">
         <div class="pv-card-head"><h2>Quick Actions</h2></div>
         <div class="pv-actions">
           <a href="<?= BASE_URL ?>bookings?status=pending" class="pv-action is-primary">
-            <span class="pv-action-ico" aria-hidden="true">📅</span>
+            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-clock"></i></span>
             <div class="pv-action-txt">
               <strong>Pending Bookings</strong>
               <span>Review &amp; manage</span>
             </div>
           </a>
           <a href="<?= BASE_URL ?>browse" class="pv-action">
-            <span class="pv-action-ico" aria-hidden="true">🔍</span>
+            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-magnifying-glass"></i></span>
             <div class="pv-action-txt"><strong>Browse Services</strong><span>Find providers near you</span></div>
           </a>
           <a href="<?= BASE_URL ?>loyalty" class="pv-action">
-            <span class="pv-action-ico" aria-hidden="true">⭐</span>
+            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-star"></i></span>
             <div class="pv-action-txt"><strong>Loyalty Points</strong><span>Redeem <?= number_format($loyaltyPoints) ?> pts</span></div>
           </a>
           <a href="<?= BASE_URL ?>profile" class="pv-action">
-            <span class="pv-action-ico" aria-hidden="true">👤</span>
+            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-user"></i></span>
             <div class="pv-action-txt"><strong>My Profile</strong><span>Update account details</span></div>
           </a>
         </div>
       </div>
 
+      <!-- Today's Snapshot -->
       <div class="pv-card">
         <div class="pv-card-head"><h2>Today's Snapshot</h2></div>
         <div class="pv-snap">
@@ -423,6 +425,7 @@ $spentDisplay = fmtMoney($totalSpent);
         </div>
       </div>
 
+      <!-- Upcoming Bookings -->
       <div class="pv-card">
         <div class="pv-card-head">
           <h2>Upcoming</h2>
@@ -456,6 +459,7 @@ $spentDisplay = fmtMoney($totalSpent);
         </div>
       </div>
 
+      <!-- Loyalty -->
       <div class="pv-card">
         <div class="pv-card-head">
           <h2>Loyalty Status</h2>
@@ -484,7 +488,7 @@ $spentDisplay = fmtMoney($totalSpent);
 
     </aside>
 
-  </div>
+  </div><!-- /pv-layout -->
 
   <?php if ($pendingReview): ?>
   <div class="pv-review-banner">
@@ -501,42 +505,227 @@ $spentDisplay = fmtMoney($totalSpent);
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
+/* ── THEME TOGGLE ── */
+(function () {
+  var btn  = document.getElementById('themeToggle');
+  var moon = document.querySelector('.icon-moon');
+  var sun  = document.querySelector('.icon-sun');
+
+  function applyTheme(theme) {
+    if (theme === 'light') {
+      document.documentElement.removeAttribute('data-theme');
+      if (moon) moon.style.display = 'none';
+      if (sun)  sun.style.display  = 'block';
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      if (moon) moon.style.display = 'block';
+      if (sun)  sun.style.display  = 'none';
+    }
+  }
+
+  var saved = localStorage.getItem('qb-theme') || 'light';
+  applyTheme(saved);
+
+  if (btn) {
+    btn.addEventListener('click', function () {
+      var current = document.documentElement.getAttribute('data-theme');
+      var next = current === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('qb-theme', next);
+      applyTheme(next);
+    });
+  }
+})();
+</script>
+<script>
 (function () {
   const labels = <?= json_encode(array_values($chartLabels)) ?>;
   const spend  = <?= json_encode(array_values($chartSpend)) ?>;
-  const booked = <?= json_encode(array_values($chartBookings)) ?>;
 
   const ctx = document.getElementById('spendChart');
   if (!ctx) return;
 
-  new Chart(ctx, {
-    type: 'bar',
+  const chart2d = ctx.getContext('2d');
+
+  const isDark = () => document.documentElement.getAttribute('data-theme') === 'dark';
+
+  function buildGradients() {
+    const dark = isDark();
+
+    const gradGold = chart2d.createLinearGradient(0, 0, 0, 220);
+    if (dark) {
+      gradGold.addColorStop(0,   'rgba(201,168,76,0.55)');
+      gradGold.addColorStop(0.55,'rgba(201,168,76,0.22)');
+      gradGold.addColorStop(1,   'rgba(201,168,76,0.00)');
+    } else {
+      gradGold.addColorStop(0,   'rgba(201,168,76,0.38)');
+      gradGold.addColorStop(0.55,'rgba(201,168,76,0.16)');
+      gradGold.addColorStop(1,   'rgba(201,168,76,0.00)');
+    }
+
+    const gradWarm = chart2d.createLinearGradient(0, 0, 0, 220);
+    if (dark) {
+      gradWarm.addColorStop(0,   'rgba(139,110,32,0.30)');
+      gradWarm.addColorStop(0.6, 'rgba(139,110,32,0.10)');
+      gradWarm.addColorStop(1,   'rgba(139,110,32,0.00)');
+    } else {
+      gradWarm.addColorStop(0,   'rgba(232,201,106,0.20)');
+      gradWarm.addColorStop(0.6, 'rgba(232,201,106,0.08)');
+      gradWarm.addColorStop(1,   'rgba(232,201,106,0.00)');
+    }
+
+    return { gradGold, gradWarm };
+  }
+
+  function getChartColors() {
+    const dark = isDark();
+    return {
+      borderColor:  dark ? '#C9A84C' : '#8B6E20',
+      xTickColor:   dark ? 'rgba(237,227,204,0.35)' : 'rgba(28,23,16,0.40)',
+      yTickColor:   dark ? 'rgba(237,227,204,0.30)' : 'rgba(28,23,16,0.38)',
+      gridColor:    dark ? 'rgba(201,168,76,0.08)'  : 'rgba(201,168,76,0.10)',
+    };
+  }
+
+  /* Track hovered index */
+  let hoveredIdx = null;
+
+  const hoverPlugin = {
+    id: 'hoverDotTooltip',
+    afterDraw(chart) {
+      if (hoveredIdx === null) return;
+
+      const { ctx: c, chartArea, scales } = chart;
+      const idx   = hoveredIdx;
+      const x     = scales.x.getPixelForValue(idx);
+      const y     = scales.y.getPixelForValue(spend[idx]);
+      const label = labels[idx] ?? '';
+      const raw   = spend[idx] ?? 0;
+
+      c.save();
+
+      /* ── Dashed vertical line ── */
+      c.beginPath();
+      c.setLineDash([4, 4]);
+      c.strokeStyle = 'rgba(201,168,76,0.50)';
+      c.lineWidth   = 1.5;
+      c.moveTo(x, chartArea.top);
+      c.lineTo(x, chartArea.bottom);
+      c.stroke();
+      c.setLineDash([]);
+
+      /* ── Dot ── */
+      c.beginPath();
+      c.arc(x, y, 7, 0, Math.PI * 2);
+      c.fillStyle = '#1C1710';
+      c.fill();
+      c.beginPath();
+      c.arc(x, y, 4, 0, Math.PI * 2);
+      c.fillStyle = '#E8C96A';
+      c.fill();
+
+      /* ── Tooltip card ── */
+      const sym  = '₱ ';
+      const num  = Number(raw).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      c.font = "500 10px 'DM Mono', monospace";
+      const labelW = c.measureText(label).width;
+      c.font = "700 11px 'DM Mono', monospace";
+      const symW = c.measureText(sym).width;
+      const numW = c.measureText(num).width;
+      const amountW = symW + numW;
+
+      const padX = 10, padY = 6;
+      const pw = Math.max(labelW, amountW) + padX * 2;
+      const ph = 40;
+      const rx = 8;
+
+      let px = x - pw / 2;
+      px = Math.max(chartArea.left, Math.min(px, chartArea.right - pw));
+      const py = Math.max(chartArea.top + 4, y - ph - 20);
+
+      /* Card background */
+      const dark = isDark();
+      c.beginPath();
+      c.roundRect(px, py, pw, ph, rx);
+      c.fillStyle     = dark ? '#1E2535' : '#FFFFFF';
+      c.shadowColor   = 'rgba(0,0,0,0.18)';
+      c.shadowBlur    = 16;
+      c.shadowOffsetY = 5;
+      c.fill();
+      c.shadowBlur = 0; c.shadowOffsetY = 0;
+
+      /* Card border */
+      c.beginPath();
+      c.roundRect(px, py, pw, ph, rx);
+      c.strokeStyle = 'rgba(201,168,76,0.45)';
+      c.lineWidth   = 1;
+      c.stroke();
+
+      /* Month label */
+      c.font         = "500 10px 'DM Mono', monospace";
+      c.fillStyle    = dark ? 'rgba(237,227,204,0.45)' : 'rgba(28,23,16,0.45)';
+      c.textAlign    = 'center';
+      c.textBaseline = 'middle';
+      c.fillText(label.toUpperCase(), px + pw / 2, py + 11);
+
+      /* Divider */
+      c.beginPath();
+      c.moveTo(px + 8, py + 20);
+      c.lineTo(px + pw - 8, py + 20);
+      c.strokeStyle = 'rgba(201,168,76,0.20)';
+      c.lineWidth   = 1;
+      c.stroke();
+
+      /* Amount */
+      const startX = px + pw / 2 - amountW / 2;
+      const midY   = py + 31;
+      c.textAlign    = 'left';
+      c.textBaseline = 'middle';
+      c.font         = "700 11px 'DM Mono', monospace";
+      c.fillStyle    = '#A88A38';
+      c.fillText(sym, startX, midY);
+      c.fillStyle    = dark ? '#EDE3CC' : '#1C1710';
+      c.fillText(num, startX + symW, midY);
+
+      c.restore();
+    }
+  };
+
+  let { gradGold, gradWarm } = buildGradients();
+  let colors = getChartColors();
+
+  const chart = new Chart(ctx, {
+    type: 'line',
+    plugins: [hoverPlugin],
     data: {
       labels,
       datasets: [
         {
           label: 'Spending (₱)',
           data: spend,
-          backgroundColor: 'rgba(201,168,76,.22)',
-          borderColor: '#C9A84C',
-          borderWidth: 1.5,
-          borderRadius: 5,
-          borderSkipped: false,
-          yAxisID: 'y',
+          borderColor: colors.borderColor,
+          backgroundColor: gradGold,
+          borderWidth: 2.5,
+          tension: 0.48,
+          fill: true,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          order: 1,
         },
         {
-          label: 'Bookings',
-          data: booked,
-          type: 'line',
-          yAxisID: 'y1',
-          borderColor: '#38BDF8',
-          backgroundColor: 'rgba(56,189,248,.07)',
-          borderWidth: 2,
-          pointBackgroundColor: '#38BDF8',
-          pointRadius: 3.5,
-          pointHoverRadius: 5.5,
-          tension: .42,
+          label: '_bg',
+          data: spend.map((v, i) => {
+            const shift = Math.sin((i / (Math.max(spend.length - 1, 1))) * Math.PI * 1.5) * Math.max(...spend, 1) * 0.18;
+            return Math.max(0, v - shift);
+          }),
+          borderColor: 'transparent',
+          backgroundColor: gradWarm,
+          borderWidth: 0,
+          tension: 0.48,
           fill: true,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          order: 2,
         }
       ]
     },
@@ -546,23 +735,71 @@ $spentDisplay = fmtMoney($totalSpent);
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
-        tooltip: {
-          backgroundColor: 'rgba(10,11,13,.96)',
-          borderColor: 'rgba(201,168,76,.25)', borderWidth: 1,
-          titleColor: '#E8C96A', bodyColor: 'rgba(255,255,255,.65)', padding: 9,
-          callbacks: {
-            label: c => c.datasetIndex === 0
-              ? ' ₱' + c.parsed.y.toLocaleString()
-              : ' ' + c.parsed.y + ' booking' + (c.parsed.y !== 1 ? 's' : '')
-          }
-        }
+        tooltip: { enabled: false }
       },
       scales: {
-        x: { grid: { color: 'rgba(255,255,255,.035)' }, ticks: { color: 'rgba(255,255,255,.35)', font: { family:"'DM Mono',monospace", size:10 } } },
-        y: { position:'left', grid: { color:'rgba(255,255,255,.04)' }, ticks: { color:'rgba(255,255,255,.35)', font:{family:"'DM Mono',monospace",size:10}, callback: v => '₱'+v.toLocaleString() } },
-        y1: { position:'right', grid:{ drawOnChartArea:false }, ticks:{ color:'rgba(56,189,248,.45)', font:{family:"'DM Mono',monospace",size:10}, stepSize:1, precision:0 } }
+        x: {
+          grid: { color: colors.gridColor, lineWidth: 1, drawBorder: false },
+          ticks: { color: colors.xTickColor, font: { family:"'DM Mono',monospace", size: 10, weight: '500' }, maxRotation: 0 },
+          border: { display: false }
+        },
+        y: {
+          min: 0,
+          ticks: {
+            color: colors.yTickColor,
+            font: { family:"'DM Mono',monospace", size: 10 },
+            callback: v => v,
+            stepSize: 100,
+            maxTicksLimit: 8,
+          },
+          grid: { color: colors.gridColor, lineWidth: 1, drawBorder: false },
+          border: { display: false }
+        }
       }
     }
+  });
+
+  /* ── Redraw chart with correct colors when theme toggles ── */
+  const themeBtn = document.getElementById('themeToggle');
+  if (themeBtn) {
+    themeBtn.addEventListener('click', () => {
+      setTimeout(() => {
+        const g = buildGradients();
+        const c = getChartColors();
+        chart.data.datasets[0].backgroundColor = g.gradGold;
+        chart.data.datasets[0].borderColor      = c.borderColor;
+        chart.data.datasets[1].backgroundColor  = g.gradWarm;
+        chart.options.scales.x.grid.color       = c.gridColor;
+        chart.options.scales.x.ticks.color      = c.xTickColor;
+        chart.options.scales.y.grid.color       = c.gridColor;
+        chart.options.scales.y.ticks.color      = c.yTickColor;
+        chart.update();
+      }, 50);
+    });
+  }
+
+  /* ── Mouse tracking ── */
+  ctx.addEventListener('mousemove', function (e) {
+    const rect   = ctx.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const xScale = chart.scales.x;
+    let   closest = null, minDist = Infinity;
+
+    labels.forEach((_, i) => {
+      const px   = xScale.getPixelForValue(i);
+      const dist = Math.abs(mouseX - px);
+      if (dist < minDist) { minDist = dist; closest = i; }
+    });
+
+    if (hoveredIdx !== closest) {
+      hoveredIdx = closest;
+      chart.draw();
+    }
+  });
+
+  ctx.addEventListener('mouseleave', function () {
+    hoveredIdx = null;
+    chart.draw();
   });
 
   document.querySelectorAll('.pv-tab').forEach(tab => {

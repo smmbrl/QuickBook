@@ -11,7 +11,7 @@ $userId        = (int)($_SESSION['user_id'] ?? 0);
 $initials      = strtoupper(substr($userName, 0, 2));
 $stAv = $db->prepare("SELECT avatar_url FROM tbl_users WHERE id = ? LIMIT 1");
 $stAv->execute([$userId]);
-$avatarUrl = ($av = $stAv->fetchColumn()) ? BASE_URL . 'assets/uploads/profiles/' . htmlspecialchars($av) : null;
+$avatarUrl = ($av = $stAv->fetchColumn()) ? ($av) : null;
 
 
 $stPoints = $db->prepare("SELECT COALESCE(SUM(points),0) FROM tbl_loyalty_points WHERE user_id = ?");
@@ -82,8 +82,8 @@ $sql = "
            s.location_type       AS service_type,
            pp.id                 AS profile_id,
            pp.business_name,
-           pp.avg_rating,
-           pp.total_reviews,
+           COALESCE(s.avg_rating, 0)     AS avg_rating,
+           COALESCE(s.total_reviews, 0)  AS total_reviews,
            pp.city,
            pp.barangay,
            c.name                AS category_name,
@@ -104,8 +104,9 @@ $services = $stmt->fetchAll();
 
 $totalServices   = count($services);
 $onSiteServices  = count(array_filter($services, fn($s) => strtolower($s['service_type']) === 'on-site'));
-$avgRating       = $totalServices > 0
-    ? round(array_sum(array_column($services, 'avg_rating')) / $totalServices, 1)
+$ratedServices   = array_filter($services, fn($s) => (float)$s['avg_rating'] > 0);
+$avgRating       = count($ratedServices) > 0
+    ? round(array_sum(array_column(array_values($ratedServices), 'avg_rating')) / count($ratedServices), 1)
     : 0;
 $totalCategories = count($cats);
 
@@ -164,9 +165,9 @@ $catIconMap = [
         <circle cx="10" cy="14.5" r="1" fill="#C9A84C" opacity=".6"/>
         <circle cx="13.5" cy="13" r="1" fill="#C9A84C" opacity=".6"/>
     ',
-    'event-styling' => '
-        <polygon points="15,4 17.5,11 25,11 19,15.5 21.5,22.5 15,18 8.5,22.5 11,15.5 5,11 12.5,11" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5" stroke-linejoin="round"/>
-        <circle cx="15" cy="14" r="2.5" fill="#C9A84C" opacity=".3"/>
+    'dental' => '
+        <path d="M10 6 C7 6 5 8.5 5 11 C5 14 7 15 8 19 C9 22 9.5 25 11.5 25 C13 25 13.5 22 15 22 C16.5 22 17 25 18.5 25 C20.5 25 21 22 22 19 C23 15 25 14 25 11 C25 8.5 23 6 20 6 C18 6 17 7.5 15 7.5 C13 7.5 12 6 10 6 Z" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M10.5 6.5 C10.5 10 12 12 15 12 C18 12 19.5 10 19.5 6.5" stroke="#C9A84C" stroke-width="1.3" stroke-linecap="round" fill="none" opacity=".6"/>
     ',
     'makeup' => '
         <path d="M15 22 L15 12" stroke="#C9A84C" stroke-width="1.8" stroke-linecap="round"/>
@@ -208,13 +209,13 @@ $serviceTypeLabels = [
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QuickBook — Browse Services</title>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_browse.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <style>
-
-    .pv-cat-scroll { --cat-count: <?= $catCount ?>; }
-  </style>
+  <style>.pv-cat-scroll { --cat-count: <?= $catCount ?>; }</style>
+  <script>
+    (function(){ var t=localStorage.getItem('qb-theme')||'light'; if(t==='dark') document.documentElement.setAttribute('data-theme','dark'); })();
+  </script>
 </head>
 <body>
 
@@ -240,10 +241,24 @@ $serviceTypeLabels = [
       <a href="<?= BASE_URL ?>profile"    class="pv-nav-link">Profile</a>
     </div>
     <div class="pv-nav-end">
-      <button class="pv-notif-btn" aria-label="Notifications">
-        <i class="fa-solid fa-bell"></i>
-        <span class="pv-notif-dot" aria-hidden="true"></span>
+      <?php $notifUserId = (int)$userId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
+
+      <!-- THEME TOGGLE -->
+      <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode" title="Toggle theme">
+        <svg class="icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+        <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
       </button>
+
       <div class="pv-nav-av" aria-hidden="true">
         <?php if ($avatarUrl): ?>
           <img src="<?= $avatarUrl ?>" alt="<?= $userName ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
@@ -255,7 +270,9 @@ $serviceTypeLabels = [
         <div class="pv-nav-user-name"><?= $userName ?></div>
         <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
       </div>
-      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout">Sign out</a>
+      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout-icon" title="Sign out" aria-label="Sign out">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i>
+      </a>
     </div>
   </div>
 </nav>
@@ -456,7 +473,7 @@ $serviceTypeLabels = [
       </form>
 
       <?php if ($search || $selectedCat || $locationFilter): ?>
-        <a href="<?= BASE_URL ?>browse" class="pv-clear-btn">Clear</a>
+        <a href="<?= BASE_URL ?>browse" class="pv-clear-btn">✕ Clear</a>
       <?php endif; ?>
     </div>
   </div>
@@ -560,6 +577,31 @@ document.addEventListener('click', () => {
   document.getElementById('stypeBtn')?.setAttribute('aria-expanded', 'false');
 });
 </script>
-
+<script>
+(function () {
+  var btn  = document.getElementById('themeToggle');
+  var moon = document.querySelector('.icon-moon');
+  var sun  = document.querySelector('.icon-sun');
+  function applyTheme(theme) {
+    if (theme === 'light') {
+      document.documentElement.removeAttribute('data-theme');
+      if (moon) moon.style.display = 'none';
+      if (sun)  sun.style.display  = 'block';
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      if (moon) moon.style.display = 'block';
+      if (sun)  sun.style.display  = 'none';
+    }
+  }
+  applyTheme(localStorage.getItem('qb-theme') || 'light');
+  if (btn) {
+    btn.addEventListener('click', function () {
+      var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('qb-theme', next);
+      applyTheme(next);
+    });
+  }
+})();
+</script>
 </body>
 </html>

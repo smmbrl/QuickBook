@@ -1,4 +1,5 @@
 <?php
+// app/views/customer/provider-profile.php
 
 require_once __DIR__ . '/../../../config/database.php';
 $db         = Database::getInstance();
@@ -6,11 +7,11 @@ $customerId = (int)($_SESSION['user_id']  ?? 0);
 $userName   = htmlspecialchars($_SESSION['user_name']  ?? 'Customer');
 $initials   = strtoupper(substr($userName, 0, 2));
 
-//  Provider profile ID comes from URL 
+// ── Provider profile ID comes from URL ───────────────────────
 // $id is passed from ProviderController::show(string $id)
 $providerId = (int)($id ?? 0);
 
-//  Fetch provider profile 
+// ── Fetch provider profile ────────────────────────────────────
 $stmt = $db->prepare("
     SELECT pp.*, u.first_name, u.last_name, u.email, u.avatar_url,
            c.name as category_name, c.slug as category_slug
@@ -27,7 +28,7 @@ if (!$provider) {
     header('Location: ' . BASE_URL . 'browse'); exit;
 }
 
-//  Services offered by provider 
+// ── Services ──────────────────────────────────────────────────
 $svcStmt = $db->prepare("
     SELECT * FROM tbl_services
     WHERE provider_id = ? AND is_active = 1
@@ -36,7 +37,7 @@ $svcStmt = $db->prepare("
 $svcStmt->execute([$providerId]);
 $services = $svcStmt->fetchAll();
 
-//  Availability 
+// ── Availability ──────────────────────────────────────────────
 $avStmt = $db->prepare("
     SELECT * FROM tbl_provider_availability
     WHERE provider_id = ? AND is_available = 1
@@ -45,18 +46,7 @@ $avStmt = $db->prepare("
 $avStmt->execute([$providerId]);
 $availability = $avStmt->fetchAll();
 
-//  Reviews 
-$revStmt = $db->prepare("
-    SELECT r.*, u.first_name, u.last_name
-    FROM tbl_reviews r
-    JOIN tbl_users u ON r.customer_id = u.id
-    WHERE r.provider_id = ?
-    ORDER BY r.created_at DESC LIMIT 5
-");
-$revStmt->execute([$providerId]);
-$reviews = $revStmt->fetchAll();
-
-//  Loyalty points (nav) 
+// ── Loyalty points (nav) ──────────────────────────────────────
 $stPoints = $db->prepare("SELECT COALESCE(SUM(points),0) FROM tbl_loyalty_points WHERE user_id = ?");
 $stPoints->execute([$customerId]);
 $loyaltyPoints = (int)$stPoints->fetchColumn();
@@ -66,16 +56,16 @@ $loyaltyTier   = match(true) {
     default                => 'Bronze',
 };
 
-// Upcoming count (nav badge) 
+// ── Upcoming count (nav badge) ────────────────────────────────
 $stUp = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE customer_id = ? AND status IN ('pending','confirmed') AND booking_date >= CURDATE()");
 $stUp->execute([$customerId]);
 $upcomingCount = (int)$stUp->fetchColumn();
 
-// Flash message 
+// ── Flash message ─────────────────────────────────────────────
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
 
-//  Helpers and mappings 
+// ── Helpers ───────────────────────────────────────────────────
 $catEmojiMap = [
     'barbershop'       => '✂️',
     'hair-salon'       => '💇',
@@ -125,7 +115,9 @@ $dayAbbr = ['Monday'=>'Mon','Tuesday'=>'Tue','Wednesday'=>'Wed',
 <div class="bg-orb bg-orb-1" aria-hidden="true"></div>
 <div class="bg-orb bg-orb-2" aria-hidden="true"></div>
 
-<!-- NAV -->
+<!-- ══════════════════════════════════════
+     NAV
+══════════════════════════════════════ -->
 <nav class="pv-nav" role="navigation" aria-label="Customer navigation">
   <div class="pv-nav-inner">
     <a href="<?= BASE_URL ?>home" class="pv-logo">
@@ -142,6 +134,7 @@ $dayAbbr = ['Monday'=>'Mon','Tuesday'=>'Tue','Wednesday'=>'Wed',
       <a href="<?= BASE_URL ?>profile"    class="pv-nav-link">Profile</a>
     </div>
     <div class="pv-nav-end">
+      <?php $notifUserId = (int)$customerId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
       <div class="pv-points-badge">⭐ <?= number_format($loyaltyPoints) ?> pts</div>
       <div class="pv-nav-av" aria-hidden="true"><?= $initials ?></div>
       <div class="pv-nav-user">
@@ -153,7 +146,9 @@ $dayAbbr = ['Monday'=>'Mon','Tuesday'=>'Tue','Wednesday'=>'Wed',
   </div>
 </nav>
 
-<!-- FLASH MESSAGE -->
+<!-- ══════════════════════════════════════
+     FLASH MESSAGE
+══════════════════════════════════════ -->
 <?php if ($flash): ?>
 <div class="pv-flash pv-flash--<?= $flash['type'] ?>" role="alert">
   <span><?= $flash['type'] === 'success' ? '✅' : '⚠️' ?></span>
@@ -162,7 +157,9 @@ $dayAbbr = ['Monday'=>'Mon','Tuesday'=>'Tue','Wednesday'=>'Wed',
 </div>
 <?php endif; ?>
 
-<!-- HERO — provider banner -->
+<!-- ══════════════════════════════════════
+     HERO — provider banner
+══════════════════════════════════════ -->
 <header class="pv-hero" role="banner">
   <div class="pv-hero-overlay" aria-hidden="true"></div>
   <div class="pv-hero-inner">
@@ -174,7 +171,7 @@ $dayAbbr = ['Monday'=>'Mon','Tuesday'=>'Tue','Wednesday'=>'Wed',
       ?>
       <div class="pv-provider-av" aria-hidden="true" style="overflow:hidden;background:var(--gold);color:#000;font-weight:800;font-size:1.4rem;display:flex;align-items:center;justify-content:center;">
         <?php if ($provPhoto): ?>
-          <img src="<?= BASE_URL ?>assets/uploads/profiles/<?= htmlspecialchars($provPhoto) ?>"
+          <img src="<?= htmlspecialchars($provPhoto) ?>"
                alt="<?= htmlspecialchars($provider['first_name']) ?>"
                style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;">
         <?php else: ?>
@@ -204,7 +201,7 @@ $dayAbbr = ['Monday'=>'Mon','Tuesday'=>'Tue','Wednesday'=>'Wed',
             📍 <?= htmlspecialchars(($provider['barangay'] ? $provider['barangay'].', ' : '') . $provider['city']) ?>
           </span>
           <?php if ($provider['offers_home_service']): ?>
-          <span class="pv-meta-chip pv-meta-chip--green">Home Service Available</span>
+          <span class="pv-meta-chip pv-meta-chip--green">🏠 Home Service Available</span>
           <?php endif; ?>
         </div>
         <?php if ($provider['bio']): ?>
@@ -239,11 +236,13 @@ $dayAbbr = ['Monday'=>'Mon','Tuesday'=>'Tue','Wednesday'=>'Wed',
   </div>
 </header>
 
-<!-- MAIN -->
+<!-- ══════════════════════════════════════
+     MAIN
+══════════════════════════════════════ -->
 <main class="pv-page" role="main">
   <div class="pv-layout">
 
-    <!-- LEFT: Services -->
+    <!-- ── LEFT: Services ── -->
     <div class="pv-main">
 
       <!-- Breadcrumb -->
@@ -303,39 +302,9 @@ $dayAbbr = ['Monday'=>'Mon','Tuesday'=>'Tue','Wednesday'=>'Wed',
         <?php endif; ?>
       </div>
 
-      <!-- Reviews card -->
-      <?php if (!empty($reviews)): ?>
-      <div class="pv-card">
-        <div class="pv-card-head">
-          <div>
-            <h2>Customer Reviews</h2>
-            <span class="pv-card-sub">
-              ⭐ <?= number_format((float)$provider['avg_rating'], 1) ?> · <?= (int)$provider['total_reviews'] ?> review<?= (int)$provider['total_reviews'] !== 1 ? 's' : '' ?>
-            </span>
-          </div>
-        </div>
-        <div class="pv-review-list">
-          <?php foreach ($reviews as $r): ?>
-          <div class="pv-review-item">
-            <div class="pv-review-av"><?= strtoupper(substr($r['first_name'], 0, 1)) ?></div>
-            <div class="pv-review-body">
-              <div class="pv-review-header">
-                <span class="pv-review-name"><?= htmlspecialchars($r['first_name'].' '.substr($r['last_name'],0,1).'.') ?></span>
-                <span class="pv-review-stars"><?= renderStars((float)$r['rating']) ?></span>
-                <span class="pv-review-date"><?= date('M d, Y', strtotime($r['created_at'])) ?></span>
-              </div>
-              <?php if ($r['comment']): ?>
-                <p class="pv-review-text"><?= htmlspecialchars($r['comment']) ?></p>
-              <?php endif; ?>
-            </div>
-          </div>
-          <?php endforeach; ?>
-        </div>
-      </div>
-      <?php endif; ?>
+    </div><!-- /pv-main -->
 
-    </div>
-
+    <!-- ── SIDEBAR ── -->
     <aside class="pv-sidebar" aria-label="Provider details">
 
       <!-- Availability card -->
@@ -373,7 +342,7 @@ $dayAbbr = ['Monday'=>'Mon','Tuesday'=>'Tue','Wednesday'=>'Wed',
           </div>
           <?php if ($provider['offers_home_service']): ?>
           <div class="pv-location-row pv-location-home">
-            <span class="pv-location-icon"></span>
+            <span class="pv-location-icon">🏠</span>
             <span>Home service available</span>
           </div>
           <?php endif; ?>
@@ -395,7 +364,7 @@ $dayAbbr = ['Monday'=>'Mon','Tuesday'=>'Tue','Wednesday'=>'Wed',
 
     </aside>
 
-  </div>
+  </div><!-- /pv-layout -->
 </main>
 
 </body>
