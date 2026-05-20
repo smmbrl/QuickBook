@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../models/User.php';
+require_once __DIR__ . '/../helpers/NotificationHelper.php';
 
 class AuthController
 {
@@ -24,7 +25,7 @@ class AuthController
         $user = $this->userModel->findByEmail($email);
 
         if (!$user || !password_verify($password, $user['password_hash'])) {
-            $_SESSION['flash_error'] = 'Invalid email or password.';
+            $_SESSION['flash_error'] = 'Invalid email or password. Please try again.';
             header('Location: ' . BASE_URL . 'login'); exit;
         }
 
@@ -33,11 +34,31 @@ class AuthController
             header('Location: ' . BASE_URL . 'login'); exit;
         }
 
+        // ★ 2FA INTERCEPT — if 2FA is on, hold user in a "pending" session
+        //   and send them to the OTP challenge page before granting access.
+        if (!empty($user['totp_enabled'])) {
+            session_regenerate_id(true);
+            $_SESSION['2fa_user_id'] = $user['id'];   // NOT yet the real session
+            header('Location: ' . BASE_URL . 'auth/2fa/verify'); exit;
+        }
+
+        // ── Normal flow (2FA not enabled) ──────────────────────────────────
         session_regenerate_id(true);
         $_SESSION['user_id']    = $user['id'];
         $_SESSION['user_role']  = $user['role'];
         $_SESSION['user_name']  = $user['first_name'];
         $_SESSION['user_email'] = $user['email'];
+
+        // Log admin logins into tbl_admin_logs
+        if ($user['role'] === 'admin') {
+            $db   = Database::getInstance();
+            $ip   = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? null;
+            $stmt = $db->prepare("
+                INSERT INTO tbl_admin_logs (admin_id, action, target_type, target_id, details, ip_address)
+                VALUES (?, 'admin_login', NULL, NULL, 'Admin logged in', ?)
+            ");
+            $stmt->execute([$user['id'], $ip]);
+        }
 
         $map = ['admin' => 'admin/dashboard', 'provider' => 'provider/dashboard', 'customer' => 'dashboard'];
         header('Location: ' . BASE_URL . ($map[$user['role']] ?? 'home')); exit;
@@ -86,11 +107,33 @@ class AuthController
 
         $this->userModel->markVerified($userId);
 
+        $db = Database::getInstance();
+
         if ($role === 'provider') {
-            $db = Database::getInstance();
             $db->prepare("INSERT INTO tbl_provider_profiles (user_id, business_name) VALUES (?,?)")
                ->execute([$userId, $firstName . ' ' . $lastName]);
         }
+
+        // ── Welcome notification to the new user ──────────────────────────
+        $roleLabel = ucfirst($role);
+        $welcomeLink = $role === 'provider' ? BASE_URL . 'provider/dashboard' : BASE_URL . 'dashboard';
+        NotificationHelper::send($db, [$userId], 'system',
+            'Welcome to QuickBook!',
+            "Hi {$firstName}! Your {$roleLabel} account has been created successfully. " .
+            ($role === 'provider'
+                ? 'Set up your services and availability to start receiving bookings.'
+                : 'Browse providers and book your first service today!'),
+            '',
+            $welcomeLink
+        );
+
+        // ── Notify all admins of new registration ─────────────────────────
+        NotificationHelper::send($db, NotificationHelper::adminIds($db), 'system',
+            "[Admin] New {$roleLabel} Registered",
+            "{$firstName} {$lastName} ({$email}) just registered as a {$role}.",
+            '',
+            BASE_URL . 'admin/users'
+        );
 
         $_SESSION['flash_success'] = 'Account created! You can now sign in.';
         header('Location: ' . BASE_URL . 'login'); exit;
@@ -119,12 +162,10 @@ class AuthController
 
     public function forgotPassword(): void
     {
-
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             require_once __DIR__ . '/../views/forgot-password.php'; return;
         }
 
- 
         $email = strtolower(trim($_POST['email'] ?? ''));
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -135,15 +176,10 @@ class AuthController
         $userModel = new User();
         $user      = $userModel->findByEmail($email);
 
-     
         if ($user) {
             $token     = $userModel->createPasswordResetToken($email);
             $resetLink = BASE_URL . 'auth/reset-password?token=' . $token;
-
-            
             error_log("[QuickBook] Password reset link for {$email}: {$resetLink}");
-
-
         }
 
         $_SESSION['flash'] = [
@@ -175,14 +211,14 @@ class AuthController
 
     public function resetPassword(): void
     {
-        $token     = trim($_POST['token']           ?? '');
-        $newPw     = $_POST['new_password']          ?? '';
-        $confirmPw = $_POST['confirm_password']      ?? '';
+        $token     = trim($_POST['token']      ?? '');
+        $newPw     = $_POST['new_password']    ?? '';
+        $confirmPw = $_POST['confirm_password'] ?? '';
 
         $errors = [];
-        if (empty($token))           $errors[] = 'Reset token is missing.';
-        if (strlen($newPw) < 8)      $errors[] = 'Password must be at least 8 characters.';
-        if ($newPw !== $confirmPw)   $errors[] = 'Passwords do not match.';
+        if (empty($token))         $errors[] = 'Reset token is missing.';
+        if (strlen($newPw) < 8)    $errors[] = 'Password must be at least 8 characters.';
+        if ($newPw !== $confirmPw) $errors[] = 'Passwords do not match.';
 
         if (!empty($errors)) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => implode(' ', $errors)];
@@ -205,6 +241,15 @@ class AuthController
 
         $userModel->updatePassword((int)$user['id'], $newPw);
         $userModel->consumePasswordResetToken($token);
+
+        // ── Notify admins of password reset (security event) ──────────────
+        $db = Database::getInstance();
+        NotificationHelper::send($db, NotificationHelper::adminIds($db), 'system',
+            '[Admin] Password Reset',
+            "User {$user['first_name']} {$user['last_name']} ({$email}) reset their password.",
+            '',
+            BASE_URL . 'admin/users'
+        );
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Password reset successfully. You can now sign in.'];
         header('Location: ' . BASE_URL . 'login'); exit;
