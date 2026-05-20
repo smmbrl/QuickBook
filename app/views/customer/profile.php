@@ -1,10 +1,11 @@
 <?php
+// app/views/customer/profile.php
 
 require_once __DIR__ . '/../../../config/database.php';
 $db     = Database::getInstance();
 $userId = (int)($_SESSION['user_id'] ?? 0);
 
-/* Full user record */
+/* -- Full user record -- */
 $stUser = $db->prepare("SELECT * FROM tbl_users WHERE id = ? LIMIT 1");
 $stUser->execute([$userId]);
 $user = $stUser->fetch();
@@ -22,9 +23,9 @@ $gender      = $user['gender']        ?? '';
 $dateOfBirth = $user['date_of_birth'] ?? '';
 $initials    = strtoupper(substr($firstName, 0, 1) . substr($lastName, 0, 1));
 $memberSince = isset($user['created_at']) ? date('F Y', strtotime($user['created_at'])) : 'Unknown';
-$avatarUrl   = !empty($user['avatar_url']) ? BASE_URL . 'assets/uploads/profiles/' . htmlspecialchars($user['avatar_url']) : null;
+$avatarUrl   = !empty($user['avatar_url']) ? $user['avatar_url'] : null;
 
-/* Loyalty */
+/* -- Loyalty -- */
 $stPoints = $db->prepare("SELECT COALESCE(SUM(points),0) FROM tbl_loyalty_points WHERE user_id = ?");
 $stPoints->execute([$userId]);
 $loyaltyPoints = (int)$stPoints->fetchColumn();
@@ -39,7 +40,7 @@ $tierIcon = match($loyaltyTier) {
     default  => '<i class="fa-solid fa-medal" style="color:#cd7f32"></i>',
 };
 
-/* Booking stats */
+/* -- Booking stats -- */
 $stStats = $db->prepare("
     SELECT
         COUNT(*) AS total,
@@ -61,7 +62,7 @@ $stSpent->execute([$userId]);
 $totalSpent    = (float)$stSpent->fetchColumn();
 $upcomingCount = (int)($stats['upcoming'] ?? 0);
 
-/* Favourite providers */
+/* -- Favourite providers -- */
 $stFavs = $db->prepare("
     SELECT pp.business_name, pp.id AS profile_id,
            COUNT(*) AS booking_count,
@@ -75,7 +76,7 @@ $stFavs = $db->prepare("
 $stFavs->execute([$userId]);
 $favourites = $stFavs->fetchAll();
 
-/* Recent activity  */
+/* -- Recent activity -- */
 $stRecent = $db->prepare("
     SELECT b.id, b.booking_date, b.status,
            s.name AS service_name, s.price,
@@ -89,6 +90,7 @@ $stRecent = $db->prepare("
 $stRecent->execute([$userId]);
 $recentActivity = $stRecent->fetchAll();
 
+/* -- Flash -- */
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
 
@@ -109,7 +111,7 @@ function fmtMoney(float $v): string {
 <body>
 <div class="grain" aria-hidden="true"></div>
 
-<!-- NAV -->
+<!-- ══ NAV ══ -->
 <nav class="pv-nav" role="navigation" aria-label="Customer navigation">
   <div class="pv-nav-inner">
     <a href="<?= BASE_URL ?>home" class="pv-logo">
@@ -127,10 +129,24 @@ function fmtMoney(float $v): string {
       <a href="<?= BASE_URL ?>profile"    class="pv-nav-link is-active">Profile</a>
     </div>
     <div class="pv-nav-end">
-      <button class="pv-notif-btn" aria-label="Notifications">
-        <i class="fa-solid fa-bell"></i>
-        <span class="pv-notif-dot" aria-hidden="true"></span>
+      <?php $notifUserId = (int)$userId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
+
+      <!-- Theme Toggle -->
+      <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode" title="Toggle theme">
+        <svg class="icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+        <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
       </button>
+
       <div class="pv-nav-av" aria-hidden="true" id="navAv">
         <?php if ($avatarUrl): ?>
           <img id="navAvImg" src="<?= $avatarUrl ?>" alt="<?= $fullName ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
@@ -142,12 +158,14 @@ function fmtMoney(float $v): string {
         <div class="pv-nav-user-name"><?= $fullName ?></div>
         <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
       </div>
-      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout">Sign out</a>
+      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout-icon" title="Sign out" aria-label="Sign out">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i>
+      </a>
     </div>
   </div>
 </nav>
 
-<!-- HERO -->
+<!-- ══ HERO ══ -->
 <header class="pp-hero" role="banner">
   <div class="pp-hero-overlay" aria-hidden="true"></div>
   <div class="pp-hero-inner">
@@ -193,43 +211,17 @@ function fmtMoney(float $v): string {
         </p>
       </div>
 
-      <!-- Tier Badge -->
-      <div class="pp-hero-approval pp-status--tier-<?= strtolower($loyaltyTier) ?>">
-        <span class="pp-approval-icon"><?= $tierIcon ?></span>
-        <div>
-          <div class="pp-approval-label">Loyalty Tier</div>
-          <div class="pp-approval-val"><?= $loyaltyTier ?></div>
-        </div>
-      </div>
+
 
     </div>
 
     <!-- Stat strip -->
-    <div class="pp-hero-stats">
-      <div class="pp-hs-item">
-        <span class="pp-hs-val"><?= $stats['total'] ?? 0 ?></span>
-        <span class="pp-hs-label">Total Bookings</span>
-      </div>
-      <div class="pp-hs-div" aria-hidden="true"></div>
-      <div class="pp-hs-item">
-        <span class="pp-hs-val green"><?= $stats['completed'] ?? 0 ?></span>
-        <span class="pp-hs-label">Completed</span>
-      </div>
-      <div class="pp-hs-div" aria-hidden="true"></div>
-      <div class="pp-hs-item">
-        <span class="pp-hs-val gold"><?= number_format($loyaltyPoints) ?></span>
-        <span class="pp-hs-label">Loyalty Points</span>
-      </div>
-      <div class="pp-hs-div" aria-hidden="true"></div>
-      <div class="pp-hs-item">
-        <span class="pp-hs-val"><?= fmtMoney($totalSpent) ?></span>
-        <span class="pp-hs-label">Total Spent</span>
-      </div>
-    </div>
+
 
   </div>
 </header>
 
+<!-- ══ FLASH ══ -->
 <?php if ($flash): ?>
 <div class="pp-flash pp-flash--<?= $flash['type'] ?>" role="alert">
   <span><?= $flash['type'] === 'success' ? '<i class="fa-solid fa-circle-check"></i>' : '<i class="fa-solid fa-triangle-exclamation"></i>' ?></span>
@@ -238,9 +230,10 @@ function fmtMoney(float $v): string {
 </div>
 <?php endif; ?>
 
-<!-- MAIN -->
+<!-- ══ MAIN ══ -->
 <main class="pr-page" role="main">
 
+  <!-- Left col: forms -->
   <div class="pr-col-forms">
 
     <!-- Personal info -->
@@ -356,6 +349,36 @@ function fmtMoney(float $v): string {
       </form>
     </section>
 
+    <!-- Two-Factor Authentication -->
+    <section class="pr-card" aria-label="Two-factor authentication">
+      <div class="pr-card-head">
+        <div>
+          <h2 class="pr-card-title">Two-Factor Authentication</h2>
+          <p class="pr-card-sub">Add an extra layer of security to your account.</p>
+        </div>
+        <span class="pr-card-icon"><i class="fa-solid fa-shield"></i></span>
+      </div>
+      <div class="pr-form">
+        <?php if ($user['totp_enabled'] ?? false): ?>
+          <p style="margin-bottom:1rem;color:#4ADE80;font-weight:600;">
+            <i class="fa-solid fa-circle-check"></i> 2FA is enabled on your account.
+          </p>
+          <form method="POST" action="<?= BASE_URL ?>auth/2fa/disable">
+            <div class="pr-form-group">
+              <label class="pr-label" for="disable_otp">Enter 6-digit code from your authenticator app</label>
+              <input type="text" id="disable_otp" name="otp" placeholder="Enter 6-digit code" maxlength="6" required class="pr-input">
+            </div>
+            <div class="pr-form-footer">
+              <button type="submit" class="pr-btn-danger">Disable 2FA</button>
+            </div>
+          </form>
+        <?php else: ?>
+          <p style="margin-bottom:1rem;">Secure your account with two-factor authentication.</p>
+          <a href="<?= BASE_URL ?>auth/2fa/setup" class="pr-btn-primary" style="display:inline-block;text-decoration:none;">Enable Two-Factor Authentication</a>
+        <?php endif; ?>
+      </div>
+    </section>
+
     <!-- Danger zone -->
     <section class="pr-card pr-card--danger" aria-label="Account actions">
       <div class="pr-card-head">
@@ -366,18 +389,61 @@ function fmtMoney(float $v): string {
         <span class="pr-card-icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
       </div>
       <div class="pr-danger-actions">
+
+        <!-- Deactivate Account -->
         <div class="pr-danger-item">
           <div>
-            <div class="pr-danger-label">Sign Out</div>
-            <div class="pr-danger-desc">Ends your current session securely.</div>
+            <div class="pr-danger-label"><i class="fa-solid fa-circle-pause" style="color:var(--red);margin-right:.4rem;font-size:.85rem"></i>Deactivate Account</div>
+            <div class="pr-danger-desc">Temporarily disable your account. You can reactivate it anytime by logging back in.</div>
           </div>
-          <a href="<?= BASE_URL ?>auth/logout" class="pr-btn-danger-outline">Sign Out</a>
+          <button type="button" class="pr-btn-danger-outline" onclick="document.getElementById('deactivateModal').style.display='flex'">Deactivate</button>
         </div>
+
+        <!-- Delete Account -->
+        <div class="pr-danger-item pr-danger-item--delete">
+          <div>
+            <div class="pr-danger-label"><i class="fa-solid fa-trash" style="color:var(--red);margin-right:.4rem;font-size:.85rem"></i>Delete Account</div>
+            <div class="pr-danger-desc">Permanently delete your account and all associated data. This action <strong>cannot be undone</strong>.</div>
+          </div>
+          <button type="button" class="pr-btn-danger-solid" onclick="document.getElementById('deleteModal').style.display='flex'">Delete</button>
+        </div>
+
       </div>
     </section>
 
+    <!-- Deactivate Modal -->
+    <div id="deactivateModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center;">
+      <div class="pr-modal">
+        <div class="pr-modal-icon pr-modal-icon--warn"><i class="fa-solid fa-circle-pause"></i></div>
+        <h3 class="pr-modal-title">Deactivate Account?</h3>
+        <p class="pr-modal-desc">Your account will be temporarily disabled. You can reactivate it anytime by simply logging back in.</p>
+        <div class="pr-modal-actions">
+          <form method="POST" action="<?= BASE_URL ?>profile/deactivate" style="margin:0">
+            <button type="submit" class="pr-modal-confirm pr-modal-confirm--warn">Yes</button>
+          </form>
+          <button class="pr-modal-cancel" onclick="document.getElementById('deactivateModal').style.display='none'">No</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete Modal -->
+    <div id="deleteModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center;">
+      <div class="pr-modal">
+        <div class="pr-modal-icon pr-modal-icon--danger"><i class="fa-solid fa-trash"></i></div>
+        <h3 class="pr-modal-title">Delete Account?</h3>
+        <p class="pr-modal-desc">This will permanently delete your account, bookings, and all data. <strong>This cannot be undone.</strong></p>
+        <div class="pr-modal-actions">
+          <form method="POST" action="<?= BASE_URL ?>profile/delete" style="margin:0">
+            <button type="submit" class="pr-modal-confirm pr-modal-confirm--danger">Yes</button>
+          </form>
+          <button class="pr-modal-cancel" onclick="document.getElementById('deleteModal').style.display='none'">No</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
+  <!-- Right col: sidebar -->
   <aside class="pr-col-side" aria-label="Account overview">
 
     <!-- Membership card -->
@@ -516,6 +582,7 @@ function fmtMoney(float $v): string {
   </aside>
 </main>
 
+<!-- ══ FOOTER ══ -->
 <footer class="pr-footer" role="contentinfo">
   <div class="pr-footer-inner">
     <span>&copy; <?= date('Y') ?> QuickBook. All rights reserved.</span>
@@ -582,7 +649,7 @@ function checkStrength(val) {
   label.className  = 'pr-strength-label ' + lvl.cls;
 }
 
-// Avatar instant preview 
+// ── Avatar instant preview ──────────────────────────────────────
 (function () {
   const input    = document.getElementById('avatarInput');
   const heroAv   = document.getElementById('heroAv');
@@ -636,6 +703,32 @@ function checkStrength(val) {
     // Submit the form
     document.getElementById('avatarForm').submit();
   });
+})();
+</script>
+<script>
+(function () {
+  var btn  = document.getElementById('themeToggle');
+  var moon = document.querySelector('.icon-moon');
+  var sun  = document.querySelector('.icon-sun');
+  function applyTheme(theme) {
+    if (theme === 'light') {
+      document.documentElement.removeAttribute('data-theme');
+      if (moon) moon.style.display = 'none';
+      if (sun)  sun.style.display  = 'block';
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      if (moon) moon.style.display = 'block';
+      if (sun)  sun.style.display  = 'none';
+    }
+  }
+  applyTheme(localStorage.getItem('qb-theme') || 'light');
+  if (btn) {
+    btn.addEventListener('click', function () {
+      var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('qb-theme', next);
+      applyTheme(next);
+    });
+  }
 })();
 </script>
 </body>

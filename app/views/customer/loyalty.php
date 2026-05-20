@@ -1,5 +1,5 @@
 <?php
-
+// app/views/customer/loyalty.php
 
 require_once __DIR__ . '/../../../config/database.php';
 $db     = Database::getInstance();
@@ -9,12 +9,14 @@ $email  = htmlspecialchars($_SESSION['user_email'] ?? '');
 $initials = strtoupper(substr($name, 0, 2));
 $stAv = $db->prepare("SELECT avatar_url FROM tbl_users WHERE id = ? LIMIT 1");
 $stAv->execute([$userId]);
-$avatarUrl = ($av = $stAv->fetchColumn()) ? BASE_URL . 'assets/uploads/profiles/' . htmlspecialchars($av) : null;
+$avatarUrl = ($av = $stAv->fetchColumn()) ? ($av) : null;
 
+/* ── Loyalty Points Total ── */
 $stPoints = $db->prepare("SELECT COALESCE(SUM(points),0) FROM tbl_loyalty_points WHERE user_id = ?");
 $stPoints->execute([$userId]);
 $loyaltyPoints = (int)$stPoints->fetchColumn();
 
+/* ── Tier logic ── */
 $loyaltyTier = match(true) {
     $loyaltyPoints >= 2000 => 'Gold',
     $loyaltyPoints >= 1000 => 'Silver',
@@ -31,10 +33,12 @@ $nextTier    = $tier['next'];
 $nextThr     = $tier['threshold'];
 $ptsToNext   = $nextThr ? max(0, $nextThr - $loyaltyPoints) : 0;
 
+// progress within current tier
 $tierFloor = match($loyaltyTier) { 'Gold' => 2000, 'Silver' => 1000, default => 0 };
 $tierCeil  = $nextThr ?? ($tierFloor + 1000);
 $progress  = min(100, round(($loyaltyPoints - $tierFloor) / ($tierCeil - $tierFloor) * 100));
 
+/* ── Point History ── */
 $stHistory = $db->prepare("
     SELECT lp.points, lp.description, lp.created_at,
            b.id AS booking_id, s.name AS service_name, pp.business_name
@@ -49,6 +53,7 @@ $stHistory = $db->prepare("
 $stHistory->execute([$userId]);
 $history = $stHistory->fetchAll();
 
+/* ── Total earned / redeemed ── */
 $stEarned = $db->prepare("SELECT COALESCE(SUM(points),0) FROM tbl_loyalty_points WHERE user_id = ? AND points > 0");
 $stEarned->execute([$userId]);
 $totalEarned = (int)$stEarned->fetchColumn();
@@ -57,7 +62,7 @@ $stRedeemed = $db->prepare("SELECT COALESCE(SUM(ABS(points)),0) FROM tbl_loyalty
 $stRedeemed->execute([$userId]);
 $totalRedeemed = (int)$stRedeemed->fetchColumn();
 
-
+/* ── Redeemable rewards catalog ── */
 $rewards = [
     ['id' => 1, 'title' => '₱50 Booking Credit',      'cost' => 200,  'icon' => '<i class="fa-solid fa-credit-card"></i>', 'desc' => 'Applied on your next booking'],
     ['id' => 2, 'title' => '₱150 Booking Credit',     'cost' => 500,  'icon' => '<i class="fa-solid fa-credit-card"></i>', 'desc' => 'Applied on your next booking'],
@@ -67,10 +72,12 @@ $rewards = [
     ['id' => 6, 'title' => 'Free Home Visit Add-on',  'cost' => 600,  'icon' => '<i class="fa-solid fa-house"></i>',       'desc' => 'Free transport for one booking'],
 ];
 
+/* ── Upcoming bookings count (for nav badge) ── */
 $stUpcoming = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE customer_id = ? AND status IN ('pending','confirmed') AND booking_date >= CURDATE()");
 $stUpcoming->execute([$userId]);
 $upcomingCount = (int)$stUpcoming->fetchColumn();
 
+/* ── Flash message ── */
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
 ?>
@@ -80,13 +87,17 @@ unset($_SESSION['flash']);
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QuickBook — Loyalty</title>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_loyalty.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script>
+    (function(){ var t=localStorage.getItem('qb-theme')||'light'; if(t==='dark') document.documentElement.setAttribute('data-theme','dark'); })();
+  </script>
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
 
+<!-- ══ NAV ══ -->
 <nav class="pv-nav" role="navigation" aria-label="Customer navigation">
   <div class="pv-nav-inner">
 
@@ -107,10 +118,23 @@ unset($_SESSION['flash']);
     </div>
 
     <div class="pv-nav-end">
-      <button class="pv-notif-btn" aria-label="Notifications">
-        <i class="fa-solid fa-bell"></i>
-        <span class="pv-notif-dot" aria-hidden="true"></span>
+      <?php $notifUserId = (int)$userId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
+
+      <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode" title="Toggle theme">
+        <svg class="icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+        <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
       </button>
+
       <div class="pv-nav-av" aria-hidden="true">
         <?php if ($avatarUrl): ?>
           <img src="<?= $avatarUrl ?>" alt="<?= $name ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
@@ -122,12 +146,15 @@ unset($_SESSION['flash']);
         <div class="pv-nav-user-name"><?= $name ?></div>
         <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
       </div>
-      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout">Sign out</a>
+      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout-icon" title="Sign out" aria-label="Sign out">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i>
+      </a>
     </div>
 
   </div>
 </nav>
 
+<!-- ══ HERO ══ -->
 <header class="ly-hero" role="banner">
   <div class="ly-hero-overlay" aria-hidden="true"></div>
   <div class="ly-hero-inner">
@@ -140,7 +167,7 @@ unset($_SESSION['flash']);
       <p class="ly-hero-sub">Earn points with every booking. Redeem for credits, upgrades &amp; more.</p>
     </div>
 
-
+    <!-- Tier badge hero card -->
     <div class="ly-tier-hero-card tier-<?= strtolower($loyaltyTier) ?>">
       <div class="ly-tier-hero-icon"><?= $tier['icon'] ?></div>
       <div class="ly-tier-hero-info">
@@ -161,8 +188,10 @@ unset($_SESSION['flash']);
 </div>
 <?php endif; ?>
 
+<!-- ══ MAIN ══ -->
 <main class="ly-page" role="main">
 
+  <!-- ── Row 1: stats + tier progress ── -->
   <section class="ly-stats-row" aria-label="Points summary">
 
     <div class="ly-stat-card">
@@ -189,7 +218,7 @@ unset($_SESSION['flash']);
       </div>
     </div>
 
-
+    <!-- Tier progress card -->
     <div class="ly-tier-progress-card">
       <div class="ly-tier-progress-head">
         <span class="ly-tier-progress-label">Tier Progress</span>
@@ -216,6 +245,7 @@ unset($_SESSION['flash']);
 
   </section>
 
+  <!-- ── Row 2: tier journey ── -->
   <section class="ly-section" aria-label="Tier journey">
     <h2 class="ly-section-title">Membership Tiers</h2>
     <div class="ly-tiers-grid">
@@ -246,6 +276,7 @@ unset($_SESSION['flash']);
     </div>
   </section>
 
+  <!-- ── Row 3: rewards catalog ── -->
   <section class="ly-section" aria-label="Redeem rewards">
     <div class="ly-section-head">
       <h2 class="ly-section-title">Redeem Points</h2>
@@ -279,6 +310,7 @@ unset($_SESSION['flash']);
     </div>
   </section>
 
+  <!-- ── Row 4: points history ── -->
   <section class="ly-section" aria-label="Points history">
     <h2 class="ly-section-title">Points History</h2>
 
@@ -330,6 +362,7 @@ unset($_SESSION['flash']);
     <?php endif; ?>
   </section>
 
+  <!-- ── How it works ── -->
   <section class="ly-section ly-how" aria-label="How loyalty points work">
     <h2 class="ly-section-title">How It Works</h2>
     <div class="ly-how-grid">
@@ -361,6 +394,7 @@ unset($_SESSION['flash']);
 
 </main>
 
+<!-- ══ FOOTER ══ -->
 <footer class="ly-footer" role="contentinfo">
   <div class="ly-footer-inner">
     <span>© <?= date('Y') ?> QuickBook. All rights reserved.</span>
@@ -368,5 +402,29 @@ unset($_SESSION['flash']);
   </div>
 </footer>
 
+<script>
+(function () {
+  var btn = document.getElementById('themeToggle');
+  var moon = document.querySelector('.icon-moon');
+  var sun  = document.querySelector('.icon-sun');
+  function applyTheme(theme) {
+    if (theme === 'light') {
+      document.documentElement.removeAttribute('data-theme');
+      if (moon) moon.style.display = 'none';
+      if (sun)  sun.style.display  = 'block';
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      if (moon) moon.style.display = 'block';
+      if (sun)  sun.style.display  = 'none';
+    }
+  }
+  applyTheme(localStorage.getItem('qb-theme') || 'light');
+  if (btn) btn.addEventListener('click', function () {
+    var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('qb-theme', next);
+    applyTheme(next);
+  });
+})();
+</script>
 </body>
 </html>
