@@ -1,5 +1,6 @@
 <?php
 
+require_once __DIR__ . '/../helpers/NotificationHelper.php';
 
 class BookingController
 {
@@ -19,20 +20,19 @@ class BookingController
 
         $db         = Database::getInstance();
         $customerId = (int)$_SESSION['user_id'];
-        
-        $serviceId      = (int)($_POST['service_id']      ?? 0);
-        $providerId     = (int)($_POST['provider_id']     ?? 0);
-        $bookingDate    = trim($_POST['booking_date']     ?? '');
-        $bookingTime    = trim($_POST['booking_time']     ?? '');
-        $notes          = trim($_POST['notes']            ?? '');
-        $locationType   = trim($_POST['location_type']    ?? 'In-shop');
-        $customerAddress= trim($_POST['customer_address'] ?? '');
-        $paymentMethod  = trim($_POST['payment_method']   ?? 'cash');
+
+        $serviceId       = (int)($_POST['service_id']      ?? 0);
+        $providerId      = (int)($_POST['provider_id']     ?? 0);
+        $bookingDate     = trim($_POST['booking_date']     ?? '');
+        $bookingTime     = trim($_POST['booking_time']     ?? '');
+        $notes           = trim($_POST['notes']            ?? '');
+        $locationType    = trim($_POST['location_type']    ?? 'In-shop');
+        $customerAddress = trim($_POST['customer_address'] ?? '');
+        $paymentMethod   = trim($_POST['payment_method']   ?? 'cash');
         $allowedPayments = ['gcash', 'paymaya', 'card', 'cash'];
         if (!in_array($paymentMethod, $allowedPayments)) $paymentMethod = 'cash';
 
         $errors = [];
-
         if (!$serviceId)   $errors[] = 'Please select a service.';
         if (!$providerId)  $errors[] = 'Provider not found.';
         if (!$bookingDate) $errors[] = 'Please pick a booking date.';
@@ -40,7 +40,6 @@ class BookingController
         if ($locationType === 'On-site' && $customerAddress === '') {
             $errors[] = 'Please enter your address so the provider knows where to come.';
         }
-
         if ($bookingDate && strtotime($bookingDate) < strtotime('today')) {
             $errors[] = 'Booking date cannot be in the past.';
         }
@@ -64,8 +63,8 @@ class BookingController
             header('Location: ' . BASE_URL . 'providers/' . $providerId); exit;
         }
 
-        $dayOfWeek = date('l', strtotime($bookingDate)); 
-        $avCheck = $db->prepare("
+        $dayOfWeek = date('l', strtotime($bookingDate));
+        $avCheck   = $db->prepare("
             SELECT * FROM tbl_provider_availability
             WHERE provider_id = ? AND day_of_week = ? AND is_available = 1
         ");
@@ -73,7 +72,7 @@ class BookingController
         $avRow = $avCheck->fetch();
 
         if (!$avRow) {
-            $_SESSION['flash'] = ['type' => 'error', 'msg' => ucfirst($dayOfWeek) . ' is not an available day for this provider. Please choose a different date.'];
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => ucfirst($dayOfWeek) . ' is not an available day for this provider.'];
             header('Location: ' . BASE_URL . 'providers/' . $providerId); exit;
         }
 
@@ -83,7 +82,7 @@ class BookingController
             $endTime   = strtotime($bookingDate . ' ' . $avRow['end_time']);
             if ($reqTime < $startTime || $reqTime > $endTime) {
                 $fmt = fn($t) => date('g:i A', strtotime($bookingDate . ' ' . $t));
-                $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Please choose a time between ' . $fmt($avRow['start_time']) . ' and ' . $fmt($avRow['end_time']) . ' on ' . $dayOfWeek . '.'];
+                $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Please choose a time between ' . $fmt($avRow['start_time']) . ' and ' . $fmt($avRow['end_time']) . '.'];
                 header('Location: ' . BASE_URL . 'providers/' . $providerId); exit;
             }
         }
@@ -99,15 +98,12 @@ class BookingController
             header('Location: ' . BASE_URL . 'providers/' . $providerId); exit;
         }
 
-        $startTime = $bookingTime ?: $avRow['start_time'];
-        $endTime   = date('H:i:s', strtotime($startTime) + ($service['duration_minutes'] * 60));
-
-        // Use submitted total (includes home service fee if applicable)
+        $startTime   = $bookingTime ?: $avRow['start_time'];
+        $endTime     = date('H:i:s', strtotime($startTime) + ($service['duration_minutes'] * 60));
         $serviceFee  = 50.00;
         $totalAmount = (float)($_POST['total_amount'] ?? $service['price']);
         $expectedMin = (float)$service['price'];
         $expectedMax = (float)$service['price'] + $serviceFee;
-        // Clamp to valid range to prevent tampering
         if ($totalAmount < $expectedMin || $totalAmount > $expectedMax) {
             $totalAmount = ($locationType === 'On-site') ? $expectedMax : $expectedMin;
         }
@@ -120,53 +116,76 @@ class BookingController
                 (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
         ");
         $insert->execute([
-            $customerId,
-            $providerId,
-            $serviceId,
-            $bookingDate,
-            $bookingTime ?: null,
-            $startTime,
-            $endTime,
-            $locationType,
-            $customerAddress ?: null,
-            $notes ?: null,
-            $totalAmount,
+            $customerId, $providerId, $serviceId, $bookingDate,
+            $bookingTime ?: null, $startTime, $endTime,
+            $locationType, $customerAddress ?: null, $notes ?: null, $totalAmount,
         ]);
-
         $bookingId = (int)$db->lastInsertId();
 
-        // Insert payment record into tbl_payments
-        $payStatus = in_array($paymentMethod, ['gcash', 'paymaya', 'card']) ? 'pending' : 'pending';
-        $payInsert = $db->prepare("
-            INSERT INTO tbl_payments
-                (booking_id, amount, payment_method, status, created_at)
-            VALUES (?, ?, ?, ?, NOW())
-        ");
-        $payInsert->execute([
-            $bookingId,
-            $totalAmount,
-            $paymentMethod,
-            $payStatus,
-        ]);
+        // Payment record
+        $db->prepare("
+            INSERT INTO tbl_payments (booking_id, amount, payment_method, status, created_at)
+            VALUES (?, ?, ?, 'pending', NOW())
+        ")->execute([$bookingId, $totalAmount, $paymentMethod]);
 
-        $balStmt = $db->prepare("
-            SELECT COALESCE(SUM(points), 0) FROM tbl_loyalty_points WHERE user_id = ?
-        ");
+        // Loyalty points
+        $balStmt = $db->prepare("SELECT COALESCE(SUM(points), 0) FROM tbl_loyalty_points WHERE user_id = ?");
         $balStmt->execute([$customerId]);
-        $currentBalance = (int) $balStmt->fetchColumn();
-
-        $pts = $db->prepare("
+        $currentBalance = (int)$balStmt->fetchColumn();
+        $db->prepare("
             INSERT INTO tbl_loyalty_points
                 (user_id, booking_id, type, points, balance, description, created_at)
             VALUES (?, ?, 'earn', 10, ?, 'Booking placed', NOW())
-        ");
-        $pts->execute([$customerId, $bookingId, $currentBalance + 10]);
+        ")->execute([$customerId, $bookingId, $currentBalance + 10]);
 
-        $notif = $db->prepare("
-            INSERT INTO tbl_notifications (user_id, title, message, type, is_read, created_at)
-            VALUES (?, 'Booking Submitted', 'Your booking has been submitted and is awaiting confirmation.', 'booking', 0, NOW())
-        ");
-        $notif->execute([$customerId]);
+        // ── Resolve provider user_id ───────────────────────────────────────
+        $provUserStmt = $db->prepare("SELECT user_id FROM tbl_provider_profiles WHERE id = ? LIMIT 1");
+        $provUserStmt->execute([$providerId]);
+        $providerUserId = (int)($provUserStmt->fetchColumn() ?: 0);
+
+        // ── Names & formatted date/time ────────────────────────────────────
+        $custStmt = $db->prepare("SELECT first_name, last_name FROM tbl_users WHERE id = ? LIMIT 1");
+        $custStmt->execute([$customerId]);
+        $custUser  = $custStmt->fetch();
+        $custName  = $custUser ? trim($custUser['first_name'] . ' ' . $custUser['last_name']) : 'A customer';
+
+        $provStmt = $db->prepare("SELECT first_name, last_name FROM tbl_users WHERE id = ? LIMIT 1");
+        $provStmt->execute([$providerUserId]);
+        $provUser  = $provStmt->fetch();
+        $provName  = $provUser ? trim($provUser['first_name'] . ' ' . $provUser['last_name']) : 'The provider';
+
+        $fDate = date('l, F j, Y', strtotime($bookingDate));
+        $fTime = $bookingTime ? date('g:i A', strtotime($bookingTime)) : 'TBD';
+        $body  = "Scheduled for {$fDate} at {$fTime}. Amount: ₱" . number_format($totalAmount, 2) . '.';
+
+        // ── Notify customer ────────────────────────────────────────────────
+        NotificationHelper::send($db, [$customerId], 'booking',
+            'Booking Submitted',
+            "Your booking for \"{$service['name']}\" has been submitted and is awaiting confirmation.",
+            $body,
+            BASE_URL . 'bookings/' . $bookingId
+        );
+
+        // ── Notify provider ────────────────────────────────────────────────
+        if ($providerUserId) {
+            NotificationHelper::send($db, [$providerUserId], 'booking',
+                'New Booking Request',
+                "{$custName} booked \"{$service['name']}\" — please confirm or reschedule.",
+                $body,
+                BASE_URL . 'provider/bookings/' . $bookingId
+            );
+        }
+
+        // ── Notify all admins ──────────────────────────────────────────────
+        NotificationHelper::send(
+            $db,
+            NotificationHelper::adminIds($db),
+            'booking',
+            '[Admin] New Booking — #' . $bookingId,
+            "Customer {$custName} booked \"{$service['name']}\" with provider {$provName}.",
+            $body . " Payment: {$paymentMethod}.",
+            BASE_URL . 'admin/bookings'
+        );
 
         $_SESSION['flash'] = [
             'type' => 'success',
