@@ -3,7 +3,7 @@
 require_once __DIR__ . '/../models/User.php';
 require_once __DIR__ . '/../../vendor/autoload.php';
 
-use PragmaRX\Google2FAQRCode\Google2FA;
+use PragmaRX\Google2FA\Google2FA;
 
 class TwoFactorController
 {
