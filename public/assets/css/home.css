@@ -4,6 +4,8 @@
    Redesigned: Larita-inspired light mode default
    ===================================================== */
 
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
+
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 /* ── LIGHT MODE (default) ── */
@@ -184,14 +186,32 @@ body {
   padding: 0 2.5rem;
   display: flex; align-items: center; justify-content: space-between;
 }
+
+/* ── NAVBAR LOGO — image + wordmark ── */
 .navbar-logo {
   font-family: var(--font-display);
-  font-size: 1.3rem; font-weight: 700;
+  font-size: 1.6rem;   /* was 1.3rem */
+  font-weight: 700;
   letter-spacing: .01em; color: var(--text-primary);
   text-decoration: none; transition: color .3s;
   font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
 }
+
 .navbar-logo span { color: var(--gold); font-style: normal; }
+
+/* Logo image sizing — adjust width/height to taste */
+.navbar-logo-img {
+  width: 52px;   /* was 34px */
+  height: 52px;  /* was 34px */
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,.18));
+  transition: transform .3s ease;
+}
+
 .navbar-links { display: flex; list-style: none; gap: 2.2rem; }
 .navbar-links a {
   font-family: var(--font-mono); font-size: .68rem; font-weight: 500;
@@ -1047,4 +1067,6 @@ body {
   .provider-grid { grid-template-columns: 1fr; }
   .navbar-links  { display: none; }
   .stats-inner   { grid-template-columns: repeat(2,1fr); }
+  /* shrink logo image on small screens */
+  .navbar-logo-img { width: 40px; height: 40px; } /* was 28px */
 }

@@ -566,7 +566,18 @@ class HomePage {
 <!-- NAVBAR -->
 <nav class="navbar">
   <div class="navbar-inner">
-    <a href="<?= BASE_URL ?>" class="navbar-logo">Quick<span>Book</span></a>
+
+    <!-- ============================================================
+         LOGO — image + wordmark side by side
+         Change QB_LOGO.png to QB_LOGO.svg / .webp etc. if needed
+         ============================================================ -->
+    <a href="<?= BASE_URL ?>" class="navbar-logo">
+      <img src="<?= BASE_URL ?>assets/img/QB_LOGO.png"
+           alt="QuickBook Logo"
+           class="navbar-logo-img">
+      Quick<span>Book</span>
+    </a>
+
     <ul class="navbar-links">
       <?= $navLinks ?>
     </ul>
