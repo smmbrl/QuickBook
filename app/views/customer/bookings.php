@@ -81,9 +81,12 @@ $params[] = $offset;
 $bookingStmt = $db->prepare("
     SELECT b.*,
            s.name  as service_name, s.price, s.duration_minutes, s.service_type,
-           pp.business_name, pp.offers_home_service,
+           pp.business_name, pp.offers_home_service, pp.avg_rating as provider_rating,
            c.name  as category_name, c.slug as category_slug,
-           (SELECT COUNT(*) FROM tbl_reviews r WHERE r.booking_id = b.id) as has_review
+           (SELECT COUNT(*) FROM tbl_reviews r WHERE r.booking_id = b.id) as has_review,
+           (SELECT py.status FROM tbl_payments py WHERE py.booking_id = b.id ORDER BY py.created_at DESC LIMIT 1) as payment_status,
+           (SELECT py.payment_method FROM tbl_payments py WHERE py.booking_id = b.id ORDER BY py.created_at DESC LIMIT 1) as payment_method,
+           (SELECT py.amount FROM tbl_payments py WHERE py.booking_id = b.id ORDER BY py.created_at DESC LIMIT 1) as payment_amount
     FROM tbl_bookings b
     JOIN tbl_services s           ON b.service_id  = s.id
     JOIN tbl_provider_profiles pp ON b.provider_id = pp.id
@@ -140,6 +143,18 @@ $filterCards = [
     'completed'    => ['label' => 'Completed',      'sub' => 'Services enjoyed',        'icon' => ''],
     'cancelled'    => ['label' => 'Cancelled',      'sub' => 'Dismissed',               'icon' => ''],
 ];
+
+/* ── Payment method icons ── */
+function pvPaymentIcon(string $method): string {
+    return match($method) {
+        'gcash'   => '📱',
+        'paymaya' => '💳',
+        'card'    => '💳',
+        'cash'    => '💵',
+        'points'  => '⭐',
+        default   => '💰',
+    };
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -331,50 +346,169 @@ $filterCards = [
     </div>
 
     <?php else: ?>
-    <div class="pv-booking-list" role="list">
+    <div class="pv-booking-grid" role="list">
       <?php foreach ($bookings as $b):
-        $imgSrc       = pvBookingImage($b['service_type'] ?? '', $svcImageMap);
-        $status       = $b['status'];
-        $isCancellable= in_array($status, ['pending', 'confirmed', 'rescheduled']);
-        $isCompleted  = $status === 'completed';
-        $bookingTime  = !empty($b['booking_time']) ? date('g:i A', strtotime($b['booking_time'])) : null;
-        $duration     = !empty($b['duration_minutes']) ? $b['duration_minutes'].' min' : null;
+        $imgSrc        = pvBookingImage($b['service_type'] ?? '', $svcImageMap);
+        $status        = $b['status'];
+        $isCompleted   = $status === 'completed';
+        $isCancelled   = in_array($status, ['cancelled', 'rejected']);
+        $isUpcoming    = in_array($status, ['pending', 'confirmed', 'rescheduled']);
+        $bookingDate   = !empty($b['booking_date'])  ? date('M j, Y', strtotime($b['booking_date'])) : '—';
+        $bookingTime   = !empty($b['booking_time'])  ? date('g:i A', strtotime($b['booking_time'])) : null;
+        $endTime       = !empty($b['end_time'])      ? date('g:i A', strtotime($b['end_time'])) : null;
+        $duration      = !empty($b['duration_minutes']) ? $b['duration_minutes'].' min' : null;
+        $payStatus     = $b['payment_status']  ?? null;
+        $payMethod     = $b['payment_method']  ?? null;
+        $payAmount     = $b['payment_amount']  ?? $b['total_amount'];
+        $isPaid        = $payStatus === 'paid';
+        $loyaltyEarned = (int)($b['loyalty_points_earned'] ?? 0);
+        $provRating    = $b['provider_rating'] ? number_format((float)$b['provider_rating'], 1) : null;
+
+        /* Build "Book Again" URL — link to browse with service pre-selected */
+        $bookAgainUrl  = BASE_URL . 'browse/service/' . (int)$b['service_id'];
       ?>
-      <div class="pv-booking-item" role="listitem">
+      <div class="pv-bk-card pv-bk-card--<?= htmlspecialchars($status) ?>" role="listitem">
 
-        <div class="pv-booking-accent pv-booking-accent--<?= htmlspecialchars($status) ?>" aria-hidden="true"></div>
+        <!-- Top accent strip (colour-coded by status) -->
+        <div class="pv-bk-strip" aria-hidden="true"></div>
 
-        <div class="pv-booking-av" aria-hidden="true">
-          <img src="<?= $imgSrc ?>" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;max-width:none;">
-        </div>
+        <!-- Card Header: image + core info + status pill -->
+        <div class="pv-bk-header">
+          <div class="pv-bk-thumb">
+            <img src="<?= $imgSrc ?>" alt="<?= htmlspecialchars($b['service_type'] ?? '') ?>" loading="lazy">
+          </div>
 
-        <div class="pv-booking-info">
-          <div class="pv-booking-service"><?= htmlspecialchars($b['service_name']) ?></div>
-          <div class="pv-booking-provider">📍 <?= htmlspecialchars($b['business_name']) ?></div>
-          <div class="pv-booking-tags">
+          <div class="pv-bk-head-info">
+            <div class="pv-bk-service-name"><?= htmlspecialchars($b['service_name']) ?></div>
+            <div class="pv-bk-provider">
+              <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+              <?= htmlspecialchars($b['business_name']) ?>
+              <?php if ($provRating): ?>
+                <span class="pv-bk-rating"><i class="fa-solid fa-star"></i> <?= $provRating ?></span>
+              <?php endif; ?>
+            </div>
             <?php if ($b['category_name']): ?>
               <span class="pv-tag pv-tag--cat"><?= htmlspecialchars($b['category_name']) ?></span>
             <?php endif; ?>
-           
           </div>
-        </div>
 
-
-        <div class="pv-booking-status-col">
           <span class="pv-pill pv-pill--<?= htmlspecialchars($status) ?>">
             <?= ucfirst(str_replace('_', ' ', $status)) ?>
           </span>
         </div>
 
-        <div class="pv-booking-actions">
-          <a href="<?= BASE_URL ?>bookings/<?= (int)$b['id'] ?>" class="pv-btn pv-btn--sm pv-btn--primary">
-            View
+        <!-- Divider -->
+        <div class="pv-bk-divider" aria-hidden="true"></div>
+
+        <!-- Details grid -->
+        <div class="pv-bk-details">
+
+          <div class="pv-bk-detail">
+            <span class="pv-bk-detail-icon">📅</span>
+            <div>
+              <div class="pv-bk-detail-label">Date</div>
+              <div class="pv-bk-detail-val"><?= $bookingDate ?></div>
+            </div>
+          </div>
+
+          <?php if ($bookingTime): ?>
+          <div class="pv-bk-detail">
+            <span class="pv-bk-detail-icon">🕐</span>
+            <div>
+              <div class="pv-bk-detail-label">Time</div>
+              <div class="pv-bk-detail-val"><?= $bookingTime ?><?= $endTime ? ' – ' . $endTime : '' ?></div>
+            </div>
+          </div>
+          <?php endif; ?>
+
+          <?php if ($duration): ?>
+          <div class="pv-bk-detail">
+            <span class="pv-bk-detail-icon">⏱</span>
+            <div>
+              <div class="pv-bk-detail-label">Duration</div>
+              <div class="pv-bk-detail-val"><?= $duration ?></div>
+            </div>
+          </div>
+          <?php endif; ?>
+
+          <div class="pv-bk-detail">
+            <span class="pv-bk-detail-icon">📍</span>
+            <div>
+              <div class="pv-bk-detail-label">Location</div>
+              <div class="pv-bk-detail-val"><?= htmlspecialchars($b['location_type'] ?? 'In-shop') ?></div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Divider -->
+        <div class="pv-bk-divider" aria-hidden="true"></div>
+
+        <!-- Payment row -->
+        <div class="pv-bk-payment-row">
+          <div class="pv-bk-price-block">
+            <span class="pv-bk-price-label">Total</span>
+            <span class="pv-bk-price">₱<?= number_format((float)($payAmount ?? 0), 2) ?></span>
+          </div>
+
+          <div class="pv-bk-pay-info">
+            <?php if ($payMethod): ?>
+              <span class="pv-bk-pay-method">
+                <?= pvPaymentIcon($payMethod) ?> <?= ucfirst($payMethod) ?>
+              </span>
+            <?php endif; ?>
+            <?php if ($payStatus): ?>
+              <span class="pv-pay-badge pv-pay-badge--<?= htmlspecialchars($payStatus) ?>">
+                <?= $isPaid ? '✓ Paid' : ucfirst($payStatus) ?>
+              </span>
+            <?php else: ?>
+              <span class="pv-pay-badge pv-pay-badge--none">No Payment</span>
+            <?php endif; ?>
+          </div>
+        </div>
+
+        <?php if ($loyaltyEarned > 0): ?>
+        <div class="pv-bk-loyalty">
+          <span>⭐ +<?= $loyaltyEarned ?> loyalty points earned</span>
+        </div>
+        <?php endif; ?>
+
+        <?php if ($status === 'rescheduled' && $b['suggested_date']): ?>
+        <div class="pv-bk-reschedule-note">
+          <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+          Suggested: <?= date('M j, Y', strtotime($b['suggested_date'])) ?>
+          <?= $b['suggested_time'] ? ' at ' . date('g:i A', strtotime($b['suggested_time'])) : '' ?>
+          <?= $b['reschedule_note'] ? ' — ' . htmlspecialchars($b['reschedule_note']) : '' ?>
+        </div>
+        <?php endif; ?>
+
+        <?php if ($isCancelled && $b['cancellation_reason']): ?>
+        <div class="pv-bk-cancel-note">
+          <i class="fa-solid fa-circle-xmark" aria-hidden="true"></i>
+          <?= htmlspecialchars($b['cancellation_reason']) ?>
+        </div>
+        <?php endif; ?>
+
+        <!-- Action buttons -->
+        <div class="pv-bk-actions">
+          <!-- Book Again always visible -->
+          <a href="<?= $bookAgainUrl ?>" class="pv-btn pv-btn--book-again">
+            <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+            Book Again
           </a>
+
+          <!-- Review: only if completed and no review yet -->
           <?php if ($isCompleted && !$b['has_review']): ?>
             <a href="<?= BASE_URL ?>bookings/<?= (int)$b['id'] ?>/review"
-               class="pv-btn pv-btn--sm pv-btn--review">
-              ⭐ Review
+               class="pv-btn pv-btn--review">
+              <i class="fa-solid fa-star" aria-hidden="true"></i>
+              Leave a Review
             </a>
+          <?php elseif ($isCompleted && $b['has_review']): ?>
+            <span class="pv-btn-reviewed">
+              <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+              Reviewed
+            </span>
           <?php endif; ?>
         </div>
 
