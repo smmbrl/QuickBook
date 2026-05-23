@@ -689,7 +689,151 @@ input[type="password"]::-webkit-strong-password-auto-fill-button { display: none
 }
 .social-icon { width: 18px; height: 18px; flex-shrink: 0; }
 
-/* ── FORM STEP (multi-step wizard) ───────────────────────── */
+/* ── SOLO PAGE LAYOUT (single centered form, no left panel) ── */
+.register-solo-page {
+  min-height:      100vh;
+  background:      #F9F7F2;
+  display:         flex;
+  flex-direction:  column;
+  align-items:     center;
+}
+
+/* top logo bar */
+.register-solo-topbar {
+  width:           100%;
+  max-width:       1240px;
+  padding:         1.4rem 2.5rem;
+  display:         flex;
+  align-items:     center;
+}
+
+.register-solo-logo {
+  font-family:     'Playfair Display', serif;
+  font-size:       1.4rem;
+  font-weight:     700;
+  font-style:      italic;
+  color:           #1A1410;
+  text-decoration: none;
+  letter-spacing:  .01em;
+  display:         flex;
+  align-items:     center;
+  gap:             .45rem;
+}
+.register-solo-logo span {
+  color:      #C9A84C;
+  font-style: normal;
+}
+.register-solo-logo .auth-logo-img {
+  /* on the light background keep normal brightness */
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,.12));
+}
+
+/* centered form wrap */
+.register-solo-wrap {
+  flex:            1;
+  width:           100%;
+  display:         flex;
+  align-items:     flex-start;
+  justify-content: center;
+  padding:         1.5rem 1.5rem 3rem;
+}
+
+/* widen the form box slightly for the solo layout */
+.register-solo-wrap .register-form-box {
+  max-width: 580px;
+  animation: scaleIn .5s cubic-bezier(.34,1.2,.64,1) both;
+}
+
+/* ── STATS ROW (bottom of solo form) ────────────────────── */
+.solo-stats {
+  display:       flex;
+  align-items:   center;
+  gap:           .5rem;
+  margin-top:    1.6rem;
+  padding:       1.2rem 1.5rem;
+  background:    rgba(201,168,76,.07);
+  border:        1px solid rgba(201,168,76,.2);
+  border-radius: var(--radius);
+}
+.solo-stat {
+  text-align: center;
+  flex:       1;
+}
+.solo-stat-num {
+  font-family:    'Playfair Display', serif;
+  font-size:      1.25rem;
+  font-weight:    800;
+  color:          #C9A84C;
+  line-height:    1;
+  margin-bottom:  .2rem;
+  letter-spacing: -.01em;
+}
+.solo-stat-lbl {
+  font-family:    'DM Mono', monospace;
+  font-size:      .58rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color:          rgba(26,20,16,.4);
+}
+.solo-stat-div {
+  width:       1px;
+  height:      32px;
+  background:  rgba(26,20,16,.1);
+  flex-shrink: 0;
+}
+
+/* ── SECTION DIVIDER LABEL ───────────────────────────────── */
+.form-section-label {
+  font-family:    'DM Mono', monospace;
+  font-size:      .62rem;
+  font-weight:    500;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color:          rgba(26,20,16,.35);
+  margin-bottom:  .9rem;
+  padding-bottom: .55rem;
+  border-bottom:  1px solid rgba(26,20,16,.07);
+  display:        flex;
+  align-items:    center;
+  gap:            .6rem;
+}
+.form-section-label::before {
+  content:       '';
+  display:       inline-block;
+  width:         18px;
+  height:        2px;
+  background:    #C9A84C;
+  border-radius: 99px;
+  flex-shrink:   0;
+}
+
+/* ── FLASH MESSAGES ──────────────────────────────────────── */
+.flash-msg {
+  display:       flex;
+  gap:           .6rem;
+  align-items:   flex-start;
+  padding:       .8rem 1rem;
+  border-radius: var(--radius-sm);
+  font-family:   'DM Mono', monospace;
+  font-size:     .75rem;
+  letter-spacing:.02em;
+  margin-bottom: 1.2rem;
+  line-height:   1.6;
+}
+.flash-error {
+  background:  rgba(239,68,68,.08);
+  border:      1px solid rgba(239,68,68,.22);
+  border-left: 3px solid #DC2626;
+  color:       #991B1B;
+}
+.flash-success {
+  background:  rgba(22,163,74,.08);
+  border:      1px solid rgba(22,163,74,.22);
+  border-left: 3px solid #16A34A;
+  color:       #14532D;
+}
+
+/* ── FORM STEP (kept for compatibility) ──────────────────── */
 .form-step {
   animation: fadeStepIn .28s ease both;
 }
@@ -756,6 +900,8 @@ input[type="password"]::-webkit-strong-password-auto-fill-button { display: none
 }
 
 /* ── RESPONSIVE ──────────────────────────────────────────── */
+
+/* Old split-panel layout (kept for reference, hidden in solo mode) */
 @media (max-width: 960px) {
   .register-page     { flex-direction: column; }
   .register-left     { width: 100%; padding: 2.5rem 2rem; gap: 1.2rem; }
@@ -764,9 +910,22 @@ input[type="password"]::-webkit-strong-password-auto-fill-button { display: none
   .register-form-box { padding: 2.2rem 1.8rem; max-width: 100%; }
   .auth-logo-img     { width: 36px; height: 36px; }
 }
+
+/* Solo layout responsive */
+@media (max-width: 640px) {
+  .register-solo-topbar              { padding: 1rem 1.2rem; }
+  .register-solo-wrap                { padding: 1rem 1rem 2.5rem; }
+  .register-solo-wrap .register-form-box { padding: 1.8rem 1.4rem; }
+  .solo-stats                        { flex-direction: column; gap: .8rem; }
+  .solo-stat-div                     { width: 80%; height: 1px; }
+  .auth-logo-img                     { width: 32px; height: 32px; }
+}
+
 @media (max-width: 480px) {
-  .form-row           { grid-template-columns: 1fr; }
-  .role-selector      { flex-direction: row; }
-  .register-form-box  { padding: 2rem 1.4rem; border-radius: var(--radius-lg); }
-  .auth-logo-img      { width: 30px; height: 30px; }
+  .form-row          { grid-template-columns: 1fr; }
+  .register-form-box { border-radius: var(--radius-lg); }
+  .auth-logo-img     { width: 28px; height: 28px; }
+  .step-nav          { flex-direction: column-reverse; gap: .5rem; }
+  .step-nav .step-back-btn,
+  .step-nav .step-next-btn { width: 100%; justify-content: center; }
 }
