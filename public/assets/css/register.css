@@ -72,7 +72,7 @@
   pointer-events:  none;
 }
 
-/* ── LEFT LOGO ───────────────────────────────────────────── */
+/* ── LEFT LOGO — image + wordmark ───────────────────────── */
 .register-left-logo {
   font-family:     'Playfair Display', serif;
   font-size:       1.55rem;
@@ -84,11 +84,24 @@
   position:        relative;
   z-index:         1;
   animation:       slideRight .5s ease both;
+  display:         flex;    /* NEW — align image + text */
+  align-items:     center;  /* NEW */
+  gap:             .5rem;   /* NEW — space between logo and wordmark */
 }
 .register-left-logo span {
   color:       #C9A84C;
   font-style:  normal;
   font-weight: 700;
+}
+
+/* ── AUTH LOGO IMAGE (shared by login + register) ────────── */
+.auth-logo-img {
+  width:       42px;
+  height:      42px;
+  object-fit:  contain;
+  flex-shrink: 0;
+  /* brightens the image so it pops on the dark left panel */
+  filter:      brightness(1.1) drop-shadow(0 2px 6px rgba(201,168,76,.35));
 }
 
 /* ── LEFT HEADING ────────────────────────────────────────── */
@@ -226,9 +239,9 @@
 }
 
 .auth-stat-divider {
-  width:      1px;
-  height:     36px;
-  background: rgba(249,247,242,.12);
+  width:       1px;
+  height:      36px;
+  background:  rgba(249,247,242,.12);
   flex-shrink: 0;
 }
 
@@ -374,16 +387,16 @@
 
 /* Select element on light background */
 .register-right select.form-control {
-  background:        #F9F7F2 !important;
-  color:             #1A1410 !important;
-  border:            1.5px solid rgba(26,20,16,.12) !important;
+  background:         #F9F7F2 !important;
+  color:              #1A1410 !important;
+  border:             1.5px solid rgba(26,20,16,.12) !important;
   -webkit-appearance: none;
-  appearance:        none;
-  padding:           .65rem 1rem;
-  border-radius:     var(--radius-sm);
-  width:             100%;
-  font-size:         .9rem;
-  font-family:       'DM Sans', sans-serif;
+  appearance:         none;
+  padding:            .65rem 1rem;
+  border-radius:      var(--radius-sm);
+  width:              100%;
+  font-size:          .9rem;
+  font-family:        'DM Sans', sans-serif;
 }
 .register-right select.form-control option {
   background: #FFFFFF;
@@ -485,10 +498,10 @@
 .role-option.selected .role-icon { transform: scale(1.08); }
 
 .role-label {
-  font-family:  'Playfair Display', serif;
-  font-size:    .82rem;
-  font-weight:  700;
-  color:        #1A1410;
+  font-family: 'Playfair Display', serif;
+  font-size:   .82rem;
+  font-weight: 700;
+  color:       #1A1410;
 }
 .role-sub {
   font-family:    'DM Mono', monospace;
@@ -676,6 +689,72 @@ input[type="password"]::-webkit-strong-password-auto-fill-button { display: none
 }
 .social-icon { width: 18px; height: 18px; flex-shrink: 0; }
 
+/* ── FORM STEP (multi-step wizard) ───────────────────────── */
+.form-step {
+  animation: fadeStepIn .28s ease both;
+}
+@keyframes fadeStepIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── STEP NAV — back / next row ──────────────────────────── */
+.step-nav {
+  display: flex;
+  gap:     .75rem;
+  margin-top: .4rem;
+}
+.step-nav .step-back-btn {
+  flex:            0 0 auto;
+  width:           auto;
+  padding-left:    1.4rem;
+  padding-right:   1.4rem;
+  background:      transparent;
+  color:           rgba(26,20,16,.55);
+  border:          1.5px solid rgba(26,20,16,.14);
+}
+.step-nav .step-back-btn:hover {
+  border-color: #C9A84C;
+  color:        #C9A84C;
+  transform:    translateY(-1px);
+}
+.step-nav .step-next-btn { flex: 1; }
+
+/* ── REVIEW CARD (step 3 summary) ────────────────────────── */
+.review-card {
+  background:    #F9F7F2;
+  border:        1.5px solid rgba(201,168,76,.22);
+  border-radius: var(--radius);
+  padding:       1.1rem 1.3rem;
+  margin-bottom: .2rem;
+}
+.review-row {
+  display:         flex;
+  justify-content: space-between;
+  align-items:     center;
+  padding:         .45rem 0;
+  border-bottom:   1px solid rgba(26,20,16,.07);
+  font-size:       .87rem;
+}
+.review-row:last-child { border-bottom: none; }
+.review-label {
+  font-family:    'DM Mono', monospace;
+  font-size:      .62rem;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color:          rgba(26,20,16,.4);
+}
+.review-value {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  color:       #1A1410;
+  text-align:  right;
+  max-width:   60%;
+  overflow:    hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ── RESPONSIVE ──────────────────────────────────────────── */
 @media (max-width: 960px) {
   .register-page     { flex-direction: column; }
@@ -683,9 +762,11 @@ input[type="password"]::-webkit-strong-password-auto-fill-button { display: none
   .auth-stats        { margin-top: 0; }
   .register-right    { padding: 2rem 1.2rem; }
   .register-form-box { padding: 2.2rem 1.8rem; max-width: 100%; }
+  .auth-logo-img     { width: 36px; height: 36px; }
 }
 @media (max-width: 480px) {
   .form-row           { grid-template-columns: 1fr; }
   .role-selector      { flex-direction: row; }
   .register-form-box  { padding: 2rem 1.4rem; border-radius: var(--radius-lg); }
+  .auth-logo-img      { width: 30px; height: 30px; }
 }

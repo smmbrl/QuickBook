@@ -24,7 +24,14 @@
 
     <div class="login-left-bg"></div>
 
+    <!-- ============================================================
+         LOGO — image + wordmark side by side
+         Change QB_LOGO.png to QB_LOGO.svg / .webp etc. if needed
+         ============================================================ -->
     <a href="<?= BASE_URL ?>home" class="login-left-logo">
+      <img src="<?= BASE_URL ?>assets/img/QB_LOGO.png"
+           alt="QuickBook Logo"
+           class="auth-logo-img">
       Quick<span>Book</span>
     </a>
 

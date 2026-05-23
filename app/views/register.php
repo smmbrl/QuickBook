@@ -3,6 +3,40 @@
 // which already sets $error and $success from flash session.
 $error   = $error   ?? null;
 $success = $success ?? null;
+
+// ── LIVE STATS FROM DATABASE ──────────────────────────────
+$stat_providers  = 0;
+$stat_customers  = 0;
+$stat_avg_rating = 0.0;
+
+try {
+    $db = Database::getInstance();
+
+    // Total approved providers
+    $stat_providers = (int) $db->query(
+        "SELECT COUNT(*) FROM tbl_provider_profiles WHERE is_approved = 1"
+    )->fetchColumn();
+
+    // Total registered customers
+    $stat_customers = (int) $db->query(
+        "SELECT COUNT(*) FROM tbl_users WHERE role = 'customer'"
+    )->fetchColumn();
+
+    // Platform-wide average rating
+    $stat_avg_rating = (float) $db->query(
+        "SELECT COALESCE(ROUND(AVG(avg_rating), 1), 0)
+         FROM tbl_provider_profiles
+         WHERE is_approved = 1 AND avg_rating > 0"
+    )->fetchColumn();
+
+} catch (Exception $e) {
+    /* DB unavailable — keep zeros, fall back to display defaults below */
+}
+
+// Format for display
+$label_providers  = $stat_providers  > 0 ? number_format($stat_providers)  . '+' : '0+';
+$label_customers  = $stat_customers  > 0 ? number_format($stat_customers)  . '+' : '0+';
+$label_avg_rating = $stat_avg_rating > 0 ? number_format($stat_avg_rating, 1)    : '0.0';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -31,7 +65,14 @@ $success = $success ?? null;
   <div class="register-left">
     <div class="register-left-bg"></div>
 
+    <!-- ============================================================
+         LOGO — image + wordmark side by side
+         Change QB_LOGO.png to QB_LOGO.svg / .webp etc. if needed
+         ============================================================ -->
     <a href="<?= BASE_URL ?>home" class="register-left-logo">
+      <img src="<?= BASE_URL ?>assets/img/QB_LOGO.png"
+           alt="QuickBook Logo"
+           class="auth-logo-img">
       Quick<span>Book</span>
     </a>
 
@@ -71,17 +112,17 @@ $success = $success ?? null;
 
     <div class="auth-stats">
       <div class="auth-stat">
-        <div class="auth-stat-number">298+</div>
+        <div class="auth-stat-number"><?= htmlspecialchars($label_providers) ?></div>
         <div class="auth-stat-label">Local Providers</div>
       </div>
       <div class="auth-stat-divider"></div>
       <div class="auth-stat">
-        <div class="auth-stat-number">5,200+</div>
+        <div class="auth-stat-number"><?= htmlspecialchars($label_customers) ?></div>
         <div class="auth-stat-label">Happy Customers</div>
       </div>
       <div class="auth-stat-divider"></div>
       <div class="auth-stat">
-        <div class="auth-stat-number">4.8 ⭐</div>
+        <div class="auth-stat-number"><?= htmlspecialchars($label_avg_rating) ?> ⭐</div>
         <div class="auth-stat-label">Avg. Rating</div>
       </div>
     </div>
@@ -92,15 +133,15 @@ $success = $success ?? null;
   <div class="register-right">
     <div class="register-form-box">
 
-      <!-- Progress steps -->
-      <div class="register-step-label">Account Setup</div>
+      <!-- ── PROGRESS BAR (driven by JS) ── -->
+      <div class="register-step-label" id="step-label">Step 1 of 3 — Your Info</div>
       <div class="register-steps">
-        <div class="r-step active"></div>
-        <div class="r-step"></div>
-        <div class="r-step"></div>
+        <div class="r-step active" id="bar-1"></div>
+        <div class="r-step"       id="bar-2"></div>
+        <div class="r-step"       id="bar-3"></div>
       </div>
 
-      <div class="form-heading">Create your account</div>
+      <div class="form-heading" id="step-heading">Create your account</div>
       <p class="form-subheading">
         Already have one?
         <a href="<?= BASE_URL ?>login">Sign in here</a>
@@ -109,20 +150,10 @@ $success = $success ?? null;
       <!-- Flash error -->
       <?php if ($error): ?>
         <div style="
-          background: rgba(239,68,68,.12);
-          border: 1px solid rgba(239,68,68,.35);
-          color: #FCA5A5;
-          border-radius: var(--radius-sm);
-          padding: .8rem 1rem;
-          font-family: var(--font-mono);
-          font-size: .75rem;
-          letter-spacing: .02em;
-          margin-bottom: 1.2rem;
-          display: flex;
-          gap: .6rem;
-          align-items: flex-start;
-          line-height: 1.6;
-        ">
+          background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);
+          color:#FCA5A5;border-radius:var(--radius-sm);padding:.8rem 1rem;
+          font-family:var(--font-mono);font-size:.75rem;letter-spacing:.02em;
+          margin-bottom:1.2rem;display:flex;gap:.6rem;align-items:flex-start;line-height:1.6;">
           <span style="font-size:1rem;line-height:1.4;flex-shrink:0">⚠</span>
           <span><?= htmlspecialchars($error) ?></span>
         </div>
@@ -131,153 +162,187 @@ $success = $success ?? null;
       <!-- Flash success -->
       <?php if ($success): ?>
         <div style="
-          background: rgba(34,197,94,.1);
-          border: 1px solid rgba(34,197,94,.3);
-          color: #86EFAC;
-          border-radius: var(--radius-sm);
-          padding: .8rem 1rem;
-          font-family: var(--font-mono);
-          font-size: .75rem;
-          letter-spacing: .02em;
-          margin-bottom: 1.2rem;
-          display: flex;
-          gap: .6rem;
-          align-items: flex-start;
-          line-height: 1.6;
-        ">
+          background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);
+          color:#86EFAC;border-radius:var(--radius-sm);padding:.8rem 1rem;
+          font-family:var(--font-mono);font-size:.75rem;letter-spacing:.02em;
+          margin-bottom:1.2rem;display:flex;gap:.6rem;align-items:flex-start;line-height:1.6;">
           <span style="font-size:1rem;line-height:1.4;flex-shrink:0">✓</span>
           <span><?= htmlspecialchars($success) ?></span>
         </div>
       <?php endif; ?>
 
-      <!-- Form -->
+      <!-- ── MULTI-STEP FORM ── -->
       <form action="<?= BASE_URL ?>auth/register" method="POST" autocomplete="off" id="register-form">
 
-        <!-- Role Selector -->
-        <div class="role-selector-label">I want to:</div>
-        <div class="role-selector" id="role-selector">
-
-          <div class="role-option selected"
-               id="role-customer"
-               data-role="customer"
-               tabindex="0"
-               role="button"
-               aria-pressed="true">
-            <span class="role-icon">👤</span>
-            <span class="role-label">Book Services</span>
-            <span class="role-sub">I'm a customer</span>
-          </div>
-
-          <div class="role-option"
-               id="role-provider"
-               data-role="provider"
-               tabindex="0"
-               role="button"
-               aria-pressed="false">
-            <span class="role-icon">💼</span>
-            <span class="role-label">Offer Services</span>
-            <span class="role-sub">I'm a provider</span>
-          </div>
-
-        </div>
         <!-- Hidden role field — always synced before submit -->
         <input type="hidden" name="role" id="role-input" value="customer">
 
-        <!-- Name Row -->
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">First Name</label>
-            <input type="text" name="first_name" class="form-control" placeholder="Maria" required autocomplete="off">
-            <div class="field-error">First name is required.</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Last Name</label>
-            <input type="text" name="last_name" class="form-control" placeholder="Santos" required autocomplete="off">
-            <div class="field-error">Last name is required.</div>
-          </div>
-        </div>
+        <!-- ══════════════════════════════════════════
+             STEP 1 — Role + Basic Info
+        ══════════════════════════════════════════ -->
+        <div class="form-step" id="step-1">
 
-        <!-- Email -->
-        <div class="form-group">
-          <label class="form-label">Email Address</label>
-          <input type="email" name="email" class="form-control" placeholder="you@example.com" required autocomplete="off">
-          <div class="field-error">A valid email is required.</div>
-        </div>
-
-        <!-- Phone -->
-        <div class="form-group">
-          <label class="form-label">Mobile Number</label>
-          <input type="tel" name="phone" class="form-control" placeholder="+63 917 000 0000" required autocomplete="off">
-        </div>
-
-        <!-- Gender & Date of Birth Row -->
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Gender</label>
-            <select name="gender" class="form-control" >
-              <option value="" disabled selected >Select gender</option>
-              <option value="male"             >Male</option>
-              <option value="female"           >Female</option>
-              <option value="non_binary"       >Non-binary</option>
-              <option value="prefer_not_to_say">Prefer not to say</option>
-            </select>
+          <div class="role-selector-label">I want to:</div>
+          <div class="role-selector" id="role-selector">
+            <div class="role-option selected" id="role-customer"
+                 data-role="customer" tabindex="0" role="button" aria-pressed="true">
+              <span class="role-icon">👤</span>
+              <span class="role-label">Book Services</span>
+              <span class="role-sub">I'm a customer</span>
+            </div>
+            <div class="role-option" id="role-provider"
+                 data-role="provider" tabindex="0" role="button" aria-pressed="false">
+              <span class="role-icon">💼</span>
+              <span class="role-label">Offer Services</span>
+              <span class="role-sub">I'm a provider</span>
+            </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Date of Birth</label>
-            <input type="date" name="date_of_birth" class="form-control" autocomplete="off"
-              
-              max="<?= date('Y-m-d', strtotime('-13 years')) ?>">
-          </div>
-        </div>
 
-        <!-- Password -->
-        <div class="form-group">
-          <label class="form-label">Password</label>
-          <div class="pw-wrap">
-            <input
-              type="password"
-              name="password"
-              id="reg-pw"
-              class="form-control"
-              placeholder="Create a password"
-              required
-              autocomplete="new-password"
-              oninput="checkStrength(this.value)"
-            >
-            <button type="button" class="pw-toggle" onclick="togglePw()" aria-label="Toggle password visibility">
-              <svg id="eye-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-              </svg>
-              <svg id="eye-off-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="display:none">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.477 0-8.268-2.943-9.542-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/>
-              </svg>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">First Name</label>
+              <input type="text" name="first_name" id="s1-first" class="form-control"
+                     placeholder="Maria" autocomplete="off">
+              <div class="field-error" id="err-first">First name is required.</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Last Name</label>
+              <input type="text" name="last_name" id="s1-last" class="form-control"
+                     placeholder="Santos" autocomplete="off">
+              <div class="field-error" id="err-last">Last name is required.</div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input type="email" name="email" id="s1-email" class="form-control"
+                   placeholder="you@example.com" autocomplete="off">
+            <div class="field-error" id="err-email">A valid email is required.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Mobile Number</label>
+            <input type="tel" name="phone" id="s1-phone" class="form-control"
+                   placeholder="+63 917 000 0000" autocomplete="off">
+            <div class="field-error" id="err-phone">A valid phone number is required.</div>
+          </div>
+
+          <button type="button" class="btn btn-primary btn-submit" onclick="goStep(2)">
+            Continue &rarr;
+          </button>
+
+        </div><!-- /step-1 -->
+
+        <!-- ══════════════════════════════════════════
+             STEP 2 — Personal Details + Password
+        ══════════════════════════════════════════ -->
+        <div class="form-step" id="step-2" style="display:none">
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Gender</label>
+              <select name="gender" id="s2-gender" class="form-control">
+                <option value="" disabled selected>Select gender</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="non_binary">Non-binary</option>
+                <option value="prefer_not_to_say">Prefer not to say</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Date of Birth</label>
+              <input type="date" name="date_of_birth" id="s2-dob" class="form-control"
+                     autocomplete="off" max="<?= date('Y-m-d', strtotime('-13 years')) ?>">
+              <div class="field-error" id="err-dob">You must be at least 13 years old.</div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <div class="pw-wrap">
+              <input type="password" name="password" id="reg-pw" class="form-control"
+                     placeholder="Create a strong password"
+                     autocomplete="new-password"
+                     oninput="checkStrength(this.value)">
+              <button type="button" class="pw-toggle" onclick="togglePw()" aria-label="Toggle password visibility">
+                <svg id="eye-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                </svg>
+                <svg id="eye-off-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="display:none">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.477 0-8.268-2.943-9.542-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/>
+                </svg>
+              </button>
+            </div>
+            <div class="strength-bar">
+              <div class="strength-segment" id="seg1"></div>
+              <div class="strength-segment" id="seg2"></div>
+              <div class="strength-segment" id="seg3"></div>
+              <div class="strength-segment" id="seg4"></div>
+            </div>
+            <div class="strength-label" id="strength-label"></div>
+            <div class="field-error" id="err-pw">Password must be at least 8 characters.</div>
+          </div>
+
+          <div class="step-nav">
+            <button type="button" class="btn btn-ghost btn-submit step-back-btn" onclick="goStep(1)">
+              &larr; Back
+            </button>
+            <button type="button" class="btn btn-primary btn-submit step-next-btn" onclick="goStep(3)">
+              Continue &rarr;
             </button>
           </div>
-          <div class="strength-bar">
-            <div class="strength-segment" id="seg1"></div>
-            <div class="strength-segment" id="seg2"></div>
-            <div class="strength-segment" id="seg3"></div>
-            <div class="strength-segment" id="seg4"></div>
+
+        </div><!-- /step-2 -->
+
+        <!-- ══════════════════════════════════════════
+             STEP 3 — Review & Confirm
+        ══════════════════════════════════════════ -->
+        <div class="form-step" id="step-3" style="display:none">
+
+          <!-- Summary card -->
+          <div class="review-card">
+            <div class="review-row">
+              <span class="review-label">Name</span>
+              <span class="review-value" id="rv-name">—</span>
+            </div>
+            <div class="review-row">
+              <span class="review-label">Email</span>
+              <span class="review-value" id="rv-email">—</span>
+            </div>
+            <div class="review-row">
+              <span class="review-label">Phone</span>
+              <span class="review-value" id="rv-phone">—</span>
+            </div>
+            <div class="review-row">
+              <span class="review-label">Role</span>
+              <span class="review-value" id="rv-role">—</span>
+            </div>
           </div>
-          <div class="strength-label" id="strength-label"></div>
-          <div class="field-error">Password must be at least 8 characters.</div>
-        </div>
 
-        <!-- Terms -->
-        <div class="terms-row">
-          <input type="checkbox" id="terms" name="terms" required>
-          <label for="terms">
-            I agree to the
-            <a href="#">Terms of Service</a>
-            and
-            <a href="#">Privacy Policy</a>
-          </label>
-        </div>
+          <div class="terms-row" style="margin-top:1.2rem">
+            <input type="checkbox" id="terms" name="terms">
+            <label for="terms">
+              I agree to the
+              <a href="#">Terms of Service</a>
+              and
+              <a href="#">Privacy Policy</a>
+            </label>
+          </div>
+          <div class="field-error" id="err-terms" style="margin-top:-.6rem;margin-bottom:.8rem">
+            You must accept the terms to continue.
+          </div>
 
-        <button type="submit" class="btn btn-primary btn-submit" id="submit-btn">
-          Create Account
-        </button>
+          <div class="step-nav">
+            <button type="button" class="btn btn-ghost btn-submit step-back-btn" onclick="goStep(2)">
+              &larr; Back
+            </button>
+            <button type="submit" class="btn btn-primary btn-submit step-next-btn" id="submit-btn">
+              Create Account
+            </button>
+          </div>
+
+        </div><!-- /step-3 -->
 
       </form>
 
@@ -307,82 +372,202 @@ $success = $success ?? null;
 
 
 <script>
-  /* Prevent browser autofill */
-  document.querySelectorAll('.register-right .form-control').forEach(function(input) {
-    input.setAttribute('readonly', true);
-    input.addEventListener('focus', function() { this.removeAttribute('readonly'); });
-  });
+/* ══════════════════════════════════════════════════════════
+   MULTI-STEP WIZARD
+   Steps: 1 = basic info | 2 = personal + password | 3 = review
+══════════════════════════════════════════════════════════ */
 
-  /* ═══════════════════════════════════════════════════════════
-     ROLE SELECTOR — fixed with event delegation
-     Clicks on child elements (icon, label text) are bubbled up
-     to the container and resolved via .closest('[data-role]').
-  ═══════════════════════════════════════════════════════════ */
-  var roleInput = document.getElementById('role-input');
+var currentStep = 1;
 
-  function selectRole(role) {
-    document.querySelectorAll('#role-selector .role-option').forEach(function(opt) {
-      opt.classList.remove('selected');
-      opt.setAttribute('aria-pressed', 'false');
-    });
-    var chosen = document.querySelector('#role-selector [data-role="' + role + '"]');
-    if (chosen) {
-      chosen.classList.add('selected');
-      chosen.setAttribute('aria-pressed', 'true');
-    }
-    roleInput.value = role;
+var STEP_LABELS = {
+  1: 'Step 1 of 3 — Your Info',
+  2: 'Step 2 of 3 — Personal Details',
+  3: 'Step 3 of 3 — Review & Confirm',
+};
+var STEP_HEADINGS = {
+  1: 'Create your account',
+  2: 'A little more about you',
+  3: 'Almost there!',
+};
+
+/* ── Progress bar updater ── */
+function updateBar(step) {
+  for (var i = 1; i <= 3; i++) {
+    var bar = document.getElementById('bar-' + i);
+    bar.classList.remove('active', 'done');
+    if (i < step)  bar.classList.add('done');
+    if (i === step) bar.classList.add('active');
+  }
+  document.getElementById('step-label').textContent   = STEP_LABELS[step];
+  document.getElementById('step-heading').textContent = STEP_HEADINGS[step];
+}
+
+/* ── Show/hide steps with a fade ── */
+function showStep(step) {
+  for (var i = 1; i <= 3; i++) {
+    var el = document.getElementById('step-' + i);
+    if (el) el.style.display = (i === step) ? 'block' : 'none';
+  }
+  updateBar(step);
+  currentStep = step;
+  /* Scroll form box to top on mobile */
+  var box = document.querySelector('.register-form-box');
+  if (box) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ── Validation helpers ── */
+function showErr(id, show) {
+  var el = document.getElementById(id);
+  if (el) el.style.display = show ? 'block' : 'none';
+}
+function markInput(id, invalid) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.style.borderColor = invalid ? '#DC2626' : '';
+  el.style.boxShadow   = invalid ? '0 0 0 3px rgba(220,38,38,.12)' : '';
+}
+
+/* ── Step validators ── */
+function validateStep1() {
+  var first = document.getElementById('s1-first').value.trim();
+  var last  = document.getElementById('s1-last').value.trim();
+  var email = document.getElementById('s1-email').value.trim();
+  var phone = document.getElementById('s1-phone').value.trim();
+  var ok = true;
+
+  showErr('err-first', !first); markInput('s1-first', !first);
+  if (!first) ok = false;
+
+  showErr('err-last', !last);  markInput('s1-last', !last);
+  if (!last) ok = false;
+
+  var emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  showErr('err-email', !emailOk); markInput('s1-email', !emailOk);
+  if (!emailOk) ok = false;
+
+  var phoneOk = phone.length >= 7;
+  showErr('err-phone', !phoneOk); markInput('s1-phone', !phoneOk);
+  if (!phoneOk) ok = false;
+
+  return ok;
+}
+
+function validateStep2() {
+  var pw  = document.getElementById('reg-pw').value;
+  var dob = document.getElementById('s2-dob').value;
+  var ok  = true;
+
+  var pwOk = pw.length >= 8;
+  showErr('err-pw', !pwOk); markInput('reg-pw', !pwOk);
+  if (!pwOk) ok = false;
+
+  /* DOB: must be at least 13 */
+  if (dob) {
+    var dobDate  = new Date(dob);
+    var minDate  = new Date();
+    minDate.setFullYear(minDate.getFullYear() - 13);
+    var dobOk = dobDate <= minDate;
+    showErr('err-dob', !dobOk); markInput('s2-dob', !dobOk);
+    if (!dobOk) ok = false;
+  } else {
+    showErr('err-dob', false);
   }
 
-  /* Click — delegate to container */
-  document.getElementById('role-selector').addEventListener('click', function(e) {
+  return ok;
+}
+
+function validateStep3() {
+  var terms = document.getElementById('terms').checked;
+  showErr('err-terms', !terms);
+  return terms;
+}
+
+/* ── Main navigation function ── */
+function goStep(target) {
+  if (target > currentStep) {
+    /* Going forward — validate current step first */
+    if (currentStep === 1 && !validateStep1()) return;
+    if (currentStep === 2 && !validateStep2()) return;
+  }
+
+  /* Populate review card when entering step 3 */
+  if (target === 3) {
+    var first = document.getElementById('s1-first').value.trim();
+    var last  = document.getElementById('s1-last').value.trim();
+    var role  = document.getElementById('role-input').value;
+    document.getElementById('rv-name').textContent  = first + ' ' + last;
+    document.getElementById('rv-email').textContent = document.getElementById('s1-email').value.trim();
+    document.getElementById('rv-phone').textContent = document.getElementById('s1-phone').value.trim();
+    document.getElementById('rv-role').textContent  = role === 'provider' ? 'Service Provider' : 'Customer';
+  }
+
+  showStep(target);
+}
+
+/* ── Role selector ── */
+var roleInput = document.getElementById('role-input');
+
+function selectRole(role) {
+  document.querySelectorAll('#role-selector .role-option').forEach(function(opt) {
+    opt.classList.remove('selected');
+    opt.setAttribute('aria-pressed', 'false');
+  });
+  var chosen = document.querySelector('#role-selector [data-role="' + role + '"]');
+  if (chosen) { chosen.classList.add('selected'); chosen.setAttribute('aria-pressed', 'true'); }
+  roleInput.value = role;
+}
+
+document.getElementById('role-selector').addEventListener('click', function(e) {
+  var opt = e.target.closest('.role-option[data-role]');
+  if (opt) selectRole(opt.getAttribute('data-role'));
+});
+document.getElementById('role-selector').addEventListener('keydown', function(e) {
+  if (e.key === ' ' || e.key === 'Enter') {
     var opt = e.target.closest('.role-option[data-role]');
-    if (opt) selectRole(opt.getAttribute('data-role'));
-  });
-
-  /* Keyboard accessibility */
-  document.getElementById('role-selector').addEventListener('keydown', function(e) {
-    if (e.key === ' ' || e.key === 'Enter') {
-      var opt = e.target.closest('.role-option[data-role]');
-      if (opt) { e.preventDefault(); selectRole(opt.getAttribute('data-role')); }
-    }
-  });
-
-  /* Safety net — re-confirm role value right before submit */
-  document.getElementById('register-form').addEventListener('submit', function() {
-    var selected = document.querySelector('#role-selector .role-option.selected');
-    if (selected) roleInput.value = selected.getAttribute('data-role');
-    var btn = document.getElementById('submit-btn');
-    if (btn) { btn.textContent = 'Creating account…'; btn.disabled = true; }
-  });
-
-  /* Password toggle */
-  function togglePw() {
-    var input  = document.getElementById('reg-pw');
-    var eyeOn  = document.getElementById('eye-icon');
-    var eyeOff = document.getElementById('eye-off-icon');
-    var hidden = input.type === 'password';
-    input.type           = hidden ? 'text'    : 'password';
-    eyeOn.style.display  = hidden ? 'none'    : '';
-    eyeOff.style.display = hidden ? ''        : 'none';
+    if (opt) { e.preventDefault(); selectRole(opt.getAttribute('data-role')); }
   }
+});
 
-  /* Password strength */
-  function checkStrength(value) {
-    var segs  = ['seg1','seg2','seg3','seg4'].map(function(id){ return document.getElementById(id); });
-    var label = document.getElementById('strength-label');
-    segs.forEach(function(s){ s.className = 'strength-segment'; });
-    label.textContent = '';
-    if (!value.length) return;
-    var score = 0;
-    if (value.length >= 8)          score++;
-    if (/[A-Z]/.test(value))        score++;
-    if (/[0-9]/.test(value))        score++;
-    if (/[^A-Za-z0-9]/.test(value)) score++;
-    var colors = ['weak','fair','fair','strong'];
-    var labels = ['Weak','Fair','Good','Strong'];
-    for (var i = 0; i < score; i++) segs[i].classList.add(colors[score - 1]);
-    label.textContent = 'Password strength: ' + labels[score - 1];
-  }
+/* ── Final submit ── */
+document.getElementById('register-form').addEventListener('submit', function(e) {
+  if (!validateStep3()) { e.preventDefault(); return; }
+  var selected = document.querySelector('#role-selector .role-option.selected');
+  if (selected) roleInput.value = selected.getAttribute('data-role');
+  var btn = document.getElementById('submit-btn');
+  if (btn) { btn.textContent = 'Creating account…'; btn.disabled = true; }
+});
+
+/* ── Password toggle ── */
+function togglePw() {
+  var input  = document.getElementById('reg-pw');
+  var eyeOn  = document.getElementById('eye-icon');
+  var eyeOff = document.getElementById('eye-off-icon');
+  var hidden = input.type === 'password';
+  input.type           = hidden ? 'text'    : 'password';
+  eyeOn.style.display  = hidden ? 'none'    : '';
+  eyeOff.style.display = hidden ? ''        : 'none';
+}
+
+/* ── Password strength meter ── */
+function checkStrength(value) {
+  var segs  = ['seg1','seg2','seg3','seg4'].map(function(id){ return document.getElementById(id); });
+  var label = document.getElementById('strength-label');
+  segs.forEach(function(s){ s.className = 'strength-segment'; });
+  label.textContent = '';
+  if (!value.length) return;
+  var score = 0;
+  if (value.length >= 8)           score++;
+  if (/[A-Z]/.test(value))         score++;
+  if (/[0-9]/.test(value))         score++;
+  if (/[^A-Za-z0-9]/.test(value))  score++;
+  var colors = ['weak','fair','fair','strong'];
+  var labels = ['Weak','Fair','Good','Strong'];
+  for (var i = 0; i < score; i++) segs[i].classList.add(colors[score - 1]);
+  label.textContent = 'Password strength: ' + labels[score - 1];
+}
+
+/* ── Initialise on load ── */
+showStep(1);
 </script>
 
 </body>
