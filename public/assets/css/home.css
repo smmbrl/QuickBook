@@ -204,13 +204,14 @@ body {
 
 /* Logo image sizing — adjust width/height to taste */
 .navbar-logo-img {
-  width: 52px;   /* was 34px */
-  height: 52px;  /* was 34px */
-  object-fit: contain;
+  width:       45px;
+  height:      45px;
+  object-fit:  contain;
   flex-shrink: 0;
   filter: drop-shadow(0 1px 3px rgba(0,0,0,.18));
   transition: transform .3s ease;
 }
+
 
 .navbar-links { display: flex; list-style: none; gap: 2.2rem; }
 .navbar-links a {
