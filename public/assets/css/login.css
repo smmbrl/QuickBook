@@ -70,7 +70,7 @@
   pointer-events:    none;
 }
 
-/* ── LEFT LOGO ───────────────────────────────────────────── */
+/* ── LEFT LOGO — image + wordmark ───────────────────────── */
 .login-left-logo {
   font-family:     'Playfair Display', serif;
   font-size:       1.55rem;
@@ -82,11 +82,24 @@
   position:        relative;
   z-index:         1;
   animation:       slideRight .5s ease both;
+  display:         flex;     /* NEW — align image + text */
+  align-items:     center;   /* NEW */
+  gap:             .5rem;    /* NEW — space between logo and wordmark */
 }
 .login-left-logo span {
   color:       #C9A84C;
   font-style:  normal;
   font-weight: 700;
+}
+
+/* ── AUTH LOGO IMAGE (shared by login + register) ────────── */
+.auth-logo-img {
+  width:       42px;
+  height:      42px;
+  object-fit:  contain;
+  flex-shrink: 0;
+  /* brightens the image so it pops on the dark left panel */
+  filter:      brightness(1.1) drop-shadow(0 2px 6px rgba(201,168,76,.35));
 }
 
 /* ── LEFT HEADING ────────────────────────────────────────── */
@@ -576,7 +589,9 @@ input[type="password"]::-webkit-strong-password-auto-fill-button { display: none
   .login-left     { width: 100%; padding: 2.5rem 2rem; gap: 1.2rem; }
   .login-right    { padding: 2rem 1.2rem; }
   .login-form-box { padding: 2.2rem 1.8rem; max-width: 100%; }
+  .auth-logo-img  { width: 36px; height: 36px; }
 }
 @media (max-width: 480px) {
   .login-form-box { padding: 2rem 1.4rem; border-radius: var(--radius-lg); }
+  .auth-logo-img  { width: 30px; height: 30px; }
 }
