@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../models/User.php';
 require_once __DIR__ . '/../helpers/NotificationHelper.php';
+require_once __DIR__ . '/../../config/database.php';
 
 class AdminController
 {
@@ -318,5 +319,184 @@ class AdminController
         } catch (Exception $e) {
             // Silently fail — logging should never break the main action
         }
+    }
+
+    /**
+     * Display admin profile page
+     */
+    public function profile(): void
+    {
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $stmt = $this->db->prepare(
+            "SELECT id, first_name, last_name, email, bio, profile_picture FROM tbl_users WHERE id = ?"
+        );
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$user) {
+            header('Location: ' . BASE_URL . 'admin/dashboard');
+            exit;
+        }
+
+        require __DIR__ . '/../views/admin/profile.php';
+    }
+
+    /**
+     * Handle profile updates
+     */
+    public function updateProfile(): void
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            header('Location: ' . BASE_URL . 'admin/profile');
+            exit;
+        }
+
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $success = false;
+        $error = null;
+
+        try {
+            // Parse full name
+            $fullName = trim($_POST['full_name'] ?? '');
+            $names = explode(' ', $fullName, 2);
+            $firstName = trim($names[0] ?? '');
+            $lastName = trim($names[1] ?? '');
+
+            if (!$firstName) {
+                throw new Exception('First name is required');
+            }
+
+            $email = trim($_POST['email'] ?? '');
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new Exception('Valid email is required');
+            }
+
+            // Check if email is already used by another user
+            $stmt = $this->db->prepare(
+                "SELECT COUNT(*) FROM tbl_users WHERE email = ? AND id != ?"
+            );
+            $stmt->execute([$email, $userId]);
+            $existingEmail = (int) $stmt->fetchColumn();
+
+            if ($existingEmail > 0) {
+                throw new Exception('Email is already in use');
+            }
+
+            $bio = trim($_POST['bio'] ?? '');
+            if (strlen($bio) > 500) {
+                throw new Exception('Bio must be 500 characters or less');
+            }
+
+            // Handle password change
+            $passwordUpdate = '';
+            $passwordParams = [];
+            $currentPassword = $_POST['current_password'] ?? '';
+            $newPassword = $_POST['new_password'] ?? '';
+            $confirmPassword = $_POST['confirm_password'] ?? '';
+
+            if ($newPassword || $confirmPassword || $currentPassword) {
+                // If any password field is filled, validate all
+                if (!$currentPassword) {
+                    throw new Exception('Current password is required to set a new password');
+                }
+
+                if ($newPassword !== $confirmPassword) {
+                    throw new Exception('New passwords do not match');
+                }
+
+                if (strlen($newPassword) < 8) {
+                    throw new Exception('Password must be at least 8 characters');
+                }
+
+                // Validate password strength
+                if (!preg_match('/[A-Z]/', $newPassword) || 
+                    !preg_match('/[0-9]/', $newPassword) || 
+                    !preg_match('/[!@#$%^&*]/', $newPassword)) {
+                    throw new Exception('Password must contain uppercase, number, and special character');
+                }
+
+                // Verify current password
+                $stmt = $this->db->prepare(
+                    "SELECT password FROM tbl_users WHERE id = ?"
+                );
+                $stmt->execute([$userId]);
+                $currentUser = $stmt->fetch();
+
+                if (!password_verify($currentPassword, $currentUser['password'])) {
+                    throw new Exception('Current password is incorrect');
+                }
+
+                $hashedPassword = password_hash($newPassword, PASSWORD_BCRYPT);
+                $passwordUpdate = ', password = ?';
+                $passwordParams = [$hashedPassword];
+            }
+
+            // Handle profile picture
+            $profilePictureData = $_POST['profile_picture'] ?? '';
+            $profilePictureUpdate = '';
+            $pictureParams = [];
+
+            if ($profilePictureData && strpos($profilePictureData, 'data:image') === 0) {
+                // Decode base64 image
+                $imageData = base64_decode(preg_replace('#^data:image/\w+;base64,#i', '', $profilePictureData));
+                $fileName = 'admin_' . $userId . '_' . time() . '.png';
+                $uploadPath = __DIR__ . '/../../public/assets/img/profiles/' . $fileName;
+
+                // Create directory if it doesn't exist
+                if (!is_dir(dirname($uploadPath))) {
+                    mkdir(dirname($uploadPath), 0755, true);
+                }
+
+                // Save the image
+                if (file_put_contents($uploadPath, $imageData)) {
+                    $profilePictureUrl = 'assets/img/profiles/' . $fileName;
+                    $profilePictureUpdate = ', profile_picture = ?';
+                    $pictureParams = [$profilePictureUrl];
+                }
+            }
+
+            // Build update query
+            $updateParts = [$firstName, $lastName, $email, $bio];
+            $updateQuery = "UPDATE tbl_users SET first_name = ?, last_name = ?, email = ?, bio = ?";
+
+            if ($passwordUpdate) {
+                $updateQuery .= $passwordUpdate;
+                $updateParts = array_merge($updateParts, $passwordParams);
+            }
+
+            if ($profilePictureUpdate) {
+                $updateQuery .= $profilePictureUpdate;
+                $updateParts = array_merge($updateParts, $pictureParams);
+            }
+
+            $updateQuery .= " WHERE id = ?";
+            $updateParts[] = $userId;
+
+            // Execute update
+            $stmt = $this->db->prepare($updateQuery);
+            $stmt->execute($updateParts);
+
+            // Update session
+            $_SESSION['user_name'] = $firstName . ' ' . $lastName;
+
+            $success = true;
+            $this->logAction('update_profile', 'admin', $userId, 'Admin updated their profile');
+
+            // Redirect with success message
+            header('Location: ' . BASE_URL . 'admin/profile?success=1');
+            exit;
+
+        } catch (Exception $e) {
+            $error = $e->getMessage();
+        }
+
+        // Load user data for display
+        $stmt = $this->db->prepare(
+            "SELECT id, first_name, last_name, email, bio, profile_picture FROM tbl_users WHERE id = ?"
+        );
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        require __DIR__ . '/../views/admin/profile.php';
     }
 }

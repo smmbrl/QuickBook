@@ -1,135 +1,228 @@
 <?php
 // app/views/admin/users.php
-$total     = count($users);
-$customers = count(array_filter($users, fn($u) => $u['role'] === 'customer'));
-$providers = count(array_filter($users, fn($u) => $u['role'] === 'provider'));
-$admins    = count(array_filter($users, fn($u) => $u['role'] === 'admin'));
+$customers  = array_filter($users, fn($u) => $u['role'] === 'customer');
+$total      = count($customers);
+$verified   = count(array_filter($customers, fn($u) => (bool)($u['is_verified'] ?? false)));
+$unverified = $total - $verified;
+
+require_once __DIR__ . '/../../../config/database.php';
+$db = Database::getInstance();
+
+// Booking stats + services booked per customer
+$stBk = $db->query("
+    SELECT b.customer_id,
+           COUNT(b.id)               AS total_bk,
+           SUM(b.status='completed') AS completed,
+           SUM(b.status='pending')   AS pending,
+           SUM(b.status='cancelled') AS cancelled,
+           MAX(b.booking_date)       AS last_booking,
+           COALESCE(SUM(s.price),0)  AS total_spent,
+           GROUP_CONCAT(DISTINCT s.name ORDER BY s.name SEPARATOR ', ') AS services_booked
+    FROM tbl_bookings b
+    JOIN tbl_services s ON b.service_id = s.id
+    GROUP BY b.customer_id
+");
+$bkMap = [];
+foreach ($stBk->fetchAll() as $row) {
+    $bkMap[$row['customer_id']] = $row;
+}
+
+$maxBk = max(1, ...array_map(fn($u) => (int)($bkMap[$u['id']]['total_bk'] ?? 0), $customers) ?: [1]);
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Users — QuickBook Admin</title>
+<title>Customers — QuickBook Admin</title>
+<script>(function(){ var t=localStorage.getItem('qb-admin-theme')||'light'; document.documentElement.setAttribute('data-theme',t); })();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/admin_nav.css">
 <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/admin_users.css">
 </head>
 <body>
 <div class="grain"></div>
-<div class="bg-orb bg-orb-1"></div>
-<div class="bg-orb bg-orb-2"></div>
-
 <?php require_once __DIR__ . '/_nav.php'; adminNav('users'); ?>
 
-<div class="admin-page">
-<div class="content">
+<div class="usr-page">
 
-  <div class="page-greeting anim-1">
-    <div>
-      <div class="eyebrow"><span class="eyebrow-dot"></span>Management</div>
-      <h1>Platform <em>Users</em></h1>
-      <p>All registered accounts across every role</p>
+  <!-- Header -->
+  <div class="usr-header anim-1">
+    <div class="usr-eyebrow"><span class="usr-eyebrow-dot"></span>Management</div>
+    <h1 class="usr-title">Platform <em>Customers</em></h1>
+    <p class="usr-subtitle">All registered customers and their booking activity</p>
+  </div>
+
+  <!-- KPI Grid -->
+  <div class="usr-kpi-grid anim-2">
+    <div class="usr-kpi" style="--kpi-accent:#C9A84C">
+      <div class="usr-kpi-val"><?= $total ?></div>
+      <div class="usr-kpi-label">Total Customers</div>
+    </div>
+    <div class="usr-kpi" style="--kpi-accent:#16A34A">
+      <div class="usr-kpi-val" style="color:#16A34A"><?= $verified ?></div>
+      <div class="usr-kpi-label">Verified</div>
+    </div>
+    <div class="usr-kpi" style="--kpi-accent:#DC2626">
+      <div class="usr-kpi-val" style="color:#DC2626"><?= $unverified ?></div>
+      <div class="usr-kpi-label">Unverified</div>
+    </div>
+    <div class="usr-kpi" style="--kpi-accent:#2563EB">
+      <div class="usr-kpi-val" style="color:#2563EB"><?= $maxBk ?></div>
+      <div class="usr-kpi-label">Most Bookings</div>
     </div>
   </div>
 
-  <!-- KPIs -->
-  <div class="kpi-row anim-2">
-    <div class="kpi-card">
-      <div class="kpi-val"><?= $total ?></div>
-      <div class="kpi-lbl">Total Users</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-val" style="color:#4ADE80"><?= $customers ?></div>
-      <div class="kpi-lbl">Customers</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-val" style="color:var(--gold)"><?= $providers ?></div>
-      <div class="kpi-lbl">Providers</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-val" style="color:#FB7185"><?= $admins ?></div>
-      <div class="kpi-lbl">Admins</div>
-    </div>
-  </div>
+  <!-- Panel -->
+  <div class="usr-panel anim-3">
 
-  <!-- Users panel -->
-  <div class="panel anim-3">
-    <div class="panel-header">
-      <h2>User Directory</h2>
-      <span style="font-family:var(--font-mono);font-size:.6rem;color:var(--faint)"><?= $total ?> accounts</span>
+    <div class="usr-panel-head">
+      <span class="usr-panel-title">Customer Directory</span>
+      <span class="usr-panel-count"><?= $total ?> registered</span>
     </div>
 
-    <div class="filter-bar-wrap">
-      <button class="filter-btn active" data-filter="all">All</button>
-      <button class="filter-btn" data-filter="customer">Customers</button>
-      <button class="filter-btn" data-filter="provider">Providers</button>
-      <button class="filter-btn" data-filter="admin">Admins</button>
-      <input class="search-input" type="search" id="usr-search" placeholder="Search name, email…">
+    <div class="usr-filter-bar">
+      <button class="usr-filter-btn active" data-filter="all">All</button>
+      <button class="usr-filter-btn" data-filter="verified">Verified</button>
+      <button class="usr-filter-btn" data-filter="unverified">Unverified</button>
+      <div class="usr-search-wrap">
+        <input class="usr-search" type="search" id="usr-search" placeholder="Search name, email…">
+      </div>
     </div>
 
-    <div class="table-wrap">
-      <table class="data-table" id="usr-table">
+    <div class="usr-table-wrap">
+      <table class="usr-table" id="usr-table">
         <thead>
           <tr>
-            <th>User</th><th>Email</th><th>Role</th><th>Verified</th><th>Joined</th>
+            <th>Customer</th>
+            <th>Services Booked</th>
+            <th>Bookings</th>
+            <th>Total Spent</th>
+            <th>Last Booking</th>
+            <th>Joined</th>
+            <th>Verified</th>
           </tr>
         </thead>
         <tbody>
-        <?php if (empty($users)): ?>
-          <tr><td colspan="5" class="empty-row">No users registered yet.</td></tr>
+        <?php if (empty($customers)): ?>
+          <tr><td colspan="7">
+            <div class="usr-empty">
+              <div class="usr-empty-icon"><i class="fa-solid fa-users"></i></div>
+              <p>No customers registered yet.</p>
+            </div>
+          </td></tr>
         <?php else: ?>
-          <?php foreach ($users as $u):
-            $initials = strtoupper(substr($u['first_name'],0,1).substr($u['last_name'],0,1));
-            $role     = $u['role'];
-            $avcls    = $role === 'admin' ? 'av-red' : ($role === 'provider' ? 'av-gold' : 'av-green');
-            $verified = (bool)($u['is_verified'] ?? false);
-            $search   = strtolower($u['first_name'].' '.$u['last_name'].' '.$u['email']);
+          <?php foreach ($customers as $u):
+            $init    = strtoupper(substr($u['first_name'],0,1).substr($u['last_name'],0,1));
+            $isVerif = (bool)($u['is_verified'] ?? false);
+            $bk      = $bkMap[$u['id']] ?? [];
+            $totalBk = (int)($bk['total_bk']    ?? 0);
+            $spent   = (float)($bk['total_spent'] ?? 0);
+            $lastBk  = $bk['last_booking']       ?? null;
+            $services= $bk['services_booked']    ?? null;
+            $barPct  = $maxBk > 0 ? round($totalBk / $maxBk * 100) : 0;
+            $search  = strtolower($u['first_name'].' '.$u['last_name'].' '.$u['email']);
           ?>
-            <tr data-role="<?= htmlspecialchars($role) ?>" data-search="<?= htmlspecialchars($search) ?>">
-              <td>
-                <div class="user-cell">
-                  <div class="av <?= $avcls ?>"><?= $initials ?></div>
-                  <span class="user-full"><?= htmlspecialchars($u['first_name'].' '.$u['last_name']) ?></span>
+          <tr data-verified="<?= $isVerif ? '1' : '0' ?>"
+              data-search="<?= htmlspecialchars($search) ?>">
+
+            <td>
+              <div class="usr-td-customer">
+                <div class="usr-av"><?= $init ?></div>
+                <div>
+                  <div class="usr-td-name"><?= htmlspecialchars($u['first_name'].' '.$u['last_name']) ?></div>
+                  <div class="usr-td-email"><?= htmlspecialchars($u['email']) ?></div>
                 </div>
-              </td>
-              <td class="td-dim" style="font-size:.75rem"><?= htmlspecialchars($u['email']) ?></td>
-              <td><span class="role-pill <?= $role ?>"><?= $role ?></span></td>
-              <td>
-                <?php if ($verified): ?>
-                  <span class="verified-label yes"><span class="verified-dot"></span>Verified</span>
-                <?php else: ?>
-                  <span class="verified-label no"><span class="verified-dot"></span>Unverified</span>
-                <?php endif ?>
-              </td>
-              <td class="td-mono td-dim"><?= date('M j, Y', strtotime($u['created_at'])) ?></td>
-            </tr>
+              </div>
+            </td>
+
+            <td>
+              <?php if ($services): ?>
+                <span class="usr-td-services" title="<?= htmlspecialchars($services) ?>"><?= htmlspecialchars($services) ?></span>
+              <?php else: ?>
+                <span class="usr-td-none">No bookings yet</span>
+              <?php endif ?>
+            </td>
+
+            <td style="font-family:var(--font-mono);font-weight:600;color:var(--text-primary)"><?= $totalBk ?></td>
+
+            <td class="usr-td-spent">₱<?= number_format($spent, 0) ?></td>
+
+            <td class="usr-td-date"><?= $lastBk ? date('M j, Y', strtotime($lastBk)) : '—' ?></td>
+
+            <td class="usr-td-date"><?= date('M j, Y', strtotime($u['created_at'])) ?></td>
+
+            <td>
+              <span class="usr-pill <?= $isVerif ? 'yes' : 'no' ?>">
+                <?= $isVerif ? 'Verified' : 'Unverified' ?>
+              </span>
+            </td>
+
+          </tr>
           <?php endforeach ?>
         <?php endif ?>
         </tbody>
       </table>
     </div>
+
   </div>
 
-</div>
-</div>
+</div><!-- /usr-page -->
 
 <script>
-document.querySelectorAll('.filter-btn').forEach(btn => {
+document.querySelectorAll('.usr-filter-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active'); applyFilters();
+    document.querySelectorAll('.usr-filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    applyFilters();
   });
 });
+
 document.getElementById('usr-search').addEventListener('input', applyFilters);
+
 function applyFilters() {
-  const f = document.querySelector('.filter-btn.active').dataset.filter;
-  const q = document.getElementById('usr-search').value.toLowerCase();
-  document.querySelectorAll('#usr-table tbody tr[data-role]').forEach(row => {
-    row.style.display = ((f === 'all' || row.dataset.role === f) && (!q || row.dataset.search.includes(q))) ? '' : 'none';
+  const f     = document.querySelector('.usr-filter-btn.active').dataset.filter;
+  const q     = document.getElementById('usr-search').value.toLowerCase().trim();
+  const tbody = document.querySelector('#usr-table tbody');
+
+  tbody.querySelectorAll('.usr-empty-row').forEach(r => r.remove());
+
+  let visible = 0;
+  tbody.querySelectorAll('tr[data-verified]').forEach(row => {
+    const matchFilter =
+      f === 'all' ||
+      (f === 'verified'   && row.dataset.verified === '1') ||
+      (f === 'unverified' && row.dataset.verified === '0');
+    const matchSearch = !q || row.dataset.search.includes(q);
+    const show = matchFilter && matchSearch;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
   });
+
+  if (visible === 0) {
+    const messages = {
+      all:        'No customers found.',
+      verified:   'No verified customers yet.',
+      unverified: 'No unverified customers.',
+    };
+    const icons = {
+      all:        'fa-users',
+      verified:   'fa-circle-check',
+      unverified: 'fa-circle-xmark',
+    };
+    const tr = document.createElement('tr');
+    tr.className = 'usr-empty-row';
+    tr.innerHTML = `<td colspan="7">
+      <div class="usr-empty">
+        <div class="usr-empty-icon"><i class="fa-solid ${icons[f]}"></i></div>
+        <p>${messages[f]}</p>
+      </div>
+    </td>`;
+    tbody.appendChild(tr);
+  }
 }
 </script>
 </body>

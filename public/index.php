@@ -102,6 +102,8 @@ $routes = [
     'GET:admin/users'                  => ['AdminController', 'users'],
     'GET:admin/reports'                => ['AdminController', 'reports'],
     'GET:admin/logs'                   => ['AdminController', 'logs'],
+    'GET:admin/profile'                => ['AdminController', 'profile'],
+    'POST:admin/update-profile'        => ['AdminController', 'updateProfile'],
 
     // 2FA routes
     'GET:auth/2fa/setup'    => ['TwoFactorController', 'setup'],
