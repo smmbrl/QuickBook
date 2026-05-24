@@ -50,10 +50,12 @@ $ptsToNext = $nextLevel - ($loyaltyPoints % $nextLevel);
 $stRecent = $db->prepare("
     SELECT b.*, pp.business_name, pp.profile_photo,
            s.name AS service_name, s.price,
-           s.service_type, s.duration_minutes, s.location_type
+           s.service_type, s.duration_minutes, s.location_type,
+           CONCAT(u.first_name, ' ', u.last_name) AS provider_name
     FROM tbl_bookings b
     JOIN tbl_provider_profiles pp ON b.provider_id = pp.id
     JOIN tbl_services s           ON b.service_id  = s.id
+    JOIN tbl_users u              ON pp.user_id = u.id
     WHERE b.customer_id = ?
     ORDER BY b.created_at DESC LIMIT 5
 ");
@@ -110,22 +112,6 @@ $stAv = $db->prepare("SELECT avatar_url FROM tbl_users WHERE id = ? LIMIT 1");
 $stAv->execute([$userId]);
 $avatarUrl = ($av = $stAv->fetchColumn()) ? ($av) : null;
 
-$imageMap = [
-    'Barber'        => 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=80&h=80&fit=crop&q=70',
-    'Hair Stylist'  => 'https://images.unsplash.com/photo-1562322140-8baeececf3df?w=80&h=80&fit=crop&q=70',
-    'Nail Tech'     => 'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=80&h=80&fit=crop&q=70',
-    'Massage'       => 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=80&h=80&fit=crop&q=70',
-    'Skincare'      => 'https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=80&h=80&fit=crop&q=70',
-    'Fitness'       => 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=80&h=80&fit=crop&q=70',
-    'Home Cleaning' => 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=80&h=80&fit=crop&q=70',
-    'Pet Groomer'   => 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=80&h=80&fit=crop&q=70',
-    'Event Stylist' => 'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=80&h=80&fit=crop&q=70',
-    'Makeup'        => 'https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?w=80&h=80&fit=crop&q=70',
-];
-function pvServiceImage(string $type, array $map): string {
-    return $map[$type] ?? 'https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?w=80&h=80&fit=crop&q=70';
-}
-
 function serviceIcon(string $n): string {
     $n = strtolower($n);
     if (str_contains($n,'massage')||str_contains($n,'spa'))   return '💆';
@@ -166,6 +152,7 @@ $spentDisplay = fmtMoney($totalSpent);
 <nav class="pv-nav" role="navigation" aria-label="Customer navigation">
   <div class="pv-nav-inner">
     <a href="<?= BASE_URL ?>home" class="pv-logo">
+      <img src="<?= BASE_URL ?>assets/img/QB_LOGO.png" alt="QuickBook Logo" style="width:42px;height:42px;object-fit:contain;display:block;flex-shrink:0;">
       Quick<span>Book</span>
       <span class="pv-logo-badge">Customer</span>
     </a>
@@ -206,22 +193,52 @@ $spentDisplay = fmtMoney($totalSpent);
         </svg>
       </button>
 
-      <div class="pv-nav-av" aria-hidden="true">
-        <?php if ($avatarUrl): ?>
-          <img src="<?= $avatarUrl ?>" alt="<?= $name ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
-        <?php else: ?>
-          <?= $initials ?>
-        <?php endif; ?>
+      <!-- Profile dropdown trigger -->
+      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false">
+        <div class="pv-nav-av">
+          <?php if ($avatarUrl): ?>
+            <img src="<?= $avatarUrl ?>" alt="<?= $name ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
+          <?php else: ?>
+            <?= $initials ?>
+          <?php endif; ?>
+        </div>
+        <div class="pv-nav-user">
+          <div class="pv-nav-user-name"><?= $name ?></div>
+          <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
+        </div>
+        <svg class="pv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
       </div>
-      <div class="pv-nav-user">
-        <div class="pv-nav-user-name"><?= $name ?></div>
-        <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
+
+      <!-- Profile dropdown panel -->
+      <div class="pv-profile-dropdown" id="profileDropdown" role="menu">
+        <div class="pv-pd-header">
+          <div class="pv-pd-avatar">
+            <?php if ($avatarUrl): ?>
+              <img src="<?= $avatarUrl ?>" alt="<?= $name ?>">
+            <?php else: ?>
+              <?= $initials ?>
+            <?php endif; ?>
+          </div>
+          <div class="pv-pd-info">
+            <div class="pv-pd-name"><?= $name ?></div>
+            <div class="pv-pd-email"><?= $email ?></div>
+            <span class="pv-pd-tier"><?= $loyaltyTier ?> Member</span>
+          </div>
+        </div>
+        <div class="pv-pd-divider"></div>
+        <a href="<?= BASE_URL ?>profile" class="pv-pd-item" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-user"></i></span>
+          <span>My Profile</span>
+          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </a>
+        <div class="pv-pd-divider"></div>
+        <a href="<?= BASE_URL ?>auth/logout" class="pv-pd-item pv-pd-item--danger" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-arrow-right-from-bracket"></i></span>
+          <span>Sign Out</span>
+        </a>
       </div>
-      <!-- Sign out icon button -->
-      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout-icon" title="Sign out" aria-label="Sign out">
-        <i class="fa-solid fa-arrow-right-from-bracket"></i>
-      </a>
-    </div>
   </div>
 </nav>
 
@@ -328,7 +345,7 @@ $spentDisplay = fmtMoney($totalSpent);
             <thead>
               <tr>
                 <th>Service</th>
-                <th>Type</th>
+                <th>Provider</th>
                 <th>Price</th>
                 <th>Duration</th>
                 <th>Location</th>
@@ -340,16 +357,14 @@ $spentDisplay = fmtMoney($totalSpent);
               <?php foreach ($recentBookings as $b):
                 $dm     = (int)($b['duration_minutes'] ?? 0);
                 $dLabel = $dm ? (($dm >= 60 && $dm % 60 === 0) ? ($dm/60).' hr' : $dm.' min') : '—';
-                $imgSrc = pvServiceImage($b['service_type'] ?? '', $imageMap);
               ?>
               <tr>
                 <td>
                   <div class="pv-rb-name">
-                    <div class="pv-rb-icon"><img src="<?= $imgSrc ?>" alt=""></div>
                     <?= htmlspecialchars($b['service_name']) ?>
                   </div>
                 </td>
-                <td><?= htmlspecialchars($b['service_type'] ?? '—') ?></td>
+                <td><?= htmlspecialchars($b['provider_name'] ?? '—') ?></td>
                 <td class="pv-rb-price">₱<?= number_format((float)$b['price'], 2) ?></td>
                 <td><?= $dLabel ?></td>
                 <td><?= htmlspecialchars($b['location_type'] ?? '—') ?></td>
@@ -397,33 +412,7 @@ $spentDisplay = fmtMoney($totalSpent);
         </div>
       </div>
 
-      <!-- Today's Snapshot -->
-      <div class="pv-card">
-        <div class="pv-card-head"><h2>Today's Snapshot</h2></div>
-        <div class="pv-snap">
-          <div class="pv-snap-item">
-            <div class="pv-snap-ico" aria-hidden="true">📥</div>
-            <div>
-              <div class="pv-snap-val"><?= $upcomingCount ?></div>
-              <div class="pv-snap-label">Upcoming booking<?= $upcomingCount !== 1 ? 's' : '' ?></div>
-            </div>
-          </div>
-          <div class="pv-snap-item">
-            <div class="pv-snap-ico" aria-hidden="true">✅</div>
-            <div>
-              <div class="pv-snap-val"><?= $completedCount ?></div>
-              <div class="pv-snap-label">Completed</div>
-            </div>
-          </div>
-          <div class="pv-snap-item">
-            <div class="pv-snap-ico" aria-hidden="true">⭐</div>
-            <div>
-              <div class="pv-snap-val"><?= number_format($loyaltyPoints) ?></div>
-              <div class="pv-snap-label">Loyalty points</div>
-            </div>
-          </div>
-        </div>
-      </div>
+
 
       <!-- Upcoming Bookings -->
       <div class="pv-card">
@@ -809,6 +798,44 @@ $spentDisplay = fmtMoney($totalSpent);
     });
   });
 })();
+</script>
+<script>
+/* ── Profile Dropdown ── */
+(function () {
+  const trigger  = document.getElementById('profileTrigger');
+  const dropdown = document.getElementById('profileDropdown');
+  if (!trigger || !dropdown) return;
+
+  function open() {
+    trigger.classList.add('is-open');
+    dropdown.classList.add('is-open');
+    trigger.setAttribute('aria-expanded', 'true');
+  }
+  function close() {
+    trigger.classList.remove('is-open');
+    dropdown.classList.remove('is-open');
+    trigger.setAttribute('aria-expanded', 'false');
+  }
+  function toggle() {
+    dropdown.classList.contains('is-open') ? close() : open();
+  }
+
+  trigger.addEventListener('click', function (e) {
+    e.stopPropagation();
+    toggle();
+  });
+  trigger.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+    if (e.key === 'Escape') close();
+  });
+  document.addEventListener('click', function (e) {
+    if (!dropdown.contains(e.target) && !trigger.contains(e.target)) close();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') close();
+  });
+})();
+
 </script>
 </body>
 </html>

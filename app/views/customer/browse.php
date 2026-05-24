@@ -43,72 +43,79 @@ $locationFilter = trim($_GET['service_type']   ?? '');
 $sortBy         = $_GET['sort']                ?? 'rating';
 
 
-$where  = ["s.is_active = 1", "pp.is_approved = 1", "u.is_active = 1"];
+// ── Build WHERE for providers ──────────────────────────────────────────────────
+$where  = ["pp.is_approved = 1", "u.is_active = 1"];
 $params = [];
 
 if ($selectedCat) {
-    $where[]  = "s.category_id = ?";
+    $where[]  = "pp.category_id = ?";
     $params[] = $selectedCat;
 }
 if ($search !== '') {
-    $where[]  = "(s.name LIKE ? OR pp.business_name LIKE ? OR c.name LIKE ? OR s.description LIKE ?)";
+    $where[]  = "(pp.business_name LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ? OR c.name LIKE ?)";
     $params[] = "%$search%";
     $params[] = "%$search%";
     $params[] = "%$search%";
     $params[] = "%$search%";
 }
 if ($locationFilter !== '') {
-    $locationMap = [
-        'on-site'  => 'On-site',
-        'remote'   => 'Remote',
-        'in-shop'  => 'In-shop',
-        'flexible' => 'Flexible',
-    ];
-    $where[]  = "s.location_type = ?";
-    $params[] = $locationMap[$locationFilter] ?? ucfirst($locationFilter);
+    if ($locationFilter === 'on-site') {
+        $where[]  = "pp.offers_home_service = 1";
+    } elseif ($locationFilter === 'in-shop') {
+        $where[]  = "FIND_IN_SET('In-shop', pp.location_types_offered)";
+    } elseif ($locationFilter === 'flexible') {
+        $where[]  = "FIND_IN_SET('Flexible', pp.location_types_offered)";
+    } elseif ($locationFilter === 'remote') {
+        $where[]  = "FIND_IN_SET('Remote', pp.location_types_offered)";
+    }
 }
 
 $orderMap = [
     'rating'   => 'pp.avg_rating DESC',
     'reviews'  => 'pp.total_reviews DESC',
-    'price_lo' => 's.price ASC',
-    'price_hi' => 's.price DESC',
-    'name'     => 's.name ASC',
+    'price_lo' => 'min_price ASC',
+    'price_hi' => 'min_price DESC',
+    'name'     => 'pp.business_name ASC',
 ];
 $order = $orderMap[$sortBy] ?? $orderMap['rating'];
 
 $sql = "
-    SELECT s.*,
-           s.location_type       AS service_type,
+    SELECT pp.*,
            pp.id                 AS profile_id,
            pp.business_name,
-           COALESCE(s.avg_rating, 0)     AS avg_rating,
-           COALESCE(s.total_reviews, 0)  AS total_reviews,
+           COALESCE(pp.avg_rating, 0)     AS avg_rating,
+           COALESCE(pp.total_reviews, 0)  AS total_reviews,
            pp.city,
            pp.barangay,
+           pp.offers_home_service,
+           pp.location_types_offered,
+           pp.profile_photo,
            c.name                AS category_name,
            c.slug                AS category_slug,
-           u.first_name, u.last_name
-    FROM tbl_services s
-    JOIN tbl_provider_profiles pp ON s.provider_id = pp.id
+           u.first_name, u.last_name, u.avatar_url,
+           (SELECT MIN(s.price) FROM tbl_services s
+            WHERE s.provider_id = pp.id AND s.is_active = 1) AS min_price,
+           (SELECT COUNT(*) FROM tbl_services s
+            WHERE s.provider_id = pp.id AND s.is_active = 1) AS service_count
+    FROM tbl_provider_profiles pp
     JOIN tbl_users u              ON pp.user_id = u.id
-    LEFT JOIN tbl_categories c    ON s.category_id = c.id
+    LEFT JOIN tbl_categories c    ON pp.category_id = c.id
     WHERE " . implode(' AND ', $where) . "
     ORDER BY $order
 ";
 
 $stmt = $db->prepare($sql);
 $stmt->execute($params);
-$services = $stmt->fetchAll();
+$providers = $stmt->fetchAll();
 
 
-$totalServices   = count($services);
-$onSiteServices  = count(array_filter($services, fn($s) => strtolower($s['service_type']) === 'on-site'));
-$ratedServices   = array_filter($services, fn($s) => (float)$s['avg_rating'] > 0);
-$avgRating       = count($ratedServices) > 0
-    ? round(array_sum(array_column(array_values($ratedServices), 'avg_rating')) / count($ratedServices), 1)
+$totalProviders   = count($providers);
+$homeServiceCount = count(array_filter($providers, fn($p) => (int)$p['offers_home_service'] === 1));
+$ratedProviders   = array_filter($providers, fn($p) => (float)$p['avg_rating'] > 0);
+$avgRating        = count($ratedProviders) > 0
+    ? round(array_sum(array_column(array_values($ratedProviders), 'avg_rating')) / count($ratedProviders), 1)
     : 0;
-$totalCategories = count($cats);
+$totalCategories  = count($cats);
 
 
 $catCount = count($cats) + 1;
@@ -208,11 +215,51 @@ $serviceTypeLabels = [
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QuickBook — Browse Services</title>
+  <title>QuickBook — Browse Providers</title>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_browse.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <style>.pv-cat-scroll { --cat-count: <?= $catCount ?>; }</style>
+  <style>
+    .pv-cat-scroll { --cat-count: <?= $catCount ?>; }
+
+    /* ── Provider card gallery strip ── */
+    .pv-svc-gallery {
+      display: flex; gap: 4px; padding: 0 1.3rem .75rem;
+    }
+    .pv-svc-gallery-img {
+      width: 56px; height: 56px; border-radius: 8px;
+      object-fit: cover; flex-shrink: 0;
+      border: 1px solid var(--gold-border);
+    }
+    .pv-svc-gallery-more {
+      width: 56px; height: 56px; border-radius: 8px;
+      background: var(--surface-md); border: 1px solid var(--gold-border);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-mono); font-size: .65rem;
+      color: var(--gold-dim); flex-shrink: 0;
+    }
+    /* ── Provider name pill ── */
+    .pv-svc-fullname {
+      font-size: .72rem; color: var(--text-dim); margin-top: .15rem;
+    }
+    /* ── Location chip ── */
+    .pv-svc-location {
+      font-family: var(--font-mono); font-size: .62rem;
+      color: var(--text-dim); display: flex; align-items: center; gap: .3rem;
+    }
+    /* ── Service count chip ── */
+    .pv-svc-count {
+      font-family: var(--font-mono); font-size: .62rem;
+      color: var(--text-muted); background: var(--surface-md);
+      padding: .18rem .55rem; border-radius: 99px;
+      border: 1px solid var(--border);
+    }
+    /* ── Provider avatar override ── */
+    .pv-svc-av img {
+      width: 44px; height: 44px; object-fit: cover;
+      border-radius: var(--r-md);
+    }
+  </style>
   <script>
     (function(){ var t=localStorage.getItem('qb-theme')||'light'; if(t==='dark') document.documentElement.setAttribute('data-theme','dark'); })();
   </script>
@@ -226,54 +273,94 @@ $serviceTypeLabels = [
 
 <nav class="pv-nav" role="navigation" aria-label="Customer navigation">
   <div class="pv-nav-inner">
+
     <a href="<?= BASE_URL ?>home" class="pv-logo">
+      <img src="<?= BASE_URL ?>assets/img/QB_LOGO.png" alt="QuickBook Logo" style="width:42px;height:42px;object-fit:contain;display:block;flex-shrink:0;">
       Quick<span>Book</span>
       <span class="pv-logo-badge">Customer</span>
     </a>
+
     <div class="pv-nav-links">
-      <a href="<?= BASE_URL ?>dashboard"  class="pv-nav-link">Dashboard</a>
-      <a href="<?= BASE_URL ?>bookings"   class="pv-nav-link">
-        Bookings
-        <?php if ($upcomingCount): ?><sup class="pv-sup"><?= $upcomingCount ?></sup><?php endif; ?>
+      <a href="<?= BASE_URL ?>dashboard" class="pv-nav-link">Dashboard</a>
+      <a href="<?= BASE_URL ?>bookings" class="pv-nav-link">
+        Bookings<?php if ($upcomingCount): ?><sup class="pv-sup"><?= $upcomingCount ?></sup><?php endif; ?>
       </a>
-      <a href="<?= BASE_URL ?>browse"     class="pv-nav-link is-active">Browse Services</a>
-      <a href="<?= BASE_URL ?>loyalty"    class="pv-nav-link">Loyalty</a>
-      <a href="<?= BASE_URL ?>profile"    class="pv-nav-link">Profile</a>
+      <a href="<?= BASE_URL ?>browse" class="pv-nav-link is-active">Browse Services</a>
+      <a href="<?= BASE_URL ?>loyalty" class="pv-nav-link">Loyalty</a>
+      <a href="<?= BASE_URL ?>profile" class="pv-nav-link">Profile</a>
     </div>
+
     <div class="pv-nav-end">
+
       <?php $notifUserId = (int)$userId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
 
-      <!-- THEME TOGGLE -->
       <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode" title="Toggle theme">
-        <svg class="icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
         </svg>
-        <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg class="icon-sun" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="5"/>
-          <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          <line x1="12" y1="1"  x2="12" y2="3"/>
+          <line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22"  y1="4.22"  x2="5.64"  y2="5.64"/>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1"  y1="12" x2="3"  y2="12"/>
+          <line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22"  y1="19.78" x2="5.64"  y2="18.36"/>
+          <line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"/>
         </svg>
       </button>
 
-      <div class="pv-nav-av" aria-hidden="true">
-        <?php if ($avatarUrl): ?>
-          <img src="<?= $avatarUrl ?>" alt="<?= $userName ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
-        <?php else: ?>
-          <?= $initials ?>
-        <?php endif; ?>
+      <!-- Profile dropdown trigger -->
+      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false">
+        <div class="pv-nav-av">
+          <?php if ($avatarUrl): ?>
+            <img src="<?= $avatarUrl ?>" alt="<?= $name ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
+          <?php else: ?>
+            <?= $initials ?>
+          <?php endif; ?>
+        </div>
+        <div class="pv-nav-user">
+          <div class="pv-nav-user-name"><?= $name ?></div>
+          <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
+        </div>
+        <svg class="pv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
       </div>
-      <div class="pv-nav-user">
-        <div class="pv-nav-user-name"><?= $userName ?></div>
-        <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
+
+      <!-- Profile dropdown panel -->
+      <div class="pv-profile-dropdown" id="profileDropdown" role="menu">
+        <div class="pv-pd-header">
+          <div class="pv-pd-avatar">
+            <?php if ($avatarUrl): ?>
+              <img src="<?= $avatarUrl ?>" alt="<?= $name ?>">
+            <?php else: ?>
+              <?= $initials ?>
+            <?php endif; ?>
+          </div>
+          <div class="pv-pd-info">
+            <div class="pv-pd-name"><?= $name ?></div>
+            <div class="pv-pd-email"><?= $email ?></div>
+            <span class="pv-pd-tier"><?= $loyaltyTier ?> Member</span>
+          </div>
+        </div>
+        <div class="pv-pd-divider"></div>
+        <a href="<?= BASE_URL ?>profile" class="pv-pd-item" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-user"></i></span>
+          <span>My Profile</span>
+          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </a>
+        <div class="pv-pd-divider"></div>
+        <a href="<?= BASE_URL ?>auth/logout" class="pv-pd-item pv-pd-item--danger" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-arrow-right-from-bracket"></i></span>
+          <span>Sign Out</span>
+        </a>
       </div>
-      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout-icon" title="Sign out" aria-label="Sign out">
-        <i class="fa-solid fa-arrow-right-from-bracket"></i>
-      </a>
-    </div>
   </div>
 </nav>
 
@@ -284,10 +371,10 @@ $serviceTypeLabels = [
     <div>
       <p class="pv-hero-eyebrow">
         <span class="pv-dot-pulse" aria-hidden="true"></span>
-        Browse Services
+        Browse Providers
       </p>
-      <h1 class="pv-hero-name">Find the perfect <em>service</em> for you</h1>
-      <p class="pv-hero-sub">Compare services, prices, and providers — then book in seconds.</p>
+      <h1 class="pv-hero-name">Find the perfect <em>provider</em> for you</h1>
+      <p class="pv-hero-sub">Browse local shops by category, view their work, then book in seconds.</p>
     </div>
 
     <form method="GET" action="<?= BASE_URL ?>browse" class="pv-hero-search" role="search">
@@ -301,9 +388,9 @@ $serviceTypeLabels = [
       <div class="pv-search-wrap">
         <span class="pv-search-icon" aria-hidden="true">🔍</span>
         <input type="text" name="search"
-               placeholder="Search services or providers…"
+               placeholder="Search providers or categories…"
                value="<?= htmlspecialchars($search) ?>"
-               aria-label="Search services or providers"
+               aria-label="Search providers or categories"
                class="pv-search-input">
         <?php if ($search): ?>
           <a href="<?= BASE_URL ?>browse<?= $selectedCat ? '?category='.$selectedCat : '' ?>"
@@ -319,8 +406,8 @@ $serviceTypeLabels = [
     <div class="pv-hero-stats-inner">
       <div class="pv-hs-item hs-gold">
         <div class="pv-hs-text">
-          <span class="pv-hs-val"><?= $totalServices ?></span>
-          <span class="pv-hs-label">Services Available</span>
+          <span class="pv-hs-val"><?= $totalProviders ?></span>
+          <span class="pv-hs-label">Providers Available</span>
         </div>
       </div>
       <div class="pv-hs-item hs-white">
@@ -331,8 +418,8 @@ $serviceTypeLabels = [
       </div>
       <div class="pv-hs-item hs-green">
         <div class="pv-hs-text">
-          <span class="pv-hs-val"><?= $onSiteServices ?></span>
-          <span class="pv-hs-label">Home Service Available</span>
+          <span class="pv-hs-val"><?= $homeServiceCount ?></span>
+          <span class="pv-hs-label">Offer Home Service</span>
         </div>
       </div>
       <div class="pv-hs-item hs-yellow">
@@ -351,18 +438,15 @@ $serviceTypeLabels = [
 
   <section class="pv-cat-section" role="region" aria-label="Filter by category">
 
-
     <div class="pv-cat-header">
-      <span class="pv-cat-title">Services</span>
+      <span class="pv-cat-title">Categories</span>
     </div>
-
 
     <div class="pv-cat-scroll" role="list">
 
-
       <a href="<?= BASE_URL ?>browse<?= $search ? '?search='.urlencode($search) : '' ?>"
          class="pv-cat-item <?= !$selectedCat ? 'active' : '' ?>"
-         role="listitem" aria-label="All services">
+         role="listitem" aria-label="All categories">
         <div class="pv-cat-circle">
           <svg viewBox="0 0 30 30" fill="none" aria-hidden="true"><?= $allIcon ?></svg>
         </div>
@@ -393,8 +477,8 @@ $serviceTypeLabels = [
 
   <div class="pv-toolbar">
     <div class="pv-result-count">
-      <span class="pv-result-num"><?= count($services) ?></span>
-      service<?= count($services) !== 1 ? 's' : '' ?> found
+      <span class="pv-result-num"><?= count($providers) ?></span>
+      provider<?= count($providers) !== 1 ? 's' : '' ?> found
       <?php if ($search): ?>
         for "<strong><?= htmlspecialchars($search) ?></strong>"
       <?php endif; ?>
@@ -408,7 +492,7 @@ $serviceTypeLabels = [
 
     <div class="pv-toolbar-right">
 
-
+      <!-- Service Type Filter -->
       <div class="pv-stype-wrap" id="stypeWrap">
         <button class="pv-stype-btn <?= $locationFilter ? 'is-on' : '' ?>"
                 id="stypeBtn"
@@ -422,11 +506,11 @@ $serviceTypeLabels = [
         <div class="pv-stype-menu" id="stypeMenu" role="listbox">
           <?php
             $stypeOptions = [
-              ''         => ['label' => 'All types',  'desc' => 'No filter applied',         'icon' => '◈'],
-              'on-site'  => ['label' => 'Home Service', 'desc' => 'Provider comes to you',      'icon' => ''],
-              'remote'   => ['label' => 'Remote',     'desc' => 'Online / virtual session',   'icon' => ''],
-              'in-shop'  => ['label' => 'In-shop',    'desc' => "Visit provider's location",  'icon' => ''],
-              'flexible' => ['label' => 'Flexible',   'desc' => 'Multiple options available', 'icon' => ''],
+              ''         => ['label' => 'All types',     'desc' => 'No filter applied',         'icon' => '◈'],
+              'on-site'  => ['label' => 'Home Service',  'desc' => 'Provider comes to you',      'icon' => ''],
+              'remote'   => ['label' => 'Remote',        'desc' => 'Online / virtual session',   'icon' => ''],
+              'in-shop'  => ['label' => 'In-shop',       'desc' => "Visit provider's location",  'icon' => ''],
+              'flexible' => ['label' => 'Flexible',      'desc' => 'Multiple options available', 'icon' => ''],
             ];
             foreach ($stypeOptions as $val => $opt):
               $isChosen = $locationFilter === $val;
@@ -461,7 +545,7 @@ $serviceTypeLabels = [
         <?php if ($locationFilter): ?><input type="hidden" name="service_type" value="<?= htmlspecialchars($locationFilter) ?>"><?php endif; ?>
         <div class="pv-sort-wrap">
           <svg class="pv-sort-ico" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M1 3h12M3 7h8M5 11h4"/></svg>
-          <select name="sort" class="pv-sort-select" onchange="this.form.submit()" aria-label="Sort services">
+          <select name="sort" class="pv-sort-select" onchange="this.form.submit()" aria-label="Sort providers">
             <option value="rating"   <?= $sortBy === 'rating'   ? 'selected' : '' ?>>Top Rated</option>
             <option value="reviews"  <?= $sortBy === 'reviews'  ? 'selected' : '' ?>>Most Reviews</option>
             <option value="price_lo" <?= $sortBy === 'price_lo' ? 'selected' : '' ?>>Price: Low to High</option>
@@ -479,67 +563,115 @@ $serviceTypeLabels = [
   </div>
 
 
-  <?php if (empty($services)): ?>
+  <?php if (empty($providers)): ?>
   <div class="pv-empty-state">
     <div class="pv-empty-icon" aria-hidden="true">🔍</div>
-    <p>No services found. Try adjusting your filters or search term.</p>
+    <p>No providers found. Try adjusting your filters or search term.</p>
     <a href="<?= BASE_URL ?>browse" class="pv-empty-cta">Clear All Filters →</a>
   </div>
 
   <?php else: ?>
   <div class="pv-service-grid" role="list">
-    <?php foreach ($services as $s):
-      $slug      = $s['category_slug'] ?? '';
-      $rating    = (float)$s['avg_rating'];
-      $reviews   = (int)$s['total_reviews'];
-      $duration  = !empty($s['duration_minutes']) ? $s['duration_minutes'] . ' min' : null;
-      $stype     = $s['service_type'] ?? '';
-      $stypeLower = strtolower(str_replace(' ', '-', $stype));
-      $stypeBadgeMap = [
-        'on-site'  => ['label' => 'Home Service',  'class' => 'badge-onsite'],
-        'remote'   => ['label' => 'Remote',   'class' => 'badge-remote'],
-        'in-shop'  => ['label' => 'In-shop',  'class' => 'badge-inshop'],
-        'flexible' => ['label' => 'Flexible', 'class' => 'badge-flexible'],
-      ];
+    <?php
+    // Pre-fetch gallery thumbnails for all providers (max 3 per provider)
+    $providerIds = array_column($providers, 'profile_id');
+    $galleryMap  = [];
+    if (!empty($providerIds)) {
+        $placeholders = implode(',', array_fill(0, count($providerIds), '?'));
+        $gStmt = $db->prepare("
+            SELECT provider_id, image_url
+            FROM tbl_provider_gallery
+            WHERE provider_id IN ($placeholders)
+            ORDER BY sort_order ASC, id ASC
+        ");
+        $gStmt->execute($providerIds);
+        foreach ($gStmt->fetchAll() as $gRow) {
+            $galleryMap[$gRow['provider_id']][] = $gRow['image_url'];
+        }
+    }
+
+    foreach ($providers as $p):
+      $slug      = $p['category_slug'] ?? '';
+      $rating    = (float)$p['avg_rating'];
+      $reviews   = (int)$p['total_reviews'];
+      $minPrice  = $p['min_price'];
+      $svcCount  = (int)$p['service_count'];
+      $locTypes  = $p['location_types_offered'] ?? '';
+      $hasHome   = (int)$p['offers_home_service'] === 1;
+
+      // Location type badges
+      $badges = [];
+      if ($hasHome)                              $badges[] = ['label' => 'Home Service', 'class' => 'badge-onsite'];
+      if (strpos($locTypes, 'In-shop') !== false) $badges[] = ['label' => 'In-shop',    'class' => 'badge-inshop'];
+      if (strpos($locTypes, 'Flexible') !== false) $badges[] = ['label' => 'Flexible',  'class' => 'badge-flexible'];
+      if (strpos($locTypes, 'Remote') !== false)   $badges[] = ['label' => 'Remote',    'class' => 'badge-remote'];
+
+      // Provider photo: prefer profile_photo, fallback avatar_url, fallback category icon
+      $providerPhoto = $p['profile_photo'] ?? $p['avatar_url'] ?? null;
+
+      // Gallery images
+      $galleryImgs = $galleryMap[$p['profile_id']] ?? [];
+      $showImgs    = array_slice($galleryImgs, 0, 3);
+      $extraCount  = count($galleryImgs) - 3;
+
+      $fullName = htmlspecialchars(trim($p['first_name'] . ' ' . $p['last_name']));
     ?>
-    <a href="<?= BASE_URL ?>services/<?= (int)$s['id'] ?>"
+    <a href="<?= BASE_URL ?>providers/<?= (int)$p['profile_id'] ?>"
        class="pv-service-card"
        role="listitem"
-       aria-label="<?= htmlspecialchars($s['name']) ?> by <?= htmlspecialchars($s['business_name']) ?>">
+       aria-label="<?= htmlspecialchars($p['business_name']) ?> — <?= htmlspecialchars($p['category_name'] ?? 'Provider') ?>">
 
       <div class="pv-svc-accent" aria-hidden="true"></div>
 
-
+      <!-- Card Header: avatar + category + badges -->
       <div class="pv-svc-head">
         <div class="pv-svc-av" aria-hidden="true">
-          <?= catSvg($slug, $catIconMap, $allIcon) ?>
-        </div>
-        <div class="pv-svc-head-right">
-          <div class="pv-svc-category"><?= htmlspecialchars($s['category_name'] ?? 'Service') ?></div>
-          <?php if ($stype && isset($stypeBadgeMap[$stypeLower])): ?>
-            <span class="pv-svc-stype-badge <?= $stypeBadgeMap[$stypeLower]['class'] ?>">
-              <?= $stypeBadgeMap[$stypeLower]['label'] ?>
-            </span>
+          <?php if ($providerPhoto): ?>
+            <img src="<?= htmlspecialchars($providerPhoto) ?>" alt="<?= htmlspecialchars($p['business_name']) ?>">
+          <?php else: ?>
+            <?= catSvg($slug, $catIconMap, $allIcon) ?>
           <?php endif; ?>
         </div>
+        <div class="pv-svc-head-right">
+          <div class="pv-svc-category"><?= htmlspecialchars($p['category_name'] ?? 'Service') ?></div>
+          <div style="display:flex;flex-wrap:wrap;gap:.25rem;justify-content:flex-end;">
+            <?php foreach (array_slice($badges, 0, 2) as $badge): ?>
+              <span class="pv-svc-stype-badge <?= $badge['class'] ?>"><?= $badge['label'] ?></span>
+            <?php endforeach; ?>
+          </div>
+        </div>
       </div>
 
+      <!-- Gallery strip (only if photos exist) -->
+      <?php if (!empty($showImgs)): ?>
+      <div class="pv-svc-gallery">
+        <?php foreach ($showImgs as $imgUrl): ?>
+          <img src="<?= htmlspecialchars($imgUrl) ?>" class="pv-svc-gallery-img" alt="Work photo" loading="lazy">
+        <?php endforeach; ?>
+        <?php if ($extraCount > 0): ?>
+          <div class="pv-svc-gallery-more">+<?= $extraCount ?></div>
+        <?php endif; ?>
+      </div>
+      <?php endif; ?>
 
+      <!-- Card Body: shop name, owner name, location, services -->
       <div class="pv-svc-body">
-        <div class="pv-svc-name"><?= htmlspecialchars($s['name']) ?></div>
-        <div class="pv-svc-provider"><?= htmlspecialchars($s['business_name']) ?></div>
-        <?php if (!empty($s['description'])): ?>
-          <div class="pv-svc-desc"><?= htmlspecialchars(mb_strimwidth($s['description'], 0, 80, '…')) ?></div>
+        <div class="pv-svc-name"><?= htmlspecialchars($p['business_name']) ?></div>
+        <div class="pv-svc-fullname"><?= $fullName ?></div>
+        <?php if ($p['barangay'] || $p['city']): ?>
+          <div class="pv-svc-location" style="margin-top:.35rem;">
+            📍 <?= htmlspecialchars(implode(', ', array_filter([$p['barangay'], $p['city']]))) ?>
+          </div>
+        <?php endif; ?>
+        <?php if ($svcCount > 0): ?>
+          <div style="margin-top:.4rem;">
+            <span class="pv-svc-count"><?= $svcCount ?> service<?= $svcCount !== 1 ? 's' : '' ?></span>
+          </div>
         <?php endif; ?>
       </div>
 
-
+      <!-- Rating row -->
       <div class="pv-svc-meta">
-        <?php if ($duration): ?>
-          <span class="pv-svc-dur">⏱ <?= $duration ?></span>
-        <?php else: ?>
-          <span></span>
-        <?php endif; ?>
         <div class="pv-svc-rating">
           <span class="pv-svc-stars" aria-label="Rating <?= number_format($rating,1) ?> out of 5">
             <?= renderStars($rating) ?>
@@ -549,12 +681,17 @@ $serviceTypeLabels = [
         </div>
       </div>
 
-
+      <!-- Footer: starting price + CTA -->
       <div class="pv-svc-footer">
         <div class="pv-svc-price">
-          <span class="pv-svc-price-val">₱<?= number_format((float)$s['price'], 0) ?></span>
+          <?php if ($minPrice !== null): ?>
+            <span style="font-size:.72rem;color:var(--text-muted);margin-right:.2rem;">From</span>
+            <span class="pv-svc-price-val">₱<?= number_format((float)$minPrice, 0) ?></span>
+          <?php else: ?>
+            <span style="font-size:.72rem;color:var(--text-dim);">No services yet</span>
+          <?php endif; ?>
         </div>
-        <span class="pv-svc-cta">Book Now</span>
+        <span class="pv-svc-cta">View Shop</span>
       </div>
 
     </a>
@@ -601,6 +738,44 @@ document.addEventListener('click', () => {
       applyTheme(next);
     });
   }
+})();
+</script>
+
+<script>
+/* ── Profile Dropdown ── */
+(function () {
+  const trigger  = document.getElementById('profileTrigger');
+  const dropdown = document.getElementById('profileDropdown');
+  if (!trigger || !dropdown) return;
+
+  function open() {
+    trigger.classList.add('is-open');
+    dropdown.classList.add('is-open');
+    trigger.setAttribute('aria-expanded', 'true');
+  }
+  function close() {
+    trigger.classList.remove('is-open');
+    dropdown.classList.remove('is-open');
+    trigger.setAttribute('aria-expanded', 'false');
+  }
+  function toggle() {
+    dropdown.classList.contains('is-open') ? close() : open();
+  }
+
+  trigger.addEventListener('click', function (e) {
+    e.stopPropagation();
+    toggle();
+  });
+  trigger.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+    if (e.key === 'Escape') close();
+  });
+  document.addEventListener('click', function (e) {
+    if (!dropdown.contains(e.target) && !trigger.contains(e.target)) close();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') close();
+  });
 })();
 </script>
 </body>
