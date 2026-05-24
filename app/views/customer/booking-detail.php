@@ -144,26 +144,52 @@ $bdAvg    = $bdTotal
         </svg>
       </button>
 
-      <div class="pv-nav-av" aria-hidden="true">
-        <?php
-          $stAv2 = $db->prepare("SELECT avatar_url FROM tbl_users WHERE id = ? LIMIT 1");
-          $stAv2->execute([$userId]);
-          $avatarUrl = ($av2 = $stAv2->fetchColumn()) ? $av2 : null;
-        ?>
-        <?php if ($avatarUrl): ?>
-          <img src="<?= htmlspecialchars($avatarUrl) ?>" alt="<?= $userName ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
-        <?php else: ?>
-          <?= $initials ?>
-        <?php endif; ?>
+     <!-- Profile dropdown trigger -->
+      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false">
+        <div class="pv-nav-av">
+          <?php if ($avatarUrl): ?>
+            <img src="<?= $avatarUrl ?>" alt="<?= $name ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
+          <?php else: ?>
+            <?= $initials ?>
+          <?php endif; ?>
+        </div>
+        <div class="pv-nav-user">
+          <div class="pv-nav-user-name"><?= $name ?></div>
+          <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
+        </div>
+        <svg class="pv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
       </div>
-      <div class="pv-nav-user">
-        <div class="pv-nav-user-name"><?= $userName ?></div>
-        <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
+
+      <!-- Profile dropdown panel -->
+      <div class="pv-profile-dropdown" id="profileDropdown" role="menu">
+        <div class="pv-pd-header">
+          <div class="pv-pd-avatar">
+            <?php if ($avatarUrl): ?>
+              <img src="<?= $avatarUrl ?>" alt="<?= $name ?>">
+            <?php else: ?>
+              <?= $initials ?>
+            <?php endif; ?>
+          </div>
+          <div class="pv-pd-info">
+            <div class="pv-pd-name"><?= $name ?></div>
+            <div class="pv-pd-email"><?= $email ?></div>
+            <span class="pv-pd-tier"><?= $loyaltyTier ?> Member</span>
+          </div>
+        </div>
+        <div class="pv-pd-divider"></div>
+        <a href="<?= BASE_URL ?>profile" class="pv-pd-item" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-user"></i></span>
+          <span>My Profile</span>
+          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </a>
+        <div class="pv-pd-divider"></div>
+        <a href="<?= BASE_URL ?>auth/logout" class="pv-pd-item pv-pd-item--danger" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-arrow-right-from-bracket"></i></span>
+          <span>Sign Out</span>
+        </a>
       </div>
-      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout-icon" title="Sign out" aria-label="Sign out">
-        <i class="fa-solid fa-arrow-right-from-bracket"></i>
-      </a>
-    </div>
   </div>
 </nav>
 
