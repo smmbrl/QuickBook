@@ -17,6 +17,56 @@ function admRolePill(string $r): string {
 
 $hour  = (int)date('G');
 $greet = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good evening');
+
+/* ── Unique hero stats ── */
+require_once __DIR__ . '/../../../config/database.php';
+$db = Database::getInstance();
+
+// Completion rate
+$stComp = $db->query("SELECT ROUND(SUM(status='completed')/COUNT(*)*100,1) FROM tbl_bookings");
+$completionRate = (float)$stComp->fetchColumn();
+
+// New users this month
+$stNew = $db->query("SELECT COUNT(*) FROM tbl_users WHERE MONTH(created_at)=MONTH(NOW()) AND YEAR(created_at)=YEAR(NOW())");
+$newThisMonth = (int)$stNew->fetchColumn();
+
+/* ── Analytics: new users per month (last 6 months) ── */
+require_once __DIR__ . '/../../../config/database.php';
+$db = Database::getInstance();
+
+$stGrowth = $db->query("
+    SELECT DATE_FORMAT(created_at,'%b') AS mo,
+           DATE_FORMAT(created_at,'%Y-%m') AS mo_key,
+           SUM(role='customer')  AS customers,
+           SUM(role='provider')  AS providers,
+           COUNT(*)              AS total
+    FROM tbl_users
+    WHERE created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+    GROUP BY mo_key, mo ORDER BY mo_key ASC
+");
+$growthData    = $stGrowth->fetchAll();
+$growthLabels  = array_column($growthData, 'mo');
+$growthCust    = array_map(fn($r) => (int)$r['customers'], $growthData);
+$growthProv    = array_map(fn($r) => (int)$r['providers'], $growthData);
+$growthTotal   = array_map(fn($r) => (int)$r['total'],     $growthData);
+
+/* ── Bookings per month (last 6 months) ── */
+$stBkMonthly = $db->query("
+    SELECT DATE_FORMAT(created_at,'%b') AS mo,
+           DATE_FORMAT(created_at,'%Y-%m') AS mo_key,
+           COUNT(*) AS cnt
+    FROM tbl_bookings
+    WHERE created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+    GROUP BY mo_key, mo ORDER BY mo_key ASC
+");
+$bkMonthly  = $stBkMonthly->fetchAll();
+$bkLabels   = array_column($bkMonthly, 'mo');
+$bkCounts   = array_map(fn($r) => (int)$r['cnt'], $bkMonthly);
+
+/* ── Role breakdown ── */
+$stRoles = $db->query("SELECT role, COUNT(*) AS cnt FROM tbl_users GROUP BY role");
+$roleData = $stRoles->fetchAll(PDO::FETCH_KEY_PAIR);
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -27,114 +77,6 @@ $greet = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good ev
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-/* ── Dashboard dark-mode overrides ── */
-[data-theme="dark"] body {
-  background: #0D1117;
-  color: #EDE3CC;
-}
-[data-theme="dark"] body::before {
-  background:
-    radial-gradient(ellipse 70% 55% at 0% 0%,   rgba(201,168,76,.09) 0%, transparent 60%),
-    radial-gradient(ellipse 55% 45% at 100% 10%, rgba(201,140,80,.07) 0%, transparent 55%),
-    radial-gradient(ellipse 50% 60% at 95% 90%,  rgba(100,80,180,.07) 0%, transparent 58%),
-    radial-gradient(ellipse 65% 50% at 5% 88%,   rgba(50,120,100,.06) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 50% 50%,  rgba(13,17,23,.80)   0%, transparent 70%);
-}
-[data-theme="dark"] .admin-hero-overlay {
-  background:
-    linear-gradient(180deg, rgba(13,17,23,.88) 0%, rgba(13,17,23,.68) 40%, rgba(13,17,23,.97) 100%),
-    linear-gradient(110deg, rgba(13,17,23,.85) 0%, rgba(13,17,23,.50) 55%, rgba(13,17,23,.20) 100%);
-}
-[data-theme="dark"] .admin-hero-name,
-[data-theme="dark"] .adm-booking-service,
-[data-theme="dark"] .adm-user-name,
-[data-theme="dark"] .adm-snap-val,
-[data-theme="dark"] .admin-hs-val,
-[data-theme="dark"] .admin-kpi-val,
-[data-theme="dark"] .adm-action-title,
-[data-theme="dark"] .admin-card-head h2 { color: #EDE3CC; }
-[data-theme="dark"] .admin-hero-date,
-[data-theme="dark"] .adm-booking-meta,
-[data-theme="dark"] .adm-user-email,
-[data-theme="dark"] .adm-snap-lbl,
-[data-theme="dark"] .admin-hs-label,
-[data-theme="dark"] .admin-kpi-label,
-[data-theme="dark"] .adm-action-sub { color: rgba(237,227,204,.40); }
-[data-theme="dark"] .admin-hero-stats {
-  background: rgba(255,255,255,.04);
-  border-color: rgba(255,255,255,.10);
-  box-shadow: 0 8px 32px rgba(0,0,0,.40);
-}
-[data-theme="dark"] .admin-hs-div { background: rgba(255,255,255,.10); }
-[data-theme="dark"] .admin-card {
-  background: rgba(18,24,38,.80);
-  border-color: rgba(201,168,76,.14);
-  box-shadow: 0 4px 28px rgba(0,0,0,.30);
-}
-[data-theme="dark"] .admin-card:hover { border-color: rgba(201,168,76,.35); }
-[data-theme="dark"] .admin-card-head {
-  background: linear-gradient(135deg, rgba(28,22,10,.92) 0%, rgba(20,16,8,.96) 100%);
-  border-bottom-color: rgba(201,168,76,.22);
-}
-[data-theme="dark"] .adm-booking-row,
-[data-theme="dark"] .adm-user-row,
-[data-theme="dark"] .adm-snap-item { border-bottom-color: rgba(255,255,255,.06); }
-[data-theme="dark"] .adm-booking-row:hover,
-[data-theme="dark"] .adm-user-row:hover,
-[data-theme="dark"] .adm-snap-item:hover { background: rgba(255,255,255,.04); }
-[data-theme="dark"] .adm-booking-av,
-[data-theme="dark"] .adm-snap-ico,
-[data-theme="dark"] .adm-action-ico {
-  background: linear-gradient(135deg, rgba(38,30,14,.90), rgba(50,40,18,.90));
-  border-color: rgba(201,168,76,.25);
-}
-[data-theme="dark"] .adm-action { border-color: rgba(201,168,76,.25); }
-[data-theme="dark"] .adm-action:hover { background: rgba(201,168,76,.07); }
-[data-theme="dark"] .adm-footer { border-top-color: rgba(255,255,255,.06); }
-/* ── Status Pills ── */
-.adm-pill {
-  display: inline-flex; align-items: center; gap: .35rem;
-  font-family: 'DM Mono', monospace;
-  font-size: .62rem; font-weight: 600;
-  letter-spacing: .06em; text-transform: uppercase;
-  padding: .28rem .82rem; border-radius: 99px;
-  border: 1px solid transparent; white-space: nowrap;
-}
-.adm-pill::before {
-  content: ''; width: 5px; height: 5px;
-  border-radius: 99px; background: currentColor; flex-shrink: 0;
-}
-/* pending — yellow */
-.adm-pill--pending     { background: rgba(217,119,6,.10);  color: #D97706; border-color: rgba(217,119,6,.28); }
-/* confirmed — green */
-.adm-pill--confirmed   { background: rgba(22,163,74,.10);  color: #16A34A; border-color: rgba(22,163,74,.28); }
-/* completed — blue */
-.adm-pill--completed   { background: rgba(37,99,235,.10);  color: #2563EB; border-color: rgba(37,99,235,.28); }
-/* cancelled — red */
-.adm-pill--cancelled   { background: rgba(220,38,38,.10);  color: #DC2626; border-color: rgba(220,38,38,.28); }
-/* in_progress — orange */
-.adm-pill--in_progress { background: rgba(234,88,12,.10);  color: #EA580C; border-color: rgba(234,88,12,.28); }
-/* rescheduled — purple */
-.adm-pill--rescheduled { background: rgba(124,58,237,.10); color: #7C3AED; border-color: rgba(124,58,237,.28); }
-/* Snapshot inline row */
-.adm-snap-inline {
-  display: flex;
-  align-items: baseline;
-  gap: .5rem;
-  white-space: nowrap;
-}
-.adm-snap-inline .adm-snap-val {
-  font-family: var(--font-display);
-  font-size: 1.1rem; font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1; flex-shrink: 0;
-}
-.adm-snap-inline .adm-snap-val.revenue { color: var(--gold-dim, #A88A38); }
-.adm-snap-inline .adm-snap-lbl {
-  font-size: .78rem; color: var(--text-muted);
-}
-</style>
 <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/admin.css">
 <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/admin_nav.css">
 <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/admin_dashboard.css">
@@ -192,13 +134,13 @@ $greet = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good ev
     </div>
     <div class="admin-hs-div"></div>
     <div class="admin-hs-item">
-      <div class="admin-hs-val"><?= $totalProviders ?></div>
-      <div class="admin-hs-label">Active Providers</div>
+      <div class="admin-hs-val accent"><?= $completionRate ?>%</div>
+      <div class="admin-hs-label">Completion Rate</div>
     </div>
     <div class="admin-hs-div"></div>
     <div class="admin-hs-item">
-      <div class="admin-hs-val"><?= $totalCustomers ?></div>
-      <div class="admin-hs-label">Customers</div>
+      <div class="admin-hs-val blue">+<?= $newThisMonth ?></div>
+      <div class="admin-hs-label">New This Month</div>
     </div>
   </div>
 </div><!-- /admin-hero -->
@@ -211,6 +153,67 @@ $greet = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good ev
 
     <!-- Left: main content -->
     <div class="admin-main">
+
+      <!-- ── Analytics Section ── -->
+      <div class="adm-analytics-section">
+
+        <div class="adm-analytics-row">
+
+          <!-- User Growth Line Chart -->
+          <div class="admin-card adm-chart-card adm-chart-card--wide">
+            <div class="admin-card-head">
+              <div>
+                <div class="adm-chart-card-eyebrow">Last 6 months</div>
+                <h2>User Growth</h2>
+              </div>
+              <div class="adm-chart-legend-inline">
+                <span class="adm-legend-dot" style="background:#C9A84C"></span>Customers
+                <span class="adm-legend-dot" style="background:#2563EB;margin-left:.75rem"></span>Providers
+              </div>
+            </div>
+            <div class="adm-chart-body">
+              <canvas id="usersChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Roles Doughnut -->
+          <div class="admin-card adm-chart-card adm-chart-card--narrow">
+            <div class="admin-card-head">
+              <div>
+                <div class="adm-chart-card-eyebrow">All time</div>
+                <h2>User Roles</h2>
+              </div>
+            </div>
+            <div class="adm-chart-body adm-chart-body--donut">
+              <div class="adm-donut-wrap">
+                <canvas id="rolesChart"></canvas>
+                <div class="adm-donut-center">
+                  <span class="adm-donut-total"><?= $totalUsers ?></span>
+                  <span class="adm-donut-label">Total</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /row 1 -->
+
+        <!-- Row 2: Bookings Bar Chart full width -->
+        <div class="admin-card adm-chart-card">
+          <div class="admin-card-head">
+            <div>
+              <div class="adm-chart-card-eyebrow">Last 6 months</div>
+              <h2>Bookings Overview</h2>
+            </div>
+            <div class="adm-chart-legend-inline">
+              <span class="adm-legend-dot" style="background:#16A34A"></span>Bookings created
+            </div>
+          </div>
+          <div class="adm-chart-body">
+            <canvas id="bookingsChart"></canvas>
+          </div>
+        </div>
+
+      </div><!-- /adm-analytics-section -->
 
       <!-- Recent Bookings -->
       <div class="admin-card">
@@ -253,8 +256,8 @@ $greet = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good ev
             <p>No users yet.</p>
           </div>
         <?php else: ?>
-          
-         <?php foreach ($newUsers as $u):
+
+         <?php foreach (array_slice($newUsers, 0, 3) as $u):
     $init  = strtoupper(substr($u['first_name'],0,1).substr($u['last_name'],0,1));
     $avcls = $u['role'] === 'admin' ? 'adm-av-red' : ($u['role'] === 'provider' ? 'adm-av-gold' : 'adm-av-green');
 
@@ -369,5 +372,133 @@ $greet = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good ev
   <div class="adm-footer">QuickBook Admin · Dashboard · <?= $today ?></div>
 </div><!-- /admin-pv-page -->
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+(function() {
+  const isDark    = () => document.documentElement.getAttribute('data-theme') === 'dark';
+  const gridColor = () => isDark() ? 'rgba(255,255,255,.06)' : 'rgba(201,168,76,.12)';
+  const tickColor = () => isDark() ? 'rgba(237,227,204,.35)' : 'rgba(28,23,16,.38)';
+  const fontMono  = () => ({ family:"'DM Mono',monospace", size:10 });
+  const tooltipStyle = () => ({
+    backgroundColor: isDark() ? '#1a2235' : '#ffffff',
+    titleColor:  isDark() ? '#EDE3CC' : '#1C1710',
+    bodyColor:   isDark() ? 'rgba(237,227,204,.65)' : 'rgba(28,23,16,.60)',
+    borderColor: 'rgba(201,168,76,.35)', borderWidth:1,
+    padding:10, cornerRadius:8,
+  });
+  const baseScales = () => ({
+    x: { grid:{ color:gridColor(), drawBorder:false }, ticks:{ color:tickColor(), font:fontMono() }, border:{ display:false } },
+    y: { grid:{ color:gridColor(), drawBorder:false }, ticks:{ color:tickColor(), font:fontMono(), maxTicksLimit:5 }, border:{ display:false }, beginAtZero:true }
+  });
+
+  // ── 1. User Growth Line Chart ──
+  const uCtx   = document.getElementById('usersChart').getContext('2d');
+  const uLabels = <?= json_encode(array_values($growthLabels)) ?>;
+  const uCust   = <?= json_encode(array_values($growthCust)) ?>;
+  const uProv   = <?= json_encode(array_values($growthProv)) ?>;
+
+  const goldGrad = uCtx.createLinearGradient(0,0,0,180);
+  goldGrad.addColorStop(0,   'rgba(201,168,76,.45)');
+  goldGrad.addColorStop(0.6, 'rgba(201,168,76,.10)');
+  goldGrad.addColorStop(1,   'rgba(201,168,76,.00)');
+
+  const blueGrad = uCtx.createLinearGradient(0,0,0,180);
+  blueGrad.addColorStop(0,   'rgba(37,99,235,.35)');
+  blueGrad.addColorStop(0.6, 'rgba(37,99,235,.08)');
+  blueGrad.addColorStop(1,   'rgba(37,99,235,.00)');
+
+  const usersChart = new Chart(uCtx, {
+    type: 'line',
+    data: {
+      labels: uLabels,
+      datasets: [
+        { label:'Customers', data:uCust, borderColor:'#C9A84C', backgroundColor:goldGrad, borderWidth:2.5, tension:0.42, fill:true, pointRadius:4, pointBackgroundColor:'#C9A84C', pointBorderColor:'#fff', pointBorderWidth:2 },
+        { label:'Providers',  data:uProv, borderColor:'#2563EB', backgroundColor:blueGrad, borderWidth:2.5, tension:0.42, fill:true, pointRadius:4, pointBackgroundColor:'#2563EB', pointBorderColor:'#fff', pointBorderWidth:2 }
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ display:false }, tooltip: { enabled: false } },
+      scales: baseScales()
+    }
+  });
+
+  // ── 2. Bookings Bar Chart ──
+  const bCtx    = document.getElementById('bookingsChart').getContext('2d');
+  const bLabels = <?= json_encode(array_values($bkLabels)) ?>;
+  const bCounts = <?= json_encode(array_values($bkCounts)) ?>;
+
+  const barGrad = bCtx.createLinearGradient(0,0,0,180);
+  barGrad.addColorStop(0, 'rgba(22,163,74,.80)');
+  barGrad.addColorStop(1, 'rgba(22,163,74,.25)');
+
+  const bookingsChart = new Chart(bCtx, {
+    type: 'bar',
+    data: {
+      labels: bLabels,
+      datasets:[{ label:'Bookings', data:bCounts, backgroundColor:barGrad, borderColor:'#16A34A', borderWidth:1.5, borderRadius:8, borderSkipped:false }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false }, tooltip: tooltipStyle() },
+      scales: baseScales()
+    }
+  });
+
+  // ── 3. Roles Doughnut ──
+  Chart.Tooltip.positioners.rightOfDonut = function(elements, eventPos) {
+    const chart = this.chart;
+    const cx = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
+    const cy = chart.chartArea.top  + (chart.chartArea.bottom - chart.chartArea.top)  / 2;
+    const r  = (chart.chartArea.right - chart.chartArea.left) / 2 + 14;
+    const dx = eventPos.x - cx;
+    const dy = eventPos.y - cy;
+    const angle = Math.atan2(dy, dx);
+    return { x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r };
+  };
+
+  const rCtx = document.getElementById('rolesChart').getContext('2d');
+  new Chart(rCtx, {
+    type: 'doughnut',
+    data: {
+      labels:['Customers','Providers','Admins'],
+      datasets:[{
+        data:[
+          <?= (int)($roleData['customer'] ?? 0) ?>,
+          <?= (int)($roleData['provider'] ?? 0) ?>,
+          <?= (int)($roleData['admin']    ?? 0) ?>
+        ],
+        backgroundColor:['rgba(201,168,76,.80)','rgba(37,99,235,.80)','rgba(220,38,38,.80)'],
+        borderColor:    ['#C9A84C','#2563EB','#DC2626'],
+        borderWidth:2, hoverOffset:6,
+      }]
+    },
+    options:{
+      responsive:false, cutout:'70%',
+      plugins:{
+        legend:{ display:false },
+        tooltip: { ...tooltipStyle(), position: 'rightOfDonut' }
+      }
+    }
+  });
+
+  // ── Redraw on theme toggle ──
+  const darkBtn = document.getElementById('admDarkToggle');
+  if (darkBtn) {
+    darkBtn.addEventListener('click', () => {
+      setTimeout(() => {
+        [usersChart, bookingsChart].forEach(ch => {
+          ch.options.scales.x.grid.color  = gridColor();
+          ch.options.scales.x.ticks.color = tickColor();
+          ch.options.scales.y.grid.color  = gridColor();
+          ch.options.scales.y.ticks.color = tickColor();
+          ch.update();
+        });
+      }, 60);
+    });
+  }
+})();
+</script>
 </body>
 </html>

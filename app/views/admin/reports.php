@@ -1,6 +1,6 @@
 <?php
 // app/views/admin/reports.php
-require_once __DIR__ . '/../../../config/database.php'; // FIXED: was a broken messy path
+require_once __DIR__ . '/../../../config/database.php';
 $db = Database::getInstance();
 
 $revenueByMonth = $db->query("
@@ -36,12 +36,20 @@ $maxRevenue  = max(1, array_reduce($revenueByMonth, fn($c,$r) => max($c,(float)$
 $maxBookings = max(1, ...array_column($topServices,'bookings') ?: [1]);
 $completionRate = $totalBookings > 0 ? round(($statusBreakdown['completed']??0)/$totalBookings*100,1) : 0;
 
-$statusColors = [
-  'pending'     => ['color'=>'var(--yellow)','fill'=>'rgba(251,191,36,.5)'],
-  'confirmed'   => ['color'=>'#4ADE80',      'fill'=>'rgba(34,197,94,.5)'],
-  'completed'   => ['color'=>'#7DD3FC',      'fill'=>'rgba(56,189,248,.5)'],
-  'cancelled'   => ['color'=>'#FB7185',      'fill'=>'rgba(244,63,94,.5)'],
-  'in_progress' => ['color'=>'var(--gold)',  'fill'=>'rgba(201,168,76,.5)'],
+$statusConfig = [
+  'pending'     => ['dot'=>'#D97706', 'fill'=>'rgba(217,119,6,.50)',  'color'=>'#D97706'],
+  'confirmed'   => ['dot'=>'#16A34A', 'fill'=>'rgba(22,163,74,.50)',  'color'=>'#16A34A'],
+  'completed'   => ['dot'=>'#2563EB', 'fill'=>'rgba(37,99,235,.50)',  'color'=>'#2563EB'],
+  'cancelled'   => ['dot'=>'#DC2626', 'fill'=>'rgba(220,38,38,.50)',  'color'=>'#DC2626'],
+  'in_progress' => ['dot'=>'#C9A84C', 'fill'=>'rgba(201,168,76,.55)', 'color'=>'#A88A38'],
+];
+
+// SVG icons for stat cards (no emojis)
+$icons = [
+  'revenue'    => '<svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+  'bookings'   => '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+  'users'      => '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  'completion' => '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>',
 ];
 ?>
 <!DOCTYPE html>
@@ -52,9 +60,13 @@ $statusColors = [
 <title>Reports — QuickBook Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/admin_nav.css">
 <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/admin_reports.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 </head>
 <body>
 <div class="grain"></div>
@@ -66,119 +78,138 @@ $statusColors = [
 <div class="admin-page">
 <div class="content">
 
+  <!-- Page header -->
   <div class="page-greeting anim-1">
     <div>
       <div class="eyebrow"><span class="eyebrow-dot"></span>Analytics</div>
       <h1>Platform <em>Reports</em></h1>
       <p>Revenue and performance insights for <?= date('F Y') ?></p>
     </div>
+    <div class="rpt-btn-group">
+      <button class="rpt-export-btn pdf" id="downloadPdfBtn">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="13" x2="12" y2="19"/><line x1="9" y1="16" x2="15" y2="16"/></svg>
+        Download PDF
+      </button>
+      <button class="rpt-export-btn print" onclick="window.print()">
+        <svg viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print Report
+      </button>
+    </div>
   </div>
 
-  <!-- Summary stats -->
+  <!-- KPI stat cards -->
   <div class="stats-grid anim-2">
+
     <div class="stat-card gold">
       <div class="stat-icon-row">
-        <div class="stat-icon">💰</div>
-        <span class="stat-trend up">Revenue</span>
+        <div class="stat-icon"><?= $icons['revenue'] ?></div>
+        <span class="stat-trend up">Completed</span>
       </div>
-      <div class="stat-value" style="font-size:1.6rem">₱<?= number_format($totalRevenue, 0) ?></div>
+      <div class="stat-value">₱<?= number_format($totalRevenue, 0) ?></div>
       <div class="stat-label">Total Revenue</div>
-      <div class="stat-sub">From completed bookings</div>
+      <div class="stat-sub">From completed bookings only</div>
     </div>
+
     <div class="stat-card blue">
       <div class="stat-icon-row">
-        <div class="stat-icon">📋</div>
+        <div class="stat-icon"><?= $icons['bookings'] ?></div>
         <span class="stat-trend neutral">All time</span>
       </div>
-      <div class="stat-value"><?= $totalBookings ?></div>
+      <div class="stat-value"><?= number_format($totalBookings) ?></div>
       <div class="stat-label">Total Bookings</div>
       <div class="stat-sub">Platform-wide orders</div>
     </div>
+
     <div class="stat-card green">
       <div class="stat-icon-row">
-        <div class="stat-icon">👥</div>
+        <div class="stat-icon"><?= $icons['users'] ?></div>
         <span class="stat-trend up">+<?= $newThisMonth ?> this month</span>
       </div>
-      <div class="stat-value"><?= $totalUsers ?></div>
+      <div class="stat-value"><?= number_format($totalUsers) ?></div>
       <div class="stat-label">Total Users</div>
       <div class="stat-sub"><?= $newThisMonth ?> joined this month</div>
     </div>
-    <div class="stat-card green">
+
+    <div class="stat-card purple">
       <div class="stat-icon-row">
-        <div class="stat-icon">✅</div>
-        <span class="stat-trend up">Completion</span>
+        <div class="stat-icon"><?= $icons['completion'] ?></div>
+        <span class="stat-trend up">Rate</span>
       </div>
       <div class="stat-value"><?= $completionRate ?>%</div>
       <div class="stat-label">Completion Rate</div>
-      <div class="stat-sub"><?= $statusBreakdown['completed'] ?? 0 ?> orders completed</div>
+      <div class="stat-sub"><?= number_format($statusBreakdown['completed'] ?? 0) ?> orders completed</div>
     </div>
-  </div>
+
+  </div><!-- /stats-grid -->
 
   <div class="report-grid anim-3">
 
-    <!-- Revenue chart -->
+    <!-- ── Monthly Revenue Chart ── -->
     <div class="panel span2">
       <div class="panel-header">
         <h2>Monthly Revenue — Last 6 Months</h2>
-        <span style="font-family:var(--font-mono);font-size:.6rem;color:var(--faint)">Completed bookings only</span>
+        <span class="panel-header-meta">Completed bookings only</span>
       </div>
-      <div class="col-chart">
+      <div class="line-chart-wrap">
         <?php if (empty($revenueByMonth)): ?>
-          <div class="empty-state"><div class="empty-icon">📉</div><p>No completed bookings yet.</p></div>
-        <?php else: ?>
-          <div class="col-row">
-            <?php foreach ($revenueByMonth as $row):
-              $h = max(5, round(($row['revenue'] / $maxRevenue) * 100));
-            ?>
-              <div class="col-item">
-                <div class="col-bar" style="height:<?= $h ?>%">
-                  <span class="col-bar-tip">₱<?= number_format($row['revenue'],2) ?><br><?= $row['bookings'] ?> bookings</span>
-                </div>
-                <div class="col-lbl"><?= htmlspecialchars($row['mo']) ?></div>
-              </div>
-            <?php endforeach ?>
+          <div class="empty-state">
+            <p>No completed bookings yet.</p>
           </div>
+        <?php else: ?>
+          <canvas id="revenueChart" class="revenue-chart"></canvas>
         <?php endif ?>
       </div>
     </div>
 
-    <!-- Top services -->
+    <!-- ── Top Services ── -->
     <div class="panel">
-      <div class="panel-header"><h2>Top Services</h2></div>
+      <div class="panel-header">
+        <h2>Top Services</h2>
+        <span class="panel-header-meta">By booking count</span>
+      </div>
       <?php if (empty($topServices)): ?>
-        <div class="empty-state"><p>No service data.</p></div>
+        <div class="empty-state"><p>No service data yet.</p></div>
       <?php else: ?>
         <div class="bar-chart">
-          <?php foreach ($topServices as $svc): ?>
+          <?php foreach ($topServices as $i => $svc): ?>
             <div class="bar-group">
-              <div class="bar-label" title="<?= htmlspecialchars($svc['name']) ?>"><?= htmlspecialchars(mb_strimwidth($svc['name'],0,13,'…')) ?></div>
-              <div class="bar-track">
-                <div class="bar-fill" style="width:<?= round($svc['bookings']/$maxBookings*100) ?>%"><?= (int)$svc['bookings'] ?></div>
+              <div class="bar-rank"><?= $i + 1 ?></div>
+              <div class="bar-label" title="<?= htmlspecialchars($svc['name']) ?>">
+                <?= htmlspecialchars(mb_strimwidth($svc['name'], 0, 14, '…')) ?>
               </div>
-              <div class="bar-end">₱<?= number_format($svc['revenue'],0) ?></div>
+              <div class="bar-track">
+                <div class="bar-fill" style="width:<?= round($svc['bookings'] / $maxBookings * 100) ?>%">
+                  <?= (int)$svc['bookings'] ?>
+                </div>
+              </div>
+              <div class="bar-end">₱<?= number_format($svc['revenue'], 0) ?></div>
             </div>
           <?php endforeach ?>
         </div>
       <?php endif ?>
     </div>
 
-    <!-- Booking status breakdown -->
+    <!-- ── Booking Status Breakdown ── -->
     <div class="panel">
-      <div class="panel-header"><h2>Booking Status Breakdown</h2></div>
+      <div class="panel-header">
+        <h2>Booking Status Breakdown</h2>
+        <span class="panel-header-meta"><?= $totalBookings ?> total</span>
+      </div>
       <?php if (empty($statusBreakdown)): ?>
-        <div class="empty-state"><p>No booking data.</p></div>
+        <div class="empty-state"><p>No booking data yet.</p></div>
       <?php else: ?>
         <div class="status-breakdown">
-          <?php foreach ($statusColors as $st => $c):
+          <?php foreach ($statusConfig as $st => $cfg):
             $cnt = $statusBreakdown[$st] ?? 0;
-            $pct = $totalBookings > 0 ? round($cnt/$totalBookings*100,1) : 0;
+            $pct = $totalBookings > 0 ? round($cnt / $totalBookings * 100, 1) : 0;
           ?>
             <div class="sb-row">
-              <div class="sb-name"><?= str_replace('_',' ',$st) ?></div>
+              <div class="sb-dot" style="background:<?= $cfg['dot'] ?>"></div>
+              <div class="sb-name"><?= str_replace('_', ' ', $st) ?></div>
               <div class="sb-bar-wrap">
-                <div class="sb-bar-fill" style="width:<?= $pct ?>%;background:<?= $c['fill'] ?>"></div>
+                <div class="sb-bar-fill" style="width:<?= $pct ?>%;background:<?= $cfg['fill'] ?>"></div>
               </div>
-              <div class="sb-cnt" style="color:<?= $c['color'] ?>"><?= $cnt ?></div>
+              <div class="sb-cnt" style="color:<?= $cfg['color'] ?>"><?= $cnt ?></div>
               <div class="sb-pct"><?= $pct ?>%</div>
             </div>
           <?php endforeach ?>
@@ -186,7 +217,7 @@ $statusColors = [
       <?php endif ?>
     </div>
 
-    <!-- Top providers leaderboard -->
+    <!-- ── Top Providers Leaderboard ── -->
     <div class="panel span2">
       <div class="panel-header">
         <h2>Top Providers by Revenue</h2>
@@ -195,10 +226,14 @@ $statusColors = [
       <?php if (empty($topProviders)): ?>
         <div class="empty-state"><p>No provider data yet.</p></div>
       <?php else: ?>
-        <?php foreach ($topProviders as $i => $p): ?>
+        <?php foreach ($topProviders as $i => $p):
+          $rank = $i + 1;
+        ?>
           <div class="prov-leaderboard-row">
-            <div class="plr-rank"><?= $i + 1 ?></div>
-            <div class="av av-gold"><?= strtoupper(substr($p['first_name'],0,1).substr($p['last_name'],0,1)) ?></div>
+            <div class="plr-rank" data-rank="<?= $rank ?>"><?= $rank ?></div>
+            <div class="av av-gold">
+              <?= strtoupper(substr($p['first_name'],0,1).substr($p['last_name'],0,1)) ?>
+            </div>
             <div class="plr-info">
               <div class="plr-name"><?= htmlspecialchars($p['first_name'].' '.$p['last_name']) ?></div>
               <?php if (!empty($p['business_name'])): ?>
@@ -206,8 +241,8 @@ $statusColors = [
               <?php endif ?>
             </div>
             <div class="plr-stats">
-              <div class="plr-rev">₱<?= number_format($p['revenue'],2) ?></div>
-              <div class="plr-bkn"><?= (int)$p['bookings'] ?> bookings</div>
+              <div class="plr-rev">₱<?= number_format($p['revenue'], 2) ?></div>
+              <div class="plr-bkn"><?= (int)$p['bookings'] ?> booking<?= $p['bookings'] != 1 ? 's' : '' ?></div>
             </div>
           </div>
         <?php endforeach ?>
@@ -215,7 +250,111 @@ $statusColors = [
     </div>
 
   </div><!-- /report-grid -->
-</div>
-</div>
+
+</div><!-- /content -->
+</div><!-- /admin-page -->
+<script>
+document.getElementById('downloadPdfBtn').addEventListener('click', function() {
+  const element = document.querySelector('.admin-page');
+  const opt = {
+    margin: 10,
+    filename: 'QuickBook-Reports-' + new Date().toISOString().split('T')[0] + '.pdf',
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2 },
+    jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
+  };
+  html2pdf().set(opt).from(element).save();
+});
+
+<?php if (!empty($revenueByMonth)): ?>
+  const revenueCtx = document.getElementById('revenueChart').getContext('2d');
+  const isDark = () => document.documentElement.getAttribute('data-theme') === 'dark';
+  const goldColor = isDark() ? '#C9A84C' : '#C9A84C';
+  const textColor = isDark() ? 'rgba(237,232,220,.62)' : 'rgba(28,23,16,.65)';
+  const textDimColor = isDark() ? 'rgba(237,232,220,.38)' : 'rgba(28,23,16,.42)';
+  const gridColor = isDark() ? 'rgba(201,168,76,.08)' : 'rgba(201,168,76,.08)';
+
+  new Chart(revenueCtx, {
+    type: 'line',
+    data: {
+      labels: <?= json_encode(array_column($revenueByMonth, 'mo')) ?>,
+      datasets: [{
+        label: 'Monthly Revenue',
+        data: <?= json_encode(array_column($revenueByMonth, 'revenue')) ?>,
+        borderColor: goldColor,
+        backgroundColor: isDark() ? 'rgba(201,168,76,.10)' : 'rgba(201,168,76,.08)',
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: goldColor,
+        pointBorderColor: isDark() ? '#111827' : '#fff',
+        pointBorderWidth: 2,
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        pointHoverBackgroundColor: '#E8C96A'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: {
+          display: true,
+          labels: {
+            font: { family: 'DM Sans, sans-serif', size: 12, weight: '500' },
+            color: textColor,
+            padding: 15,
+            usePointStyle: true,
+            pointStyle: 'circle'
+          }
+        },
+        tooltip: {
+          backgroundColor: isDark() ? 'rgba(19,29,48,.95)' : 'rgba(255,255,255,.95)',
+          borderColor: goldColor,
+          borderWidth: 1.5,
+          titleColor: isDark() ? '#EDE8DC' : '#1C1710',
+          bodyColor: isDark() ? '#EDE8DC' : '#1C1710',
+          bodyFont: { family: 'DM Sans, sans-serif', size: 13, weight: '500' },
+          padding: 12,
+          cornerRadius: 8,
+          displayColors: false,
+          callbacks: {
+            label: function(ctx) {
+              return '₱' + ctx.parsed.y.toLocaleString('en-US', {maximumFractionDigits: 0});
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            color: textDimColor,
+            font: { family: 'DM Mono, monospace', size: 11 },
+            callback: function(value) {
+              return '₱' + (value / 1000).toFixed(0) + 'k';
+            }
+          },
+          grid: {
+            color: gridColor,
+            drawBorder: false,
+            lineWidth: 1
+          }
+        },
+        x: {
+          ticks: {
+            color: textDimColor,
+            font: { family: 'DM Mono, monospace', size: 11 }
+          },
+          grid: {
+            display: false,
+            drawBorder: false
+          }
+        }
+      }
+    }
+  });
+<?php endif ?>
+</script>
 </body>
 </html>

@@ -30,14 +30,13 @@ function adminNav(string $active = ''): void {
   <!-- Right: profile chip · notifications · dark mode -->
   <div class="adm-topbar-right">
 
-    <!-- Profile chip -->
-    <div class="adm-topbar-profile">
+    <!-- Profile chip — clickable -->
+    <a href="<?= BASE_URL ?>admin/profile" class="adm-topbar-profile" title="View and edit profile">
       <div class="adm-topbar-av"><?= $initials ?></div>
       <div class="adm-topbar-profile-info">
-        <span class="adm-topbar-profile-name"><?= $name ?></span>
-        <span class="adm-topbar-profile-role">Administrator</span>
+        <span class="adm-topbar-profile-role" style="font-size:1rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">ADMIN</span>
       </div>
-    </div>
+    </a>
 
     <!-- Notification bell -->
     <?php
@@ -49,7 +48,6 @@ function adminNav(string $active = ''): void {
 
     <!-- Dark mode toggle -->
     <button class="adm-topbar-btn adm-darkmode-btn" id="admDarkToggle" title="Toggle dark mode" aria-label="Toggle dark mode">
-      <!-- Sun: shown in light mode -->
       <svg id="admIconSun" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
            viewBox="0 0 24 24" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -63,7 +61,6 @@ function adminNav(string $active = ''): void {
         <line x1="4.22"  y1="19.78" x2="5.64"  y2="18.36"/>
         <line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"/>
       </svg>
-      <!-- Moon: shown in dark mode -->
       <svg id="admIconMoon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
            viewBox="0 0 24 24" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -77,12 +74,17 @@ function adminNav(string $active = ''): void {
 <!-- ══════════════ SIDEBAR ══════════════ -->
 <aside class="adm-sidebar-nav" id="admSidebar">
 
-  <!-- Logo -->
+  <!-- ============================================================
+       LOGO — QB_LOGO image + wordmark
+       Change QB_LOGO.png to .svg / .webp if needed
+       ============================================================ -->
   <div class="adm-sb-logo-wrap">
     <a class="adm-sb-logo" href="<?= BASE_URL ?>admin/dashboard">
+      <img src="<?= BASE_URL ?>assets/img/QB_LOGO.png"
+           alt="QuickBook Logo"
+           class="adm-sb-logo-img">
       <span class="adm-sb-logo-quick">Quick</span><span class="adm-sb-logo-book">Book</span>
     </a>
-    <span class="adm-sb-badge">ADMIN</span>
   </div>
 
   <!-- Menu label -->
@@ -109,7 +111,7 @@ function adminNav(string $active = ''): void {
   <!-- Push logout to bottom -->
   <div class="adm-sb-spacer"></div>
 
-  <!-- Logout only — no label, no border, no profile block -->
+  <!-- Logout -->
   <div class="adm-sb-logout-wrap">
     <form method="POST" action="<?= BASE_URL ?>auth/logout">
       <button type="submit" class="adm-sb-logout-btn">
@@ -144,18 +146,15 @@ function adminNav(string $active = ''): void {
     const moon = document.getElementById('admIconMoon');
     const sun  = document.getElementById('admIconSun');
     if (t === 'dark') {
-      // dark mode → show moon, hide sun
       if (sun)  sun.style.display  = 'none';
       if (moon) moon.style.display = 'block';
     } else {
-      // light mode → show sun, hide moon
       if (sun)  sun.style.display  = 'block';
       if (moon) moon.style.display = 'none';
     }
     localStorage.setItem('qb-admin-theme', t);
   }
 
-  // Apply immediately
   html.setAttribute('data-theme', saved);
   document.addEventListener('DOMContentLoaded', () => applyTheme(saved));
 
