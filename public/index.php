@@ -4,7 +4,7 @@ session_start();
 
 //  Base URL (auto-detected)
 $scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));
-define('BASE_URL', rtrim($scriptDir, '/') . '/');   // e.g. /quickbook/public/
+define('BASE_URL', rtrim($scriptDir, '/') . '/');   // e.g. /QuickBook/public/
 
 //  Autoload helpers
 require_once __DIR__ . '/../config/database.php';
@@ -13,10 +13,10 @@ require_once __DIR__ . '/../app/controllers/TwoFactorController.php';
 
 
 //  Parse URI
-$basePath    = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
-$uri         = $_GET['url'] ?? '';
-$uri         = trim($uri, '/');
-$method      = $_SERVER['REQUEST_METHOD'];
+$basePath = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
+$uri      = $_GET['url'] ?? '';
+$uri      = trim($uri, '/');
+$method   = $_SERVER['REQUEST_METHOD'];
 
 
 
@@ -67,26 +67,49 @@ $routes = [
     'GET:providers/{any}'=> ['ProviderController', 'show'],
     'POST:book'          => ['BookingController',  'store'],
 
-    // Provider dashboard
+    // ── Provider dashboard ──────────────────────────────────────────
     'GET:provider/dashboard'                  => ['ProviderDashController', 'index'],
+
+    // Appointments (new dedicated routes — must come BEFORE the old bookings routes)
+    'GET:provider/appointments'                    => ['ProviderDashController', 'appointments'],
+    'GET:provider/appointments/accept/{any}'       => ['ProviderDashController', 'acceptAppointment'],
+    'GET:provider/appointments/decline/{any}'      => ['ProviderDashController', 'declineAppointment'],
+    'GET:provider/appointments/complete/{any}'     => ['ProviderDashController', 'completeAppointment'],
+    'POST:provider/appointments/reschedule/{any}'  => ['ProviderDashController', 'rescheduleAppointment'],
+    'GET:provider/appointments/{any}'              => ['ProviderDashController', 'appointmentDetail'],
+
+    // Bookings (legacy alias — kept so old links don't break)
     'GET:provider/bookings'                   => ['ProviderDashController', 'bookings'],
     'GET:provider/bookings/{any}'             => ['ProviderDashController', 'bookingDetail'],
     'POST:provider/bookings/{any}'            => ['ProviderDashController', 'updateBooking'],
+
+    // Services
     'GET:provider/services'                   => ['ProviderDashController', 'services'],
     'POST:provider/services/store'            => ['ProviderDashController', 'storeService'],
     'POST:provider/service/update/{any}'      => ['ProviderDashController', 'updateService'],
     'POST:provider/service/delete/{any}'      => ['ProviderDashController', 'deleteService'],
     'POST:provider/service/toggle/{any}'      => ['ProviderDashController', 'toggleService'],
+
+    // Availability / Schedule
     'GET:provider/availability'               => ['ProviderDashController', 'availability'],
+    'GET:provider/schedule'                   => ['ProviderDashController', 'availability'],
     'POST:provider/availability/store'        => ['ProviderDashController', 'storeAvailability'],
     'POST:provider/availability/update/{any}' => ['ProviderDashController', 'updateAvailability'],
     'POST:provider/availability/delete/{any}' => ['ProviderDashController', 'deleteAvailability'],
+
+    // Profile
     'GET:provider/profile'                    => ['ProviderDashController', 'profile'],
     'POST:provider/profile'                   => ['ProviderDashController', 'updateProfile'],
     'POST:provider/profile/update-business'   => ['ProviderDashController', 'updateProfile'],
     'POST:provider/profile/update-personal'   => ['ProviderDashController', 'updatePersonalInfo'],
     'POST:provider/profile/update-password'   => ['ProviderDashController', 'updatePassword'],
     'POST:provider/profile/upload-photo'      => ['ProviderDashController', 'uploadProfilePhoto'],
+
+    // Portfolio (placeholder — add a portfolioController method when ready)
+    'GET:provider/portfolio'                  => ['ProviderDashController', 'index'],
+
+    // Settings (placeholder)
+    'GET:provider/settings'                   => ['ProviderDashController', 'profile'],
 
     // Notifications (all roles)
     'POST:notifications/mark-read'     => ['NotificationController', 'markRead'],
@@ -113,7 +136,7 @@ $routes = [
     'POST:auth/2fa/disable' => ['TwoFactorController', 'disable'],
 ];
 
-// Dispatcher
+// ── Dispatcher ────────────────────────────────────────────────────
 $matched = false;
 $params  = [];
 

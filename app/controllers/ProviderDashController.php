@@ -18,14 +18,238 @@ class ProviderDashController
         }
     }
 
+    // ── Dashboard ─────────────────────────────────────────────────────────────
+
     public function index(): void
     {
         require __DIR__ . '/../views/Provider/dashboard.php';
     }
 
+    // ── Appointments (NEW) ────────────────────────────────────────────────────
+
+    /**
+     * Main appointments page — loads the existing appointments.php view.
+     */
+    public function appointments(): void
+    {
+        require __DIR__ . '/../views/Provider/appointments.php';
+    }
+
+    /**
+     * GET  provider/appointments/accept/{id}
+     * Confirms a pending booking and notifies the customer.
+     */
+    public function acceptAppointment(string $id): void
+    {
+        $db     = Database::getInstance();
+        $userId = $_SESSION['user_id'] ?? 0;
+
+        $booking = $this->_getBookingForProvider((int)$id, $userId, $db);
+        if (!$booking) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Booking not found.'];
+            header('Location: ' . BASE_URL . 'provider/appointments'); exit;
+        }
+
+        if ($booking['status'] !== 'pending') {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Only pending bookings can be accepted.'];
+            header('Location: ' . BASE_URL . 'provider/appointments'); exit;
+        }
+
+        $db->prepare("
+            UPDATE tbl_bookings SET status = 'confirmed', updated_at = NOW()
+            WHERE id = ?
+        ")->execute([(int)$id]);
+
+        $fDate = $booking['booking_date'] ? date('M j, Y', strtotime($booking['booking_date'])) : '';
+        $fTime = $booking['booking_time'] ? date('g:i A', strtotime($booking['booking_time'])) : '';
+
+        NotificationHelper::send($db, [(int)$booking['customer_id']], 'booking',
+            'Booking Confirmed',
+            "Your booking for \"{$booking['service_name']}\" on {$fDate} at {$fTime} has been confirmed by {$booking['prov_name']}.",
+            '',
+            BASE_URL . 'bookings/' . (int)$id
+        );
+        NotificationHelper::send($db, NotificationHelper::adminIds($db), 'booking',
+            "[Admin] Booking #{$id} Confirmed",
+            "Provider {$booking['prov_name']} confirmed \"{$booking['service_name']}\" for customer {$booking['cust_name']}.",
+            '',
+            BASE_URL . 'admin/bookings'
+        );
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Booking confirmed — customer notified.'];
+        header('Location: ' . BASE_URL . 'provider/appointments'); exit;
+    }
+
+    /**
+     * GET  provider/appointments/decline/{id}
+     * Declines a pending booking and notifies the customer.
+     */
+    public function declineAppointment(string $id): void
+    {
+        $db     = Database::getInstance();
+        $userId = $_SESSION['user_id'] ?? 0;
+
+        $booking = $this->_getBookingForProvider((int)$id, $userId, $db);
+        if (!$booking) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Booking not found.'];
+            header('Location: ' . BASE_URL . 'provider/appointments'); exit;
+        }
+
+        if ($booking['status'] !== 'pending') {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Only pending bookings can be declined.'];
+            header('Location: ' . BASE_URL . 'provider/appointments'); exit;
+        }
+
+        $db->prepare("
+            UPDATE tbl_bookings SET status = 'rejected', updated_at = NOW()
+            WHERE id = ?
+        ")->execute([(int)$id]);
+
+        NotificationHelper::send($db, [(int)$booking['customer_id']], 'booking_cancelled',
+            'Booking Declined',
+            "Your booking for \"{$booking['service_name']}\" was declined by {$booking['prov_name']}.",
+            '',
+            BASE_URL . 'bookings/' . (int)$id
+        );
+        NotificationHelper::send($db, NotificationHelper::adminIds($db), 'booking_cancelled',
+            "[Admin] Booking #{$id} Declined",
+            "Provider {$booking['prov_name']} declined \"{$booking['service_name']}\" for customer {$booking['cust_name']}.",
+            '',
+            BASE_URL . 'admin/bookings'
+        );
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Booking declined — customer notified.'];
+        header('Location: ' . BASE_URL . 'provider/appointments'); exit;
+    }
+
+    /**
+     * GET  provider/appointments/complete/{id}
+     * Marks a confirmed/in-progress booking as completed, awards loyalty points.
+     */
+    public function completeAppointment(string $id): void
+    {
+        $db     = Database::getInstance();
+        $userId = $_SESSION['user_id'] ?? 0;
+
+        $booking = $this->_getBookingForProvider((int)$id, $userId, $db);
+        if (!$booking) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Booking not found.'];
+            header('Location: ' . BASE_URL . 'provider/appointments'); exit;
+        }
+
+        if (!in_array($booking['status'], ['confirmed', 'in_progress'])) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Only confirmed or in-progress bookings can be completed.'];
+            header('Location: ' . BASE_URL . 'provider/appointments'); exit;
+        }
+
+        $db->prepare("
+            UPDATE tbl_bookings SET status = 'completed', updated_at = NOW()
+            WHERE id = ?
+        ")->execute([(int)$id]);
+
+        // Award 20 loyalty points to the customer
+        $custId = (int)$booking['customer_id'];
+        $balStmt = $db->prepare("SELECT COALESCE(SUM(points), 0) FROM tbl_loyalty_points WHERE user_id = ?");
+        $balStmt->execute([$custId]);
+        $bal = (int)$balStmt->fetchColumn();
+        $db->prepare("
+            INSERT INTO tbl_loyalty_points
+                (user_id, booking_id, type, points, balance, description, created_at)
+            VALUES (?, ?, 'earn', 20, ?, 'Booking completed', NOW())
+        ")->execute([$custId, (int)$id, $bal + 20]);
+
+        NotificationHelper::send($db, [$custId], 'booking',
+            'Service Completed — 20 pts earned!',
+            "Your booking for \"{$booking['service_name']}\" with {$booking['prov_name']} is complete. You earned 20 loyalty points!",
+            '',
+            BASE_URL . 'bookings/' . (int)$id
+        );
+        NotificationHelper::send($db, NotificationHelper::adminIds($db), 'booking',
+            "[Admin] Booking #{$id} Completed",
+            "Provider {$booking['prov_name']} completed \"{$booking['service_name']}\" for customer {$booking['cust_name']}.",
+            '',
+            BASE_URL . 'admin/bookings'
+        );
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Booking completed — customer notified and 20 pts awarded.'];
+        header('Location: ' . BASE_URL . 'provider/appointments'); exit;
+    }
+
+    /**
+     * POST  provider/appointments/reschedule/{id}
+     * Suggests a new date/time for the appointment.
+     */
+    public function rescheduleAppointment(string $id): void
+    {
+        $db     = Database::getInstance();
+        $userId = $_SESSION['user_id'] ?? 0;
+
+        $booking = $this->_getBookingForProvider((int)$id, $userId, $db);
+        if (!$booking) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Booking not found.'];
+            header('Location: ' . BASE_URL . 'provider/appointments'); exit;
+        }
+
+        $suggestedDate = trim($_POST['new_date']           ?? '');
+        $suggestedTime = trim($_POST['new_time']           ?? '');
+        $reschedNote   = trim($_POST['reschedule_note']    ?? '');
+
+        if (!$suggestedDate || !$suggestedTime) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Please provide both a new date and time.'];
+            header('Location: ' . BASE_URL . 'provider/appointments'); exit;
+        }
+        if (strtotime($suggestedDate) < strtotime('today')) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Suggested date cannot be in the past.'];
+            header('Location: ' . BASE_URL . 'provider/appointments'); exit;
+        }
+
+        $db->prepare("
+            UPDATE tbl_bookings
+            SET status = 'rescheduled',
+                suggested_date  = ?,
+                suggested_time  = ?,
+                reschedule_note = ?,
+                updated_at      = NOW()
+            WHERE id = ?
+        ")->execute([$suggestedDate, $suggestedTime, $reschedNote ?: null, (int)$id]);
+
+        $nDate = date('l, F j, Y', strtotime($suggestedDate));
+        $nTime = date('g:i A', strtotime($suggestedTime));
+        $body  = "New date: {$nDate} at {$nTime}." . ($reschedNote ? " Note: {$reschedNote}" : '');
+
+        NotificationHelper::send($db, [(int)$booking['customer_id']], 'reschedule',
+            'Booking Rescheduled',
+            "Provider {$booking['prov_name']} suggested a reschedule for \"{$booking['service_name']}\".",
+            $body,
+            BASE_URL . 'bookings/' . (int)$id
+        );
+        NotificationHelper::send($db, NotificationHelper::adminIds($db), 'reschedule',
+            "[Admin] Reschedule — Booking #{$id}",
+            "Provider {$booking['prov_name']} rescheduled \"{$booking['service_name']}\" for customer {$booking['cust_name']}.",
+            $body,
+            BASE_URL . 'admin/bookings'
+        );
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Reschedule suggestion sent — customer notified.'];
+        header('Location: ' . BASE_URL . 'provider/appointments'); exit;
+    }
+
+    /**
+     * GET  provider/appointments/{id}
+     * Shows a single appointment detail (reuses the customer-detail view).
+     */
+    public function appointmentDetail(string $id): void
+    {
+        // Reuse the existing bookingDetail logic
+        $this->bookingDetail($id);
+    }
+
+    // ── Bookings (legacy) ─────────────────────────────────────────────────────
+
     public function bookings(): void
     {
-        require __DIR__ . '/../views/Provider/bookings.php';
+        // Redirect old /provider/bookings links to the new appointments page
+        header('Location: ' . BASE_URL . 'provider/appointments'); exit;
     }
 
     public function bookingDetail(string $id): void
@@ -63,7 +287,7 @@ class ProviderDashController
 
         if (!$booking) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Booking not found.'];
-            header('Location: ' . BASE_URL . 'provider/bookings'); exit;
+            header('Location: ' . BASE_URL . 'provider/appointments'); exit;
         }
 
         require __DIR__ . '/../views/Provider/customer-detail.php';
@@ -76,7 +300,6 @@ class ProviderDashController
         $action     = $_POST['action'] ?? '';
         $reason     = trim($_POST['reason'] ?? '');
 
-        // Fetch full booking + names
         $stmt = $db->prepare("
             SELECT b.id, b.customer_id, b.status, b.booking_date, b.booking_time,
                    u.first_name AS cust_first, u.last_name AS cust_last,
@@ -95,7 +318,7 @@ class ProviderDashController
 
         if (!$booking) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Booking not found.'];
-            header('Location: ' . BASE_URL . 'provider/bookings'); exit;
+            header('Location: ' . BASE_URL . 'provider/appointments'); exit;
         }
 
         $custName = trim($booking['cust_first'] . ' ' . $booking['cust_last']);
@@ -131,14 +354,12 @@ class ProviderDashController
             $nTime = date('g:i A', strtotime($suggestedTime));
             $body  = "New date: {$nDate} at {$nTime}. Reason: {$reschedReason}";
 
-            // Notify customer
             NotificationHelper::send($db, [$custId], 'reschedule',
                 'Booking Rescheduled',
                 "Provider {$provName} suggested a reschedule for \"{$svcName}\".",
                 $body,
                 BASE_URL . 'bookings/' . (int)$id
             );
-            // Notify admins
             NotificationHelper::send($db, NotificationHelper::adminIds($db), 'reschedule',
                 "[Admin] Reschedule — Booking #{$id}",
                 "Provider {$provName} rescheduled \"{$svcName}\" for customer {$custName}.",
@@ -147,7 +368,7 @@ class ProviderDashController
             );
 
             $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Reschedule suggestion sent and booking marked as rescheduled.'];
-            header('Location: ' . BASE_URL . 'provider/bookings'); exit;
+            header('Location: ' . BASE_URL . 'provider/appointments'); exit;
         }
 
         // ── Status map ───────────────────────────────────────────────────────
@@ -162,12 +383,12 @@ class ProviderDashController
 
         if (!isset($statusMap[$action])) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Invalid action.'];
-            header('Location: ' . BASE_URL . 'provider/bookings'); exit;
+            header('Location: ' . BASE_URL . 'provider/appointments'); exit;
         }
 
         if ($action === 'delete' && $reason === '') {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'A reason is required when deleting a booking.'];
-            header('Location: ' . BASE_URL . 'provider/bookings'); exit;
+            header('Location: ' . BASE_URL . 'provider/appointments'); exit;
         }
 
         $newStatus = $statusMap[$action];
@@ -210,7 +431,6 @@ class ProviderDashController
                 'cancel'   => 'Booking cancelled — customer notified.',
             ];
 
-            // ── Per-action customer + admin notifications ─────────────────
             switch ($action) {
                 case 'confirm':
                     NotificationHelper::send($db, [$custId], 'booking',
@@ -243,7 +463,6 @@ class ProviderDashController
                     break;
 
                 case 'complete':
-                    // Loyalty points for completion
                     $balStmt = $db->prepare("SELECT COALESCE(SUM(points), 0) FROM tbl_loyalty_points WHERE user_id = ?");
                     $balStmt->execute([$custId]);
                     $bal = (int)$balStmt->fetchColumn();
@@ -302,10 +521,10 @@ class ProviderDashController
             $_SESSION['flash'] = ['type' => 'success', 'msg' => $labels[$action]];
         }
 
-        header('Location: ' . BASE_URL . 'provider/bookings'); exit;
+        header('Location: ' . BASE_URL . 'provider/appointments'); exit;
     }
 
-    // ── Services ─────────────────────────────────────────────────────────────
+    // ── Services ──────────────────────────────────────────────────────────────
 
     public function services(): void
     {
@@ -363,7 +582,6 @@ class ProviderDashController
         ")->execute([$providerId, $categoryId, $name, $serviceType, $locationType,
                      $shopAddress ?: null, $price, $durationMins ?: null, $description ?: null]);
 
-        // Fetch provider name
         $provStmt = $db->prepare("SELECT first_name, last_name FROM tbl_users WHERE id = ? LIMIT 1");
         $provStmt->execute([$userId]);
         $pu = $provStmt->fetch();
@@ -786,7 +1004,6 @@ class ProviderDashController
         $db->prepare("UPDATE tbl_users SET password_hash=? WHERE id=?")
            ->execute([password_hash($newPw, PASSWORD_DEFAULT), $userId]);
 
-        // Notify admins of password change (security event)
         $provStmt = $db->prepare("SELECT first_name, last_name, email FROM tbl_users WHERE id = ? LIMIT 1");
         $provStmt->execute([$userId]);
         $pu = $provStmt->fetch();
@@ -838,5 +1055,31 @@ class ProviderDashController
 
         echo json_encode(['success' => true, 'dataUrl' => $base64]);
         exit;
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Fetches a booking row and verifies it belongs to the current provider.
+     * Returns the row (with cust_name, prov_name, service_name) or null.
+     */
+    private function _getBookingForProvider(int $bookingId, int $userId, $db): ?array
+    {
+        $stmt = $db->prepare("
+            SELECT b.id, b.customer_id, b.status, b.booking_date, b.booking_time,
+                   s.name AS service_name,
+                   CONCAT(u.first_name, ' ', u.last_name) AS cust_name,
+                   CONCAT(pu.first_name, ' ', pu.last_name) AS prov_name
+            FROM tbl_bookings b
+            JOIN tbl_provider_profiles pp ON pp.id = b.provider_id
+            JOIN tbl_users             u  ON u.id  = b.customer_id
+            JOIN tbl_users             pu ON pu.id = pp.user_id
+            JOIN tbl_services          s  ON s.id  = b.service_id
+            WHERE b.id = ? AND pp.user_id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$bookingId, $userId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
     }
 }

@@ -1,145 +1,181 @@
 <?php
+// app/views/provider/dashboard.php
+$name        = htmlspecialchars($_SESSION['user_name']  ?? 'Provider');
+$email       = htmlspecialchars($_SESSION['user_email'] ?? '');
+$userId      = (int)($_SESSION['user_id'] ?? 0);
+$providerId  = (int)($_SESSION['provider_id'] ?? 0);
+
 require_once __DIR__ . '/../../../config/database.php';
-$db           = Database::getInstance();
-$providerId   = $_SESSION['user_id'] ?? 0;
-$providerName = htmlspecialchars($_SESSION['user_name'] ?? 'Provider');
+$db = Database::getInstance();
 
-$profile = $db->prepare("SELECT * FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
-$profile->execute([$providerId]);
-$profile   = $profile->fetch();
-$profileId = $profile['id'] ?? 0;
-
-/* ── Core counts ── */
-$stmt = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ?");
-$stmt->execute([$profileId]);
-$totalBookings = (int)$stmt->fetchColumn();
-
-$stmt = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ? AND DATE(created_at) = CURDATE()");
-$stmt->execute([$profileId]);
-$todayBookings = (int)$stmt->fetchColumn();
-
-$stmt = $db->prepare("SELECT COALESCE(SUM(total_amount),0) FROM tbl_bookings WHERE provider_id = ? AND status = 'completed'");
-$stmt->execute([$profileId]);
-$totalRevenue = (float)$stmt->fetchColumn();
-
-/* Month-over-month revenue for delta badge */
-$stmt = $db->prepare("
-    SELECT COALESCE(SUM(total_amount),0) FROM tbl_bookings
-    WHERE provider_id = ? AND status = 'completed'
-      AND MONTH(booking_date) = MONTH(CURDATE())
-      AND YEAR(booking_date)  = YEAR(CURDATE())
-");
-$stmt->execute([$profileId]);
-$thisMonthRevenue = (float)$stmt->fetchColumn();
-
-$stmt = $db->prepare("
-    SELECT COALESCE(SUM(total_amount),0) FROM tbl_bookings
-    WHERE provider_id = ? AND status = 'completed'
-      AND MONTH(booking_date) = MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))
-      AND YEAR(booking_date)  = YEAR(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))
-");
-$stmt->execute([$profileId]);
-$lastMonthRevenue = (float)$stmt->fetchColumn();
-
-$revDelta   = $lastMonthRevenue > 0 ? round(($thisMonthRevenue - $lastMonthRevenue) / $lastMonthRevenue * 100) : null;
-$revDeltaPos = $revDelta !== null && $revDelta >= 0;
-
-/* ── Status counts ── */
-$stmt = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ? AND status = 'pending'");
-$stmt->execute([$profileId]);
-$pendingBookings = (int)$stmt->fetchColumn();
-
-$stmt = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ? AND status = 'confirmed'");
-$stmt->execute([$profileId]);
-$confirmedBookings = (int)$stmt->fetchColumn();
-
-$stmt = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ? AND status = 'completed'");
-$stmt->execute([$profileId]);
-$completedBookings = (int)$stmt->fetchColumn();
-
-$stmt = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ? AND status = 'cancelled'");
-$stmt->execute([$profileId]);
-$cancelledBookings = (int)$stmt->fetchColumn();
-
-$stmt = $db->prepare("SELECT COUNT(*) FROM tbl_services WHERE provider_id = ? AND is_active = 1");
-$stmt->execute([$profileId]);
-$totalServices = (int)$stmt->fetchColumn();
-
-/* ── Recent bookings ── */
-$stmt = $db->prepare("
-    SELECT b.id, b.booking_date, b.status, b.total_amount, b.created_at,
-           u.first_name, u.last_name, u.avatar_url,
-           s.name AS service_name
-    FROM tbl_bookings b
-    JOIN tbl_users u ON u.id = b.customer_id
-    JOIN tbl_services s ON s.id = b.service_id
-    WHERE b.provider_id = ?
-    ORDER BY b.created_at DESC LIMIT 8
-");
-$stmt->execute([$profileId]);
-$recentBookings = $stmt->fetchAll();
-
-/* ── Status breakdown ── */
-$stmt = $db->prepare("SELECT status, COUNT(*) AS cnt FROM tbl_bookings WHERE provider_id = ? GROUP BY status");
-$stmt->execute([$profileId]);
-$statusCounts = [];
-foreach ($stmt->fetchAll() as $row) {
-    $statusCounts[$row['status']] = (int)$row['cnt'];
+/* ── If session doesn't hold provider_id, look it up ── */
+if (!$providerId && $userId) {
+    $stPid = $db->prepare("SELECT id FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
+    $stPid->execute([$userId]);
+    $providerId = (int)$stPid->fetchColumn();
 }
 
-/* ── 6-month revenue trend ── */
-$stmt = $db->prepare("
-    SELECT DATE_FORMAT(booking_date,'%b') AS month,
-           DATE_FORMAT(booking_date,'%Y-%m') AS ym,
-           COALESCE(SUM(total_amount),0) AS revenue
-    FROM tbl_bookings
+/* ── Business info (JOIN with categories to get category_name) ── */
+$stBiz = $db->prepare("
+    SELECT pp.*, c.name AS category_name
+    FROM tbl_provider_profiles pp
+    LEFT JOIN tbl_categories c ON pp.category_id = c.id
+    WHERE pp.id = ? LIMIT 1
+");
+$stBiz->execute([$providerId]);
+$biz = $stBiz->fetch() ?: [];
+$bizName      = htmlspecialchars($biz['business_name'] ?? $name); 
+$firstName = htmlspecialchars(explode(' ', $name)[0]);
+$bizCategory  = htmlspecialchars($biz['category_name'] ?? 'Service Provider');
+$profilePhoto = $biz['profile_photo'] ?? null;
+
+/* ── Rating from stored columns (updated by DB trigger on review insert) ── */
+$avgRating   = round((float)($biz['avg_rating']    ?? 0), 1);
+$reviewCount = (int)($biz['total_reviews'] ?? 0);
+
+/* ── KPI Stats ── */
+$stTotalApt = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ?");
+$stTotalApt->execute([$providerId]);
+$totalBookings = (int)$stTotalApt->fetchColumn();
+
+$stMonthApt = $db->prepare("
+    SELECT COUNT(*) FROM tbl_bookings
     WHERE provider_id = ?
-      AND status = 'completed'
-      AND booking_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
-    GROUP BY DATE_FORMAT(booking_date,'%Y-%m')
-    ORDER BY MIN(booking_date) ASC
+      AND MONTH(created_at) = MONTH(CURDATE())
+      AND YEAR(created_at)  = YEAR(CURDATE())
 ");
-$stmt->execute([$profileId]);
-$revTrend = $stmt->fetchAll();
-$currentYM = date('Y-m');
+$stMonthApt->execute([$providerId]);
+$monthBookings = (int)$stMonthApt->fetchColumn();
 
-/* ── Average rating ── */
-$stmt = $db->prepare("
-    SELECT COALESCE(AVG(rating), 0) AS avg_rating, COUNT(*) AS total_reviews
-    FROM tbl_reviews WHERE provider_id = ?
+$stEarnings = $db->prepare("
+    SELECT COALESCE(SUM(b.total_amount), 0)
+    FROM tbl_bookings b
+    WHERE b.provider_id = ? AND b.status = 'completed'
 ");
-$stmt->execute([$profileId]);
-$reviewData = $stmt->fetch();
-$avgRating  = round((float)($reviewData['avg_rating'] ?? 0), 1);
-$totalReviews = (int)($reviewData['total_reviews'] ?? 0);
+$stEarnings->execute([$providerId]);
+$totalEarnings = (float)$stEarnings->fetchColumn();
 
-/* Rating distribution (1-5) */
-$ratingDist = [];
-for ($i = 5; $i >= 1; $i--) {
-    $s = $db->prepare("SELECT COUNT(*) FROM tbl_reviews WHERE provider_id = ? AND rating = ?");
-    $s->execute([$profileId, $i]);
-    $ratingDist[$i] = (int)$s->fetchColumn();
+$stMonthEarn = $db->prepare("
+    SELECT COALESCE(SUM(b.total_amount), 0)
+    FROM tbl_bookings b
+    WHERE b.provider_id = ? AND b.status = 'completed'
+      AND MONTH(b.booking_date) = MONTH(CURDATE())
+      AND YEAR(b.booking_date)  = YEAR(CURDATE())
+");
+$stMonthEarn->execute([$providerId]);
+$monthEarnings = (float)$stMonthEarn->fetchColumn();
+
+/* ── Unique customers served (replaces profile views — no tbl_provider_views in schema) ── */
+$stCustomers = $db->prepare("
+    SELECT COUNT(DISTINCT customer_id)
+    FROM tbl_bookings
+    WHERE provider_id = ? AND status = 'completed'
+");
+$stCustomers->execute([$providerId]);
+$uniqueCustomers = (int)$stCustomers->fetchColumn();
+
+$stPending = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ? AND status = 'pending'");
+$stPending->execute([$providerId]);
+$pendingCount = (int)$stPending->fetchColumn();
+
+$stCompleted = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ? AND status = 'completed'");
+$stCompleted->execute([$providerId]);
+$completedCount = (int)$stCompleted->fetchColumn();
+
+/* ── Upcoming appointments ── */
+$stUpcoming = $db->prepare("
+    SELECT b.*,
+           CONCAT(u.first_name,' ',u.last_name) AS customer_name,
+           u.avatar_url AS customer_avatar,
+           s.name AS service_name, s.price, s.duration_minutes
+    FROM tbl_bookings b
+    JOIN tbl_users u    ON b.customer_id=u.id
+    JOIN tbl_services s ON b.service_id=s.id
+    WHERE b.provider_id=?
+      AND b.status IN ('pending','confirmed')
+      AND b.booking_date >= CURDATE()
+    ORDER BY b.booking_date ASC, b.booking_time ASC
+    LIMIT 8
+");
+$stUpcoming->execute([$providerId]);
+$upcomingApts = $stUpcoming->fetchAll();
+
+/* ── Monthly earnings chart ── */
+$stMonthly = $db->prepare("
+    SELECT DATE_FORMAT(b.booking_date, '%b')    AS month,
+           DATE_FORMAT(b.booking_date, '%Y-%m') AS month_key,
+           COALESCE(SUM(b.total_amount), 0)     AS total,
+           COUNT(*)                              AS cnt
+    FROM tbl_bookings b
+    WHERE b.provider_id = ? AND b.status = 'completed'
+      AND b.booking_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+    GROUP BY month_key, month
+    ORDER BY month_key ASC
+");
+$stMonthly->execute([$providerId]);
+$monthlyData   = $stMonthly->fetchAll();
+$chartLabels   = array_column($monthlyData, 'month');
+$chartEarnings = array_map(fn($r) => (float)$r['total'], $monthlyData);
+
+/* ── Portfolio — uses tbl_provider_gallery (not tbl_portfolio) ── */
+$stPortfolio = $db->prepare("
+    SELECT * FROM tbl_provider_gallery
+    WHERE provider_id = ?
+    ORDER BY sort_order ASC, created_at DESC
+    LIMIT 6
+");
+$stPortfolio->execute([$providerId]);
+$portfolioItems = $stPortfolio->fetchAll();
+
+$stPortTotal = $db->prepare("SELECT COUNT(*) FROM tbl_provider_gallery WHERE provider_id = ?");
+$stPortTotal->execute([$providerId]);
+$totalPortfolio = (int)$stPortTotal->fetchColumn();
+
+/* ── Rating breakdown from tbl_reviews ── */
+$stRatingBreakdown = $db->prepare("
+    SELECT rating, COUNT(*) AS cnt
+    FROM tbl_reviews
+    WHERE provider_id = ? AND is_visible = 1
+    GROUP BY rating
+    ORDER BY rating DESC
+");
+$stRatingBreakdown->execute([$providerId]);
+$ratingBreakdown = [];
+foreach ($stRatingBreakdown->fetchAll() as $row) {
+    $ratingBreakdown[(int)$row['rating']] = (int)$row['cnt'];
 }
 
-/* ── Recent reviews ── */
-$recentReviewsStmt = $db->prepare("
-    SELECT r.rating, r.comment, r.created_at,
-           r.customer_id AS reviewer_id,
-           TRIM(CONCAT(u.first_name,' ',COALESCE(u.last_name,''))) AS reviewer_name,
-           u.avatar_url AS profile_photo
-    FROM   tbl_reviews r
-    JOIN   tbl_users u ON u.id = r.customer_id
-    WHERE  r.provider_id = ? AND r.is_visible = 1
-    ORDER  BY r.created_at DESC
-    LIMIT  5
+/* ── Today's booked slots ── */
+$stSchedule = $db->prepare("
+    SELECT b.booking_time, s.name AS service_name,
+           CONCAT(u.first_name, ' ', u.last_name) AS customer_name,
+           b.status
+    FROM tbl_bookings b
+    JOIN tbl_services s ON b.service_id  = s.id
+    JOIN tbl_users u    ON b.customer_id = u.id
+    WHERE b.provider_id = ?
+      AND b.booking_date = CURDATE()
+      AND b.status IN ('confirmed', 'pending', 'in_progress')
+    ORDER BY b.booking_time ASC
+    LIMIT 5
 ");
-$recentReviewsStmt->execute([$profileId]);
-$recentReviews = $recentReviewsStmt->fetchAll(PDO::FETCH_ASSOC);
+$stSchedule->execute([$providerId]);
+$todaySlots = $stSchedule->fetchAll();
 
-/* ── Greeting ── */
+/* ── Helpers ── */
 $hour     = (int)date('H');
 $greeting = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good evening');
-$initials = strtoupper(substr($providerName, 0, 2));
+$initials = strtoupper(substr($bizName, 0, 2));
+
+function fmtMoney(float $v): string {
+    return $v >= 1000 ? '₱'.number_format($v/1000,1).'k' : '₱'.number_format($v,0);
+}
+function starFill(float $avg, int $pos): string {
+    $diff = $avg - $pos + 1;
+    if ($diff >= 1)   return 'full';
+    if ($diff >= 0.5) return 'half';
+    return 'empty';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -150,7 +186,6 @@ $initials = strtoupper(substr($providerName, 0, 2));
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/provider_dashboard.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <!-- Apply saved theme BEFORE render to prevent flash -->
   <script>
     (function(){
       var t = localStorage.getItem('qb-theme') || 'light';
@@ -159,161 +194,184 @@ $initials = strtoupper(substr($providerName, 0, 2));
   </script>
 </head>
 <body>
-
-<!-- GRAIN -->
 <div class="grain" aria-hidden="true"></div>
 
 <!-- ══════════════════════════════════════
-     NAV
+     NAVBAR
 ══════════════════════════════════════ -->
 <nav class="pv-nav" role="navigation" aria-label="Provider navigation">
   <div class="pv-nav-inner">
 
-    <a href="<?= BASE_URL ?>provider/dashboard" class="pv-logo">
-      Quick<span>Book</span><span class="pv-logo-badge">Provider</span>
+    <!-- Logo -->
+    <a href="<?= BASE_URL ?>home" class="pv-logo">
+      <img src="<?= BASE_URL ?>assets/img/QB_LOGO.png" alt="QuickBook Logo"
+           style="width:42px;height:42px;object-fit:contain;display:block;flex-shrink:0;">
+      Quick<span>Book</span>
+      <span class="pv-logo-badge">Provider</span>
     </a>
 
+    <!-- Centre nav links -->
     <div class="pv-nav-links">
-      <a href="<?= BASE_URL ?>provider/dashboard"    class="pv-nav-link is-active">Dashboard</a>
-      <a href="<?= BASE_URL ?>provider/bookings"     class="pv-nav-link">
-        Bookings
-        <?php if ($pendingBookings): ?>
-          <sup class="pv-sup"><?= $pendingBookings ?></sup>
-        <?php endif; ?>
+      <a href="<?= BASE_URL ?>provider/dashboard"     class="pv-nav-link is-active">Dashboard</a>
+      <a href="<?= BASE_URL ?>provider/appointments"  class="pv-nav-link">
+        Appointments
+        <?php if ($pendingCount): ?><sup class="pv-sup"><?= $pendingCount ?></sup><?php endif; ?>
       </a>
-      <a href="<?= BASE_URL ?>provider/services"     class="pv-nav-link">Services</a>
-      <a href="<?= BASE_URL ?>provider/availability" class="pv-nav-link">Availability</a>
-      <a href="<?= BASE_URL ?>provider/profile"      class="pv-nav-link">Profile</a>
+      <a href="<?= BASE_URL ?>provider/services"   class="pv-nav-link">Services</a>
+      <a href="<?= BASE_URL ?>provider/portfolio"  class="pv-nav-link">Portfolio</a>
+      <a href="<?= BASE_URL ?>provider/schedule"   class="pv-nav-link">Schedule</a>
     </div>
 
+    <!-- Right-side controls -->
     <div class="pv-nav-end">
-      <!-- Notification bell -->
-      <?php
-        $notifUserId = (int)($providerId);
-        require __DIR__ . '/../_partials/notification_panel.php';
-      ?>
+      <?php $notifUserId = (int)$userId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
 
-      <!-- THEME TOGGLE -->
-      <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode" title="Toggle theme">
-        <!-- Moon icon (shown in light mode) -->
-        <svg class="icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-             viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <!-- Theme toggle -->
+      <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode">
+        <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
         </svg>
-        <!-- Sun icon (shown in dark mode) -->
-        <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-             viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg class="icon-sun" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="5"/>
-          <line x1="12" y1="1"  x2="12" y2="3"/>
-          <line x1="12" y1="21" x2="12" y2="23"/>
-          <line x1="4.22"  y1="4.22"  x2="5.64"  y2="5.64"/>
-          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-          <line x1="1"  y1="12" x2="3"  y2="12"/>
-          <line x1="21" y1="12" x2="23" y2="12"/>
-          <line x1="4.22"  y1="19.78" x2="5.64"  y2="18.36"/>
-          <line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"/>
+          <line x1="12" y1="1"  x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22"  y1="4.22"  x2="5.64"  y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1"  y1="12" x2="3"  y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22"  y1="19.78" x2="5.64"  y2="18.36"/><line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"/>
         </svg>
       </button>
 
-      <div class="pv-nav-av" aria-hidden="true">
-        <?php if (!empty($profile['profile_photo'])): ?>
-          <img src="<?= htmlspecialchars($profile['profile_photo']) ?>" alt="Profile photo" style="width:34px;height:34px;min-width:34px;min-height:34px;max-width:34px;max-height:34px;object-fit:cover;border-radius:99px;display:block;">
-        <?php else: ?>
-          <span><?= $initials ?></span>
-        <?php endif; ?>
+      <!-- Profile dropdown trigger -->
+      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0"
+           aria-haspopup="true" aria-expanded="false">
+        <div class="pv-nav-av">
+          <?php if ($profilePhoto): ?>
+            <img src="<?= htmlspecialchars($profilePhoto) ?>" alt="<?= $bizName ?>">
+          <?php else: ?>
+            <?= $initials ?>
+          <?php endif; ?>
+        </div>
+        <div class="pv-nav-user">
+  <div class="pv-nav-user-name"><?= $firstName ?></div>
+</div>
+        <svg class="pv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
       </div>
-      <div class="pv-nav-user">
-        <div class="pv-nav-user-name"><?= $providerName ?></div>
-        <div class="pv-nav-user-role">Provider</div>
-      </div>
-      <!-- Sign out icon button -->
-      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout-icon" title="Sign out" aria-label="Sign out">
-        <i class="fa-solid fa-arrow-right-from-bracket"></i>
-      </a>
-    </div>
 
+      <!-- Profile dropdown panel -->
+      <div class="pv-profile-dropdown" id="profileDropdown" role="menu">
+        <div class="pv-pd-header">
+          <div class="pv-pd-avatar">
+            <?php if ($profilePhoto): ?>
+              <img src="<?= htmlspecialchars($profilePhoto) ?>" alt="<?= $bizName ?>">
+            <?php else: ?>
+              <?= $initials ?>
+            <?php endif; ?>
+          </div>
+          <div class="pv-pd-info">
+            <div class="pv-pd-name"><?= $bizName ?></div>
+            <div class="pv-pd-email"><?= $email ?></div>
+            <span class="pv-pd-role">Provider</span>
+          </div>
+        </div>
+        <div class="pv-pd-divider"></div>
+        <a href="<?= BASE_URL ?>provider/profile" class="pv-pd-item" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-store"></i></span>
+          <span>Business Profile</span>
+          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </a>
+        <a href="<?= BASE_URL ?>provider/settings" class="pv-pd-item" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-gear"></i></span>
+          <span>Settings</span>
+          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </a>
+        <div class="pv-pd-divider"></div>
+        <a href="<?= BASE_URL ?>auth/logout" class="pv-pd-item pv-pd-item--danger" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-arrow-right-from-bracket"></i></span>
+          <span>Sign Out</span>
+        </a>
+      </div>
+
+    </div>
   </div>
 </nav>
 
 <!-- ══════════════════════════════════════
-     HERO
+     HERO BANNER
 ══════════════════════════════════════ -->
 <header class="pv-hero" role="banner">
   <div class="pv-hero-overlay" aria-hidden="true"></div>
-
   <div class="pv-hero-inner">
-    <div class="pv-hero-text">
+    <div>
       <p class="pv-hero-eyebrow">
         <span class="pv-dot-pulse" aria-hidden="true"></span>
         <?= $greeting ?>
       </p>
-      <h1 class="pv-hero-name"><?= $providerName ?></h1>
-      <p class="pv-hero-date"><?= date('l, F j, Y') ?></p>
+      <h1 class="pv-hero-name"><?= $bizName ?></h1>
+      <p class="pv-hero-sub"><?= $bizCategory ?> · <?= date('l, F j, Y') ?></p>
       <div class="pv-hero-meta">
         <span class="pv-status-badge">
           <span class="pv-status-dot" aria-hidden="true"></span>
-          Active &amp; Accepting
+          Active Business
         </span>
-        <?php if ($avgRating > 0): ?>
-        <span class="pv-status-badge" style="background:var(--gold-soft);border-color:var(--gold-border);color:var(--gold-bright);">
-          ★ <?= $avgRating ?> rating
-        </span>
-        <?php endif; ?>
+        <span class="pv-tier-badge">⭐ <?= number_format($avgRating, 1) ?> Rating</span>
       </div>
     </div>
-
-    <?php if ($pendingBookings > 0): ?>
-    <a href="<?= BASE_URL ?>provider/bookings?status=pending" class="pv-pending-chip">
-      <span class="pv-pending-dot" aria-hidden="true"></span>
-      <?= $pendingBookings ?> booking<?= $pendingBookings > 1 ? 's' : '' ?> need your confirmation
-      <span aria-hidden="true">→</span>
-    </a>
-    <?php endif; ?>
+    <div class="pv-hero-right">
+      <?php if ($pendingCount > 0): ?>
+      <a href="<?= BASE_URL ?>provider/appointments?status=pending" class="pv-hero-chip">
+        <span class="pv-hero-chip-dot" aria-hidden="true"></span>
+        <?= $pendingCount ?> pending request<?= $pendingCount > 1 ? 's' : '' ?>
+        <span aria-hidden="true">→</span>
+      </a>
+      <?php endif; ?>
+      <a href="<?= BASE_URL ?>provider/appointments?date=today" class="pv-hero-chip">
+        <i class="fa-regular fa-calendar-check" style="font-size:.75rem"></i>
+        <?= count($todaySlots) ?> today
+      </a>
+    </div>
   </div>
 
-  <!-- STAT STRIP -->
-  <div class="pv-hero-stats" role="region" aria-label="Key metrics">
-    <div class="pv-hs-item">
-      <span class="pv-hs-val">₱<?= number_format($totalRevenue, 0) ?></span>
-      <span class="pv-hs-label">Total Revenue</span>
-      <?php if ($revDelta !== null): ?>
-      <span class="pv-hs-change <?= $revDeltaPos ? '' : 'neg' ?>">
-        <?= $revDeltaPos ? '↑' : '↓' ?> <?= abs($revDelta) ?>% vs last month
-      </span>
-      <?php endif; ?>
-    </div>
-    <div class="pv-hs-div" aria-hidden="true"></div>
-
+  <!-- Stats strip -->
+  <div class="pv-hero-stats" role="region" aria-label="Business quick stats">
     <div class="pv-hs-item">
       <span class="pv-hs-val"><?= $totalBookings ?></span>
-      <span class="pv-hs-label">All Bookings</span>
+      <span class="pv-hs-label">Total Bookings</span>
     </div>
     <div class="pv-hs-div" aria-hidden="true"></div>
-
     <div class="pv-hs-item">
-      <span class="pv-hs-val accent"><?= $pendingBookings ?></span>
+      <span class="pv-hs-val accent"><?= $pendingCount ?></span>
       <span class="pv-hs-label">Pending</span>
     </div>
     <div class="pv-hs-div" aria-hidden="true"></div>
-
     <div class="pv-hs-item">
-      <span class="pv-hs-val green"><?= $completedBookings ?></span>
-      <span class="pv-hs-label">Completed</span>
+      <span class="pv-hs-val green"><?= fmtMoney($totalEarnings) ?></span>
+      <span class="pv-hs-label">Total Earnings</span>
     </div>
     <div class="pv-hs-div" aria-hidden="true"></div>
-
     <div class="pv-hs-item">
-      <span class="pv-hs-val"><?= $totalServices ?></span>
-      <span class="pv-hs-label">Active Services</span>
+      <span class="pv-hs-val accent"><?= fmtMoney($monthEarnings) ?></span>
+      <span class="pv-hs-label">This Month</span>
     </div>
     <div class="pv-hs-div" aria-hidden="true"></div>
-
     <div class="pv-hs-item">
-      <?php $cancelRate = $totalBookings > 0 ? round($cancelledBookings / $totalBookings * 100) : 0; ?>
-      <span class="pv-hs-val <?= $cancelRate > 25 ? 'accent' : '' ?>"><?= $cancelRate ?>%</span>
-      <span class="pv-hs-label">Cancellation Rate</span>
+      <span class="pv-hs-val yellow"><?= number_format($avgRating, 1) ?></span>
+      <span class="pv-hs-label">Avg Rating</span>
+    </div>
+    <div class="pv-hs-div" aria-hidden="true"></div>
+    <div class="pv-hs-item">
+      <span class="pv-hs-val blue"><?= number_format($uniqueCustomers) ?></span>
+      <span class="pv-hs-label">Customers Served</span>
     </div>
   </div>
 </header>
@@ -322,452 +380,518 @@ $initials = strtoupper(substr($providerName, 0, 2));
      MAIN CONTENT
 ══════════════════════════════════════ -->
 <main class="pv-page" role="main">
+
+  <!-- KPI Cards — Row 1 -->
+  <div class="pv-kpi-row">
+    <div class="pv-kpi pv-kpi--gold">
+      <div class="pv-kpi-ico"><i class="fa-solid fa-calendar-check"></i></div>
+      <div class="pv-kpi-val"><?= $totalBookings ?></div>
+      <div class="pv-kpi-label">Total Bookings</div>
+      <div class="pv-kpi-sub"><?= $monthBookings ?> this month</div>
+    </div>
+    <div class="pv-kpi pv-kpi--green">
+      <div class="pv-kpi-ico"><i class="fa-solid fa-peso-sign"></i></div>
+      <div class="pv-kpi-val"><?= fmtMoney($totalEarnings) ?></div>
+      <div class="pv-kpi-label">Total Earnings</div>
+      <div class="pv-kpi-sub"><?= fmtMoney($monthEarnings) ?> this month</div>
+    </div>
+    <div class="pv-kpi pv-kpi--yellow">
+      <div class="pv-kpi-ico"><i class="fa-solid fa-star"></i></div>
+      <div class="pv-kpi-val"><?= number_format($avgRating, 1) ?></div>
+      <div class="pv-kpi-label">Customer Rating</div>
+      <div class="pv-kpi-sub"><?= number_format($reviewCount) ?> review<?= $reviewCount !== 1 ? 's' : '' ?></div>
+    </div>
+    <div class="pv-kpi pv-kpi--blue">
+      <div class="pv-kpi-ico"><i class="fa-solid fa-users"></i></div>
+      <div class="pv-kpi-val"><?= number_format($uniqueCustomers) ?></div>
+      <div class="pv-kpi-label">Customers Served</div>
+      <div class="pv-kpi-sub"><?= $completedCount ?> completed</div>
+    </div>
+  </div>
+
   <div class="pv-layout">
 
-    <!-- ── LEFT COLUMN ── -->
+    <!-- ── MAIN column ── -->
     <div class="pv-main">
 
-      <!-- Revenue Trend (full width) -->
-        <div class="pv-card">
-          <div class="pv-card-head">
-            <h2>Revenue Trend</h2>
-            <span class="pv-card-sub">Last 6 months · completed bookings</span>
+      <!-- Row 2 — Earnings Chart -->
+      <div class="pv-card pv-card--trend">
+        <div class="pv-trend-head">
+          <div class="pv-trend-meta">
+            <span class="pv-trend-eyebrow">LAST 6 MONTHS</span>
+            <h2 class="pv-trend-title">Earnings Overview</h2>
           </div>
-          <div class="pv-linechart-area">
-            <?php if (empty($revTrend)): ?>
-              <p class="pv-chart-empty">No revenue data yet — complete your first booking to see trends.</p>
-            <?php else: ?>
-            <canvas id="revChart" aria-label="Revenue line chart"></canvas>
-            <script>
-            (function(){
-              var labels  = <?= json_encode(array_column($revTrend, 'month')) ?>;
-              var data    = <?= json_encode(array_map(fn($r) => (float)$r['revenue'], $revTrend)) ?>;
-              var currentIdx = <?= array_search($currentYM, array_column($revTrend, 'ym')) !== false ? array_search($currentYM, array_column($revTrend, 'ym')) : -1 ?>;
-              var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-              var gold   = '#C9A84C';
-              var gridC  = isDark ? 'rgba(255,255,255,.10)' : 'rgba(201,168,76,.18)';
-              var textC  = isDark ? 'rgba(237,227,204,.85)' : 'rgba(28,23,16,.75)';
-
-              function buildChart() {
-                var ctx = document.getElementById('revChart').getContext('2d');
-                var gradient = ctx.createLinearGradient(0, 0, 0, 300);
-                gradient.addColorStop(0,   'rgba(201,168,76,.30)');
-                gradient.addColorStop(0.6, 'rgba(201,168,76,.08)');
-                gradient.addColorStop(1,   'rgba(201,168,76,0)');
-
-                var pointColors = data.map(function(_, i) {
-                  return i === currentIdx ? '#C9A84C' : 'transparent';
-                });
-                var pointBorder = data.map(function(_, i) {
-                  return i === currentIdx ? '#fff' : 'transparent';
-                });
-                var pointRadius = data.map(function(_, i) {
-                  return i === currentIdx ? 5 : 3;
-                });
-
-                window._revChart = new Chart(ctx, {
-                  type: 'line',
-                  data: {
-                    labels: labels,
-                    datasets: [{
-                      data: data,
-                      borderColor: gold,
-                      borderWidth: 2.2,
-                      backgroundColor: gradient,
-                      fill: true,
-                      tension: 0.45,
-                      pointBackgroundColor: pointColors,
-                      pointBorderColor: pointBorder,
-                      pointBorderWidth: 2,
-                      pointRadius: pointRadius,
-                      pointHoverRadius: 6,
-                      pointHoverBackgroundColor: gold,
-                      pointHoverBorderColor: '#fff',
-                      pointHoverBorderWidth: 2,
-                    }]
-                  },
-                  options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: {
-                      legend: { display: false },
-                      tooltip: {
-                        backgroundColor: isDark ? 'rgba(20,16,8,.95)' : 'rgba(255,252,245,.97)',
-                        borderColor: 'rgba(201,168,76,.35)',
-                        borderWidth: 1,
-                        titleColor: isDark ? '#e2d5a0' : '#1C1710',
-                        bodyColor:  isDark ? 'rgba(237,227,204,.65)' : 'rgba(28,23,16,.60)',
-                        padding: 10,
-                        titleFont: { family: "'DM Mono', monospace", size: 11, weight: '500' },
-                        bodyFont:  { family: "'DM Mono', monospace", size: 12, weight: '600' },
-                        callbacks: {
-                          label: function(ctx) {
-                            return ' ₱' + Number(ctx.raw).toLocaleString('en-PH', {minimumFractionDigits:0});
-                          }
-                        }
-                      }
-                    },
-                    scales: {
-                      x: {
-                        grid: { color: gridC, drawBorder: false },
-                        ticks: { color: textC, font: { family: "'DM Mono', monospace", size: 11 } },
-                        border: { display: false }
-                      },
-                      y: {
-                        grid: { color: gridC, drawBorder: false },
-                        ticks: {
-                          color: textC,
-                          font: { family: "'DM Mono', monospace", size: 11 },
-                          callback: function(v) { return v >= 1000 ? '₱' + (v/1000).toFixed(1) + 'k' : '₱' + v; }
-                        },
-                        border: { display: false }
-                      }
-                    }
-                  }
-                });
-              }
-
-              if (window.Chart) {
-                buildChart();
-              } else {
-                var s = document.createElement('script');
-                s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
-                s.onload = buildChart;
-                document.head.appendChild(s);
-              }
-            })();
-            </script>
-            <?php endif; ?>
+          <div class="pv-trend-right">
+            <div class="pv-tabs">
+              <span class="pv-tab active">6M</span>
+              <span class="pv-tab">1Y</span>
+              <span class="pv-tab">All</span>
+            </div>
           </div>
         </div>
+        <div class="pv-trend-canvas-wrap">
+          <canvas id="earningsChart"></canvas>
+        </div>
+      </div>
 
-
-
-      <!-- Recent Bookings Table -->
-      <div class="pv-card">
+      <!-- Row 3 — Upcoming Appointments -->
+      <div class="pv-card pv-card--table">
         <div class="pv-card-head">
-          <h2>Recent Bookings</h2>
-          <a href="<?= BASE_URL ?>provider/bookings" class="pv-link">View all →</a>
+          <h2>Upcoming Appointments</h2>
+          <a href="<?= BASE_URL ?>provider/appointments" class="pv-link">View all →</a>
         </div>
-
-        <div class="pv-table-wrap">
-          <table class="pv-table" aria-label="Recent booking records">
+        <?php if (empty($upcomingApts)): ?>
+        <div class="pv-empty-state">
+          <div class="pv-empty-icon" aria-hidden="true">📭</div>
+          <p>No upcoming appointments yet.</p>
+          <a href="<?= BASE_URL ?>provider/services" class="pv-empty-cta">Manage Services →</a>
+        </div>
+        <?php else: ?>
+        <div class="pv-apt-table-wrap">
+          <table class="pv-apt-table">
             <thead>
               <tr>
-                <th scope="col">ID</th>
-                <th scope="col">Customer</th>
-                <th scope="col">Service</th>
-                <th scope="col">Date</th>
-                <th scope="col">Amount</th>
-                <th scope="col">Status</th>
+                <th>Customer</th>
+                <th>Service</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Price</th>
+                <th>Status</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              <?php if (empty($recentBookings)): ?>
+              <?php foreach ($upcomingApts as $a): ?>
               <tr>
-                <td colspan="6" class="pv-empty">
-                  No bookings yet — share your profile to get your first client!
-                </td>
-              </tr>
-              <?php else: foreach ($recentBookings as $b): ?>
-              <tr>
-                <td class="pv-table-id">#<?= $b['id'] ?></td>
                 <td>
-                  <div class="pv-cust">
-                    <div class="pv-cust-av" aria-hidden="true">
-                      <?php if (!empty($b['avatar_url'])): ?>
-                        <img src="<?= htmlspecialchars($b['avatar_url']) ?>"
-                             alt="<?= htmlspecialchars($b['first_name'] . ' ' . $b['last_name']) ?>">
+                  <div class="pv-apt-customer">
+                    <div class="pv-apt-av">
+                      <?php if (!empty($a['customer_avatar'])): ?>
+                        <img src="<?= htmlspecialchars($a['customer_avatar']) ?>" alt="<?= htmlspecialchars($a['customer_name']) ?>">
                       <?php else: ?>
-                        <?= strtoupper(substr($b['first_name'], 0, 1) . substr($b['last_name'], 0, 1)) ?>
+                        <?= strtoupper(substr($a['customer_name'], 0, 2)) ?>
                       <?php endif; ?>
                     </div>
-                    <span class="pv-cust-name">
-                      <?= htmlspecialchars($b['first_name'] . ' ' . $b['last_name']) ?>
-                    </span>
+                    <div>
+                      <div class="pv-apt-name"><?= htmlspecialchars($a['customer_name']) ?></div>
+                    </div>
                   </div>
                 </td>
-                <td class="pv-trunc" title="<?= htmlspecialchars($b['service_name']) ?>">
-                  <?= htmlspecialchars($b['service_name']) ?>
-                </td>
-                <td class="mono muted"><?= date('M d, Y', strtotime($b['booking_date'])) ?></td>
-                <td class="pv-amount">₱<?= number_format($b['total_amount'], 2) ?></td>
                 <td>
-                  <span class="pv-pill pv-pill--<?= $b['status'] ?>">
-                    <?= ucfirst(str_replace('_', ' ', $b['status'])) ?>
+                  <div class="pv-apt-name" style="font-size:.82rem"><?= htmlspecialchars($a['service_name']) ?></div>
+                  <?php if (!empty($a['duration_minutes'])): ?>
+                    <div class="pv-apt-service"><?= (int)$a['duration_minutes'] ?> min</div>
+                  <?php endif; ?>
+                </td>
+                <td class="pv-apt-date"><?= date('M d, Y', strtotime($a['booking_date'])) ?></td>
+                <td class="pv-apt-time">
+                  <?= !empty($a['booking_time']) ? date('g:i A', strtotime($a['booking_time'])) : '—' ?>
+                </td>
+                <td class="pv-apt-price">₱<?= number_format((float)$a['total_amount'], 2) ?></td>
+                <td>
+                  <span class="pv-badge pv-badge--<?= $a['status'] ?>">
+                    <?= ucfirst($a['status']) ?>
                   </span>
                 </td>
+                <td>
+                  <div class="pv-apt-actions">
+                    <?php if ($a['status'] === 'pending'): ?>
+                      <button class="pv-btn-accept"
+                              onclick="location.href='<?= BASE_URL ?>provider/appointments/accept/<?= (int)$a['id'] ?>'">
+                        Accept
+                      </button>
+                      <button class="pv-btn-decline"
+                              onclick="location.href='<?= BASE_URL ?>provider/appointments/decline/<?= (int)$a['id'] ?>'">
+                        Decline
+                      </button>
+                    <?php endif; ?>
+                    <a href="<?= BASE_URL ?>provider/appointments/<?= (int)$a['id'] ?>" class="pv-btn-view">
+                      Details
+                    </a>
+                  </div>
+                </td>
               </tr>
-              <?php endforeach; endif; ?>
+              <?php endforeach; ?>
             </tbody>
           </table>
         </div>
-      </div>
-
-
-      <!-- Customer Reviews -->
-      <?php if ($totalReviews > 0): ?>
-      <div class="pv-card pv-reviews-card">
-
-        <!-- Card header -->
-        <div class="pv-card-head">
-          <h2>Customer Reviews</h2>
-        </div>
-
-        <!-- Summary row: big score left + bar chart right -->
-        <div class="pv-cr-summary">
-
-          <!-- Left: big score -->
-          <div class="pv-cr-score-col">
-            <div class="pv-cr-big"><?= $avgRating ?></div>
-            <div class="pv-cr-stars">
-              <?php
-              $full = floor($avgRating);
-              $half = ($avgRating - $full) >= 0.5;
-              for ($i = 1; $i <= 5; $i++):
-                if ($i <= $full): ?>
-                  <span class="star filled">★</span>
-                <?php elseif ($i === $full + 1 && $half): ?>
-                  <span class="star half">½</span>
-                <?php else: ?>
-                  <span class="star empty">☆</span>
-                <?php endif;
-              endfor; ?>
-            </div>
-            <div class="pv-cr-count"><?= $totalReviews ?> rating<?= $totalReviews !== 1 ? 's' : '' ?></div>
-          </div>
-
-          <!-- Right: star breakdown bars -->
-          <div class="pv-cr-bars">
-            <?php for ($star = 5; $star >= 1; $star--):
-              $cnt = $ratingDist[$star] ?? 0;
-              $pct = $totalReviews > 0 ? round($cnt / $totalReviews * 100) : 0;
-            ?>
-            <div class="pv-cr-bar-row">
-              <span class="pv-cr-bar-star">★ <?= $star ?></span>
-              <div class="pv-cr-bar-track">
-                <div class="pv-cr-bar-fill" style="width:<?= max($pct, $cnt > 0 ? 3 : 0) ?>%"></div>
-              </div>
-              <span class="pv-cr-bar-n"><?= $cnt ?></span>
-            </div>
-            <?php endfor; ?>
-          </div>
-
-        </div><!-- /pv-cr-summary -->
-
-        <!-- Reviews list -->
-        <?php if (!empty($recentReviews)): ?>
-        <div class="pv-cr-list">
-          <?php foreach ($recentReviews as $rv):
-            $rvName   = htmlspecialchars($rv['reviewer_name'] ?? 'Anonymous');
-            $rvInit   = strtoupper(substr(strip_tags($rvName), 0, 2));
-            $rvDate   = !empty($rv['created_at']) ? date('M j, Y', strtotime($rv['created_at'])) : '';
-            $rvRate   = (int)$rv['rating'];
-            $isYou    = isset($rv['reviewer_id']) && $rv['reviewer_id'] == ($currentUserId ?? null);
-          ?>
-          <div class="pv-cr-review">
-            <div class="pv-cr-av">
-              <?php if (!empty($rv['profile_photo'])): ?>
-                <img src="<?= htmlspecialchars($rv['profile_photo']) ?>"
-                     alt="<?= $rvName ?>" loading="lazy">
-              <?php else: ?>
-                <?= $rvInit ?>
-              <?php endif; ?>
-            </div>
-            <div class="pv-cr-content">
-              <div class="pv-cr-top">
-                <div class="pv-cr-name-row">
-                  <span class="pv-cr-name"><?= $rvName ?></span>
-                  <?php if ($isYou): ?>
-                  <span class="pv-cr-you">You</span>
-                  <?php endif; ?>
-                  <span class="pv-cr-rstars">
-                    <?php for ($s=1;$s<=5;$s++): ?>
-                      <span class="<?= $s<=$rvRate ? 'star filled' : 'star empty' ?>"><?= $s<=$rvRate ? "★" : "☆" ?></span>
-                    <?php endfor; ?>
-                  </span>
-                </div>
-                <span class="pv-cr-date"><?= $rvDate ?></span>
-              </div>
-              <?php if (!empty($rv['comment'])): ?>
-              <p class="pv-cr-comment"><?= htmlspecialchars($rv['comment']) ?></p>
-              <?php endif; ?>
-            </div>
-          </div>
-          <?php endforeach; ?>
-        </div>
         <?php endif; ?>
-
       </div>
-      <?php endif; ?>
-
 
     </div><!-- /pv-main -->
 
-    <!-- ── SIDEBAR ── -->
-    <aside class="pv-sidebar" aria-label="Sidebar">
-
-      <!-- Booking Status -->
-      <div class="pv-card">
-        <div class="pv-card-head">
-          <h2>Booking Status</h2>
-          <a href="<?= BASE_URL ?>provider/bookings" class="pv-link">View all →</a>
-        </div>
-        <div class="pv-breakdown">
-          <?php
-          $bsMeta = [
-            'pending'     => ['Pending',     '#C9A84C'],
-            'confirmed'   => ['Confirmed',   '#22C55E'],
-            'in_progress' => ['In Progress', '#818CF8'],
-            'completed'   => ['Completed',   '#38BDF8'],
-            'cancelled'   => ['Cancelled',   '#F43F5E'],
-          ];
-          $total = max(1, $totalBookings);
-          foreach ($bsMeta as $key => [$label, $color]):
-            $count = $statusCounts[$key] ?? 0;
-            $pct   = round($count / $total * 100);
-          ?>
-          <div class="pv-bd-row">
-            <div class="pv-bd-left">
-              <span class="pv-bd-dot" style="background:<?= $color ?>" aria-hidden="true"></span>
-              <span class="pv-bd-lbl"><?= $label ?></span>
-            </div>
-            <div class="pv-bd-track" role="progressbar" aria-valuenow="<?= $pct ?>" aria-valuemin="0" aria-valuemax="100">
-              <div class="pv-bd-fill" style="width:<?= max($pct, 1) ?>%;background:<?= $color ?>"></div>
-            </div>
-            <span class="pv-bd-n"><?= $count ?></span>
-          </div>
-          <?php endforeach; ?>
-        </div>
-      </div>
-
+    <!-- ── SIDEBAR column ── -->
+    <aside class="pv-sidebar" aria-label="Provider sidebar">
 
       <!-- Quick Actions -->
       <div class="pv-card">
         <div class="pv-card-head"><h2>Quick Actions</h2></div>
         <div class="pv-actions">
-
-          <a href="<?= BASE_URL ?>provider/bookings?status=pending" class="pv-action is-primary">
-            <span class="pv-action-ico" aria-hidden="true">
-              <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
-                <circle cx="10" cy="10" r="8.5" stroke="currentColor" stroke-width="1.5"/>
-                <path d="M10 6v4.5l2.5 2.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </span>
+          <a href="<?= BASE_URL ?>provider/services/create" class="pv-action">
+            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-plus"></i></span>
             <div class="pv-action-txt">
-              <strong>Pending Bookings</strong>
-              <span>Review &amp; confirm</span>
+              <strong>Add Service</strong>
+              <span>Create a new offering</span>
             </div>
-            <?php if ($pendingBookings): ?>
-            <span class="pv-action-badge" aria-label="<?= $pendingBookings ?> pending">
-              <?= $pendingBookings ?>
-            </span>
-            <?php endif; ?>
           </a>
-
-          <a href="<?= BASE_URL ?>provider/services" class="pv-action">
-            <span class="pv-action-ico" aria-hidden="true">
-              <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
-                <path d="M3 5h14M3 10h14M3 15h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-                <circle cx="15.5" cy="15" r="2.5" stroke="currentColor" stroke-width="1.4"/>
-              </svg>
-            </span>
-            <div class="pv-action-txt"><strong>My Services</strong><span>Manage listings</span></div>
+          <a href="<?= BASE_URL ?>provider/portfolio/upload" class="pv-action">
+            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-images"></i></span>
+            <div class="pv-action-txt"><strong>Upload Portfolio</strong><span>Showcase your work</span></div>
           </a>
-
-          <a href="<?= BASE_URL ?>provider/availability" class="pv-action">
-            <span class="pv-action-ico" aria-hidden="true">
-              <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
-                <rect x="2.5" y="4" width="15" height="13.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
-                <path d="M2.5 8.5h15M6.5 2.5v3M13.5 2.5v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
-            </span>
-            <div class="pv-action-txt"><strong>Availability</strong><span>Set your schedule</span></div>
+          <a href="<?= BASE_URL ?>provider/schedule" class="pv-action">
+            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-clock"></i></span>
+            <div class="pv-action-txt"><strong>Update Schedule</strong><span>Set availability</span></div>
           </a>
-
           <a href="<?= BASE_URL ?>provider/profile" class="pv-action">
-            <span class="pv-action-ico" aria-hidden="true">
-              <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
-                <circle cx="10" cy="7" r="3.5" stroke="currentColor" stroke-width="1.5"/>
-                <path d="M3 17c0-3.314 3.134-6 7-6s7 2.686 7 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
-            </span>
-            <div class="pv-action-txt"><strong>My Profile</strong><span>Edit information</span></div>
+            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-store"></i></span>
+            <div class="pv-action-txt"><strong>View Profile</strong><span>See public listing</span></div>
           </a>
-
         </div>
       </div>
 
-      <!-- Today's Snapshot -->
+      <!-- Portfolio Insights -->
       <div class="pv-card">
-        <div class="pv-card-head"><h2>Today's Snapshot</h2></div>
-        <div class="pv-snap">
-          <div class="pv-snap-item">
-            <div>
-              <strong><?= $todayBookings ?></strong>
-              <span>New booking<?= $todayBookings !== 1 ? 's' : '' ?></span>
+        <div class="pv-card-head">
+          <h2>Portfolio</h2>
+          <a href="<?= BASE_URL ?>provider/portfolio" class="pv-link">Manage →</a>
+        </div>
+        <div class="pv-portfolio-body">
+          <div class="pv-portfolio-grid">
+            <?php for ($i = 0; $i < 6; $i++):
+              $item = $portfolioItems[$i] ?? null; ?>
+            <div class="pv-port-thumb">
+              <?php if ($item && !empty($item['image_url'])): ?>
+                <img src="<?= htmlspecialchars($item['image_url']) ?>"
+                     alt="<?= htmlspecialchars($item['caption'] ?? 'Portfolio') ?>">
+                <div class="pv-port-overlay">
+                  <i class="fa-solid fa-expand pv-port-overlay-ico"></i>
+                </div>
+              <?php else: ?>
+                <div class="pv-port-thumb-empty" aria-hidden="true">📷</div>
+              <?php endif; ?>
             </div>
-            <?php if ($todayBookings > 0): ?>
-            <span class="pv-snap-trend">+<?= $todayBookings ?></span>
-            <?php endif; ?>
+            <?php endfor; ?>
           </div>
-          <div class="pv-snap-item">
-            <div>
-              <strong><?= $confirmedBookings ?></strong>
-              <span>Confirmed</span>
+          <div class="pv-port-stats">
+            <div class="pv-port-stat">
+              <div class="pv-port-stat-val"><?= $totalPortfolio ?></div>
+              <div class="pv-port-stat-label">Uploads</div>
+            </div>
+            <div class="pv-port-stat">
+              <div class="pv-port-stat-val"><?= $reviewCount ?></div>
+              <div class="pv-port-stat-label">Reviews</div>
+            </div>
+            <div class="pv-port-stat">
+              <div class="pv-port-stat-val"><?= $uniqueCustomers ?></div>
+              <div class="pv-port-stat-label">Clients</div>
             </div>
           </div>
-          <div class="pv-snap-item">
+          <button class="pv-port-upload-btn"
+                  onclick="location.href='<?= BASE_URL ?>provider/portfolio/upload'">
+            <i class="fa-solid fa-cloud-arrow-up"></i>
+            Upload New Work
+          </button>
+        </div>
+      </div>
+
+      <!-- Schedule Status -->
+      <div class="pv-card">
+        <div class="pv-card-head">
+          <h2>Today's Schedule</h2>
+          <a href="<?= BASE_URL ?>provider/schedule" class="pv-link">Manage →</a>
+        </div>
+        <div class="pv-schedule-body">
+          <div class="pv-schedule-status <?= empty($todaySlots) ? 'is-closed' : '' ?>">
+            <span class="pv-sched-label">
+              <?= empty($todaySlots) ? 'No Bookings Today' : 'Open Today' ?>
+            </span>
+            <button class="pv-sched-toggle">Edit</button>
+          </div>
+          <?php if (!empty($todaySlots)): ?>
+          <p class="pv-schedule-next">
+            <?= count($todaySlots) ?> appointment<?= count($todaySlots) > 1 ? 's' : '' ?> scheduled
+          </p>
+          <div class="pv-schedule-slots">
+            <?php foreach ($todaySlots as $slot): ?>
+            <div class="pv-slot-item">
+              <span class="pv-slot-time">
+                <?= !empty($slot['booking_time']) ? date('g:i A', strtotime($slot['booking_time'])) : 'TBD' ?>
+              </span>
+              <span class="pv-slot-avail"><?= htmlspecialchars($slot['customer_name']) ?></span>
+              <span class="pv-slot-dot <?= $slot['status'] === 'confirmed' ? '' : 'is-booked' ?>"></span>
+            </div>
+            <?php endforeach; ?>
+          </div>
+          <?php else: ?>
+          <p class="pv-schedule-next" style="text-align:center;padding:.5rem 0;opacity:.55">
+            No appointments for today.
+          </p>
+          <?php endif; ?>
+        </div>
+      </div>
+
+      <!-- Customer Ratings -->
+      <div class="pv-card">
+        <div class="pv-card-head">
+          <h2>Customer Ratings</h2>
+          <a href="<?= BASE_URL ?>provider/reviews" class="pv-link">All reviews →</a>
+        </div>
+        <div class="pv-rating-body">
+          <div class="pv-rating-score">
+            <div class="pv-rating-big"><?= number_format($avgRating, 1) ?></div>
             <div>
-              <strong><?= $completedBookings ?></strong>
-              <span>Completed</span>
+              <div class="pv-rating-stars">
+                <?php for ($s = 1; $s <= 5; $s++):
+                  $fill = starFill($avgRating, $s);
+                ?>
+                  <span class="pv-star <?= $fill === 'empty' ? 'half' : '' ?>" aria-hidden="true">
+                    <?= $fill === 'full' ? '★' : ($fill === 'half' ? '½' : '☆') ?>
+                  </span>
+                <?php endfor; ?>
+              </div>
+              <span class="pv-rating-count"><?= $reviewCount ?> review<?= $reviewCount !== 1 ? 's' : '' ?></span>
             </div>
           </div>
-          <div class="pv-snap-item">
-            <div>
-              <strong><?= $cancelledBookings ?></strong>
-              <span>Cancelled</span>
+          <div class="pv-rating-bars">
+            <?php for ($r = 5; $r >= 1; $r--):
+              $cnt = $ratingBreakdown[$r] ?? 0;
+              $pct = $reviewCount > 0 ? round($cnt / $reviewCount * 100) : 0;
+            ?>
+            <div class="pv-rating-row">
+              <span class="pv-rating-row-label"><?= $r ?></span>
+              <div class="pv-rating-bar-bg">
+                <div class="pv-rating-bar-fill" style="width:<?= $pct ?>%"></div>
+              </div>
+              <span class="pv-rating-row-pct"><?= $pct ?>%</span>
             </div>
+            <?php endfor; ?>
           </div>
         </div>
       </div>
 
     </aside>
 
-  </div>
+  </div><!-- /pv-layout -->
+
 </main>
 
-<script>
-  /* ── Theme toggle ── */
-  (function () {
-    const html   = document.documentElement;
-    const btn    = document.getElementById('themeToggle');
-    const moon   = btn ? btn.querySelector('.icon-moon') : null;
-    const sun    = btn ? btn.querySelector('.icon-sun')  : null;
+<!-- ══════════════════════════════════════
+     SCRIPTS
+══════════════════════════════════════ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 
-    function applyTheme(t) {
-      if (t === 'dark') {
-        html.setAttribute('data-theme', 'dark');
-        if (moon) moon.style.display = 'block';
-        if (sun)  sun.style.display  = 'none';
-      } else {
-        html.removeAttribute('data-theme');
-        if (moon) moon.style.display = 'none';
-        if (sun)  sun.style.display  = 'block';
+<script>
+/* ── THEME TOGGLE ── */
+(function () {
+  var btn  = document.getElementById('themeToggle');
+  var moon = document.querySelector('.icon-moon');
+  var sun  = document.querySelector('.icon-sun');
+
+  function applyTheme(theme) {
+    if (theme === 'light') {
+      document.documentElement.removeAttribute('data-theme');
+      if (moon) moon.style.display = 'none';
+      if (sun)  sun.style.display  = 'block';
+    } else {
+      document.documentElement.setAttribute('data-theme','dark');
+      if (moon) moon.style.display = 'block';
+      if (sun)  sun.style.display  = 'none';
+    }
+  }
+
+  var saved = localStorage.getItem('qb-theme') || 'light';
+  applyTheme(saved);
+
+  if (btn) {
+    btn.addEventListener('click', function () {
+      var current = document.documentElement.getAttribute('data-theme');
+      var next = current === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('qb-theme', next);
+      applyTheme(next);
+      if (chart) {
+        setTimeout(function() {
+          var g = buildGradients();
+          var c = getColors();
+          chart.data.datasets[0].backgroundColor = g.gradGold;
+          chart.data.datasets[0].borderColor      = c.borderColor;
+          chart.data.datasets[1].backgroundColor  = g.gradWarm;
+          chart.options.scales.x.grid.color       = c.gridColor;
+          chart.options.scales.x.ticks.color      = c.xTickColor;
+          chart.options.scales.y.grid.color       = c.gridColor;
+          chart.options.scales.y.ticks.color      = c.yTickColor;
+          chart.update();
+        }, 50);
+      }
+    });
+  }
+})();
+</script>
+
+<script>
+/* ── EARNINGS CHART ── */
+(function () {
+  var labels   = <?= json_encode(array_values($chartLabels)) ?>;
+  var earnings = <?= json_encode(array_values($chartEarnings)) ?>;
+
+  var ctx = document.getElementById('earningsChart');
+  if (!ctx) return;
+  var chart2d = ctx.getContext('2d');
+  var hoveredIdx = null;
+
+  var isDark = function() { return document.documentElement.getAttribute('data-theme') === 'dark'; };
+
+  window.buildGradients = function() {
+    var dark = isDark();
+    var gradGold = chart2d.createLinearGradient(0,0,0,220);
+    if (dark) {
+      gradGold.addColorStop(0,   'rgba(201,168,76,0.55)');
+      gradGold.addColorStop(0.55,'rgba(201,168,76,0.22)');
+      gradGold.addColorStop(1,   'rgba(201,168,76,0.00)');
+    } else {
+      gradGold.addColorStop(0,   'rgba(201,168,76,0.38)');
+      gradGold.addColorStop(0.55,'rgba(201,168,76,0.16)');
+      gradGold.addColorStop(1,   'rgba(201,168,76,0.00)');
+    }
+    var gradWarm = chart2d.createLinearGradient(0,0,0,220);
+    if (dark) {
+      gradWarm.addColorStop(0,   'rgba(139,110,32,0.30)');
+      gradWarm.addColorStop(0.6, 'rgba(139,110,32,0.10)');
+      gradWarm.addColorStop(1,   'rgba(139,110,32,0.00)');
+    } else {
+      gradWarm.addColorStop(0,   'rgba(232,201,106,0.20)');
+      gradWarm.addColorStop(0.6, 'rgba(232,201,106,0.08)');
+      gradWarm.addColorStop(1,   'rgba(232,201,106,0.00)');
+    }
+    return { gradGold: gradGold, gradWarm: gradWarm };
+  };
+
+  window.getColors = function() {
+    var dark = isDark();
+    return {
+      borderColor: dark ? '#C9A84C' : '#8B6E20',
+      xTickColor:  dark ? 'rgba(237,227,204,0.35)' : 'rgba(28,23,16,0.40)',
+      yTickColor:  dark ? 'rgba(237,227,204,0.30)' : 'rgba(28,23,16,0.38)',
+      gridColor:   dark ? 'rgba(201,168,76,0.08)'  : 'rgba(201,168,76,0.10)',
+    };
+  };
+
+  var hoverPlugin = {
+    id: 'hoverDotTooltip',
+    afterDraw: function(c) {
+      if (hoveredIdx === null) return;
+      var ctx2 = c.ctx, scales = c.scales, chartArea = c.chartArea;
+      var i = hoveredIdx, x = scales.x.getPixelForValue(i), y = scales.y.getPixelForValue(earnings[i]);
+      var label = labels[i] || '', raw = earnings[i] || 0;
+
+      ctx2.save();
+      ctx2.beginPath(); ctx2.setLineDash([4,4]);
+      ctx2.strokeStyle = 'rgba(201,168,76,0.50)'; ctx2.lineWidth = 1.5;
+      ctx2.moveTo(x, chartArea.top); ctx2.lineTo(x, chartArea.bottom); ctx2.stroke();
+      ctx2.setLineDash([]);
+
+      ctx2.beginPath(); ctx2.arc(x,y,7,0,Math.PI*2);
+      ctx2.fillStyle = '#1C1710'; ctx2.fill();
+      ctx2.beginPath(); ctx2.arc(x,y,4,0,Math.PI*2);
+      ctx2.fillStyle = '#E8C96A'; ctx2.fill();
+
+      var sym = '₱ ', num = Number(raw).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});
+      ctx2.font = "500 10px 'DM Mono', monospace";
+      var labelW = ctx2.measureText(label).width;
+      ctx2.font = "700 11px 'DM Mono', monospace";
+      var symW = ctx2.measureText(sym).width, numW = ctx2.measureText(num).width;
+      var amountW = symW + numW, padX = 10, padY = 6;
+      var pw = Math.max(labelW, amountW) + padX*2, ph = 40, rx = 8;
+      var px = Math.max(chartArea.left, Math.min(x - pw/2, chartArea.right - pw));
+      var py = Math.max(chartArea.top+4, y - ph - 20);
+      var dark = isDark();
+
+      ctx2.beginPath(); ctx2.roundRect(px,py,pw,ph,rx);
+      ctx2.fillStyle = dark ? '#1E2535' : '#FFFFFF';
+      ctx2.shadowColor = 'rgba(0,0,0,0.18)'; ctx2.shadowBlur = 16; ctx2.shadowOffsetY = 5;
+      ctx2.fill(); ctx2.shadowBlur = 0; ctx2.shadowOffsetY = 0;
+      ctx2.beginPath(); ctx2.roundRect(px,py,pw,ph,rx);
+      ctx2.strokeStyle = 'rgba(201,168,76,0.45)'; ctx2.lineWidth = 1; ctx2.stroke();
+
+      ctx2.font = "500 10px 'DM Mono', monospace";
+      ctx2.fillStyle = dark ? 'rgba(237,227,204,0.45)' : 'rgba(28,23,16,0.45)';
+      ctx2.textAlign = 'center'; ctx2.textBaseline = 'middle';
+      ctx2.fillText(label.toUpperCase(), px+pw/2, py+11);
+      ctx2.beginPath(); ctx2.moveTo(px+8,py+20); ctx2.lineTo(px+pw-8,py+20);
+      ctx2.strokeStyle = 'rgba(201,168,76,0.20)'; ctx2.lineWidth = 1; ctx2.stroke();
+      var startX = px+pw/2-amountW/2;
+      ctx2.textAlign = 'left'; ctx2.textBaseline = 'middle';
+      ctx2.font = "700 11px 'DM Mono', monospace";
+      ctx2.fillStyle = '#A88A38'; ctx2.fillText(sym, startX, py+31);
+      ctx2.fillStyle = dark ? '#EDE3CC' : '#1C1710'; ctx2.fillText(num, startX+symW, py+31);
+      ctx2.restore();
+    }
+  };
+
+  var g = buildGradients(), c = getColors();
+  window.chart = new Chart(ctx, {
+    type: 'line',
+    plugins: [hoverPlugin],
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Earnings (₱)', data: earnings,
+          borderColor: c.borderColor, backgroundColor: g.gradGold,
+          borderWidth: 2.5, tension: 0.48, fill: true, pointRadius: 0, pointHoverRadius: 0, order: 1,
+        },
+        {
+          label: '_bg',
+          data: earnings.map(function(v,i){ var shift=Math.sin((i/(Math.max(earnings.length-1,1)))*Math.PI*1.5)*Math.max.apply(null,earnings.concat([1]))*0.18; return Math.max(0,v-shift); }),
+          borderColor: 'transparent', backgroundColor: g.gradWarm,
+          borderWidth: 0, tension: 0.48, fill: true, pointRadius: 0, pointHoverRadius: 0, order: 2,
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: {
+        x: { grid: { color: c.gridColor, lineWidth: 1, drawBorder: false }, ticks: { color: c.xTickColor, font: { family:"'DM Mono',monospace", size: 10, weight: '500' }, maxRotation: 0 }, border: { display: false } },
+        y: { min: 0, ticks: { color: c.yTickColor, font: { family:"'DM Mono',monospace", size: 10 }, callback: function(v){ return v; }, maxTicksLimit: 8 }, grid: { color: c.gridColor, lineWidth: 1, drawBorder: false }, border: { display: false } }
       }
     }
+  });
 
-    applyTheme(localStorage.getItem('qb-theme') || 'light');
+  ctx.addEventListener('mousemove', function(e) {
+    var rect = ctx.getBoundingClientRect(), mouseX = e.clientX - rect.left;
+    var xScale = window.chart.scales.x, closest = null, minDist = Infinity;
+    labels.forEach(function(_,i) { var px = xScale.getPixelForValue(i), dist = Math.abs(mouseX-px); if (dist<minDist){ minDist=dist; closest=i; } });
+    if (hoveredIdx !== closest) { hoveredIdx = closest; window.chart.draw(); }
+  });
+  ctx.addEventListener('mouseleave', function() { hoveredIdx = null; window.chart.draw(); });
 
-    if (btn) {
-      btn.addEventListener('click', () => {
-        const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-        localStorage.setItem('qb-theme', next);
-        applyTheme(next);
-      });
-    }
-  })();
+  document.querySelectorAll('.pv-tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      tab.closest('.pv-tabs').querySelectorAll('.pv-tab').forEach(function(t){ t.classList.remove('active'); });
+      tab.classList.add('active');
+    });
+  });
+})();
 </script>
+
+<script>
+/* ── PROFILE DROPDOWN ── */
+(function () {
+  var trigger  = document.getElementById('profileTrigger');
+  var dropdown = document.getElementById('profileDropdown');
+  if (!trigger || !dropdown) return;
+
+  function open()   { trigger.classList.add('is-open'); dropdown.classList.add('is-open'); trigger.setAttribute('aria-expanded','true'); }
+  function close()  { trigger.classList.remove('is-open'); dropdown.classList.remove('is-open'); trigger.setAttribute('aria-expanded','false'); }
+  function toggle() { dropdown.classList.contains('is-open') ? close() : open(); }
+
+  trigger.addEventListener('click', function(e){ e.stopPropagation(); toggle(); });
+  trigger.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); toggle(); } if(e.key==='Escape') close(); });
+  document.addEventListener('click', function(e){ if(!dropdown.contains(e.target)&&!trigger.contains(e.target)) close(); });
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') close(); });
+})();
+</script>
+
 </body>
 </html>
