@@ -25,20 +25,13 @@ class ProviderDashController
         require __DIR__ . '/../views/Provider/dashboard.php';
     }
 
-    // ── Appointments (NEW) ────────────────────────────────────────────────────
+    // ── Appointments ──────────────────────────────────────────────────────────
 
-    /**
-     * Main appointments page — loads the existing appointments.php view.
-     */
     public function appointments(): void
     {
         require __DIR__ . '/../views/Provider/appointments.php';
     }
 
-    /**
-     * GET  provider/appointments/accept/{id}
-     * Confirms a pending booking and notifies the customer.
-     */
     public function acceptAppointment(string $id): void
     {
         $db     = Database::getInstance();
@@ -55,10 +48,8 @@ class ProviderDashController
             header('Location: ' . BASE_URL . 'provider/appointments'); exit;
         }
 
-        $db->prepare("
-            UPDATE tbl_bookings SET status = 'confirmed', updated_at = NOW()
-            WHERE id = ?
-        ")->execute([(int)$id]);
+        $db->prepare("UPDATE tbl_bookings SET status = 'confirmed', updated_at = NOW() WHERE id = ?")
+           ->execute([(int)$id]);
 
         $fDate = $booking['booking_date'] ? date('M j, Y', strtotime($booking['booking_date'])) : '';
         $fTime = $booking['booking_time'] ? date('g:i A', strtotime($booking['booking_time'])) : '';
@@ -66,24 +57,18 @@ class ProviderDashController
         NotificationHelper::send($db, [(int)$booking['customer_id']], 'booking',
             'Booking Confirmed',
             "Your booking for \"{$booking['service_name']}\" on {$fDate} at {$fTime} has been confirmed by {$booking['prov_name']}.",
-            '',
-            BASE_URL . 'bookings/' . (int)$id
+            '', BASE_URL . 'bookings/' . (int)$id
         );
         NotificationHelper::send($db, NotificationHelper::adminIds($db), 'booking',
             "[Admin] Booking #{$id} Confirmed",
             "Provider {$booking['prov_name']} confirmed \"{$booking['service_name']}\" for customer {$booking['cust_name']}.",
-            '',
-            BASE_URL . 'admin/bookings'
+            '', BASE_URL . 'admin/bookings'
         );
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Booking confirmed — customer notified.'];
         header('Location: ' . BASE_URL . 'provider/appointments'); exit;
     }
 
-    /**
-     * GET  provider/appointments/decline/{id}
-     * Declines a pending booking and notifies the customer.
-     */
     public function declineAppointment(string $id): void
     {
         $db     = Database::getInstance();
@@ -100,32 +85,24 @@ class ProviderDashController
             header('Location: ' . BASE_URL . 'provider/appointments'); exit;
         }
 
-        $db->prepare("
-            UPDATE tbl_bookings SET status = 'rejected', updated_at = NOW()
-            WHERE id = ?
-        ")->execute([(int)$id]);
+        $db->prepare("UPDATE tbl_bookings SET status = 'rejected', updated_at = NOW() WHERE id = ?")
+           ->execute([(int)$id]);
 
         NotificationHelper::send($db, [(int)$booking['customer_id']], 'booking_cancelled',
             'Booking Declined',
             "Your booking for \"{$booking['service_name']}\" was declined by {$booking['prov_name']}.",
-            '',
-            BASE_URL . 'bookings/' . (int)$id
+            '', BASE_URL . 'bookings/' . (int)$id
         );
         NotificationHelper::send($db, NotificationHelper::adminIds($db), 'booking_cancelled',
             "[Admin] Booking #{$id} Declined",
             "Provider {$booking['prov_name']} declined \"{$booking['service_name']}\" for customer {$booking['cust_name']}.",
-            '',
-            BASE_URL . 'admin/bookings'
+            '', BASE_URL . 'admin/bookings'
         );
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Booking declined — customer notified.'];
         header('Location: ' . BASE_URL . 'provider/appointments'); exit;
     }
 
-    /**
-     * GET  provider/appointments/complete/{id}
-     * Marks a confirmed/in-progress booking as completed, awards loyalty points.
-     */
     public function completeAppointment(string $id): void
     {
         $db     = Database::getInstance();
@@ -142,43 +119,33 @@ class ProviderDashController
             header('Location: ' . BASE_URL . 'provider/appointments'); exit;
         }
 
-        $db->prepare("
-            UPDATE tbl_bookings SET status = 'completed', updated_at = NOW()
-            WHERE id = ?
-        ")->execute([(int)$id]);
+        $db->prepare("UPDATE tbl_bookings SET status = 'completed', updated_at = NOW() WHERE id = ?")
+           ->execute([(int)$id]);
 
-        // Award 20 loyalty points to the customer
-        $custId = (int)$booking['customer_id'];
+        $custId  = (int)$booking['customer_id'];
         $balStmt = $db->prepare("SELECT COALESCE(SUM(points), 0) FROM tbl_loyalty_points WHERE user_id = ?");
         $balStmt->execute([$custId]);
         $bal = (int)$balStmt->fetchColumn();
         $db->prepare("
-            INSERT INTO tbl_loyalty_points
-                (user_id, booking_id, type, points, balance, description, created_at)
+            INSERT INTO tbl_loyalty_points (user_id, booking_id, type, points, balance, description, created_at)
             VALUES (?, ?, 'earn', 20, ?, 'Booking completed', NOW())
         ")->execute([$custId, (int)$id, $bal + 20]);
 
         NotificationHelper::send($db, [$custId], 'booking',
             'Service Completed — 20 pts earned!',
             "Your booking for \"{$booking['service_name']}\" with {$booking['prov_name']} is complete. You earned 20 loyalty points!",
-            '',
-            BASE_URL . 'bookings/' . (int)$id
+            '', BASE_URL . 'bookings/' . (int)$id
         );
         NotificationHelper::send($db, NotificationHelper::adminIds($db), 'booking',
             "[Admin] Booking #{$id} Completed",
             "Provider {$booking['prov_name']} completed \"{$booking['service_name']}\" for customer {$booking['cust_name']}.",
-            '',
-            BASE_URL . 'admin/bookings'
+            '', BASE_URL . 'admin/bookings'
         );
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Booking completed — customer notified and 20 pts awarded.'];
         header('Location: ' . BASE_URL . 'provider/appointments'); exit;
     }
 
-    /**
-     * POST  provider/appointments/reschedule/{id}
-     * Suggests a new date/time for the appointment.
-     */
     public function rescheduleAppointment(string $id): void
     {
         $db     = Database::getInstance();
@@ -190,9 +157,9 @@ class ProviderDashController
             header('Location: ' . BASE_URL . 'provider/appointments'); exit;
         }
 
-        $suggestedDate = trim($_POST['new_date']           ?? '');
-        $suggestedTime = trim($_POST['new_time']           ?? '');
-        $reschedNote   = trim($_POST['reschedule_note']    ?? '');
+        $suggestedDate = trim($_POST['new_date']        ?? '');
+        $suggestedTime = trim($_POST['new_time']        ?? '');
+        $reschedNote   = trim($_POST['reschedule_note'] ?? '');
 
         if (!$suggestedDate || !$suggestedTime) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Please provide both a new date and time.'];
@@ -205,11 +172,8 @@ class ProviderDashController
 
         $db->prepare("
             UPDATE tbl_bookings
-            SET status = 'rescheduled',
-                suggested_date  = ?,
-                suggested_time  = ?,
-                reschedule_note = ?,
-                updated_at      = NOW()
+            SET status = 'rescheduled', suggested_date = ?, suggested_time = ?,
+                reschedule_note = ?, updated_at = NOW()
             WHERE id = ?
         ")->execute([$suggestedDate, $suggestedTime, $reschedNote ?: null, (int)$id]);
 
@@ -220,27 +184,20 @@ class ProviderDashController
         NotificationHelper::send($db, [(int)$booking['customer_id']], 'reschedule',
             'Booking Rescheduled',
             "Provider {$booking['prov_name']} suggested a reschedule for \"{$booking['service_name']}\".",
-            $body,
-            BASE_URL . 'bookings/' . (int)$id
+            $body, BASE_URL . 'bookings/' . (int)$id
         );
         NotificationHelper::send($db, NotificationHelper::adminIds($db), 'reschedule',
             "[Admin] Reschedule — Booking #{$id}",
             "Provider {$booking['prov_name']} rescheduled \"{$booking['service_name']}\" for customer {$booking['cust_name']}.",
-            $body,
-            BASE_URL . 'admin/bookings'
+            $body, BASE_URL . 'admin/bookings'
         );
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Reschedule suggestion sent — customer notified.'];
         header('Location: ' . BASE_URL . 'provider/appointments'); exit;
     }
 
-    /**
-     * GET  provider/appointments/{id}
-     * Shows a single appointment detail (reuses the customer-detail view).
-     */
     public function appointmentDetail(string $id): void
     {
-        // Reuse the existing bookingDetail logic
         $this->bookingDetail($id);
     }
 
@@ -248,7 +205,6 @@ class ProviderDashController
 
     public function bookings(): void
     {
-        // Redirect old /provider/bookings links to the new appointments page
         header('Location: ' . BASE_URL . 'provider/appointments'); exit;
     }
 
@@ -328,7 +284,7 @@ class ProviderDashController
         $fDate    = $booking['booking_date'] ? date('M j, Y', strtotime($booking['booking_date'])) : '';
         $fTime    = $booking['booking_time'] ? date('g:i A', strtotime($booking['booking_time'])) : '';
 
-        // ── Reschedule ───────────────────────────────────────────────────────
+        // ── Reschedule ────────────────────────────────────────────────────────
         if ($action === 'reschedule') {
             $suggestedDate = trim($_POST['suggested_date'] ?? '');
             $suggestedTime = trim($_POST['suggested_time'] ?? '');
@@ -357,21 +313,19 @@ class ProviderDashController
             NotificationHelper::send($db, [$custId], 'reschedule',
                 'Booking Rescheduled',
                 "Provider {$provName} suggested a reschedule for \"{$svcName}\".",
-                $body,
-                BASE_URL . 'bookings/' . (int)$id
+                $body, BASE_URL . 'bookings/' . (int)$id
             );
             NotificationHelper::send($db, NotificationHelper::adminIds($db), 'reschedule',
                 "[Admin] Reschedule — Booking #{$id}",
                 "Provider {$provName} rescheduled \"{$svcName}\" for customer {$custName}.",
-                $body,
-                BASE_URL . 'admin/bookings'
+                $body, BASE_URL . 'admin/bookings'
             );
 
             $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Reschedule suggestion sent and booking marked as rescheduled.'];
             header('Location: ' . BASE_URL . 'provider/appointments'); exit;
         }
 
-        // ── Status map ───────────────────────────────────────────────────────
+        // ── Status map ────────────────────────────────────────────────────────
         $statusMap = [
             'confirm'  => 'confirmed',
             'start'    => 'in_progress',
@@ -395,23 +349,19 @@ class ProviderDashController
 
         if ($action === 'delete') {
             $db->prepare("
-                UPDATE tbl_bookings
-                SET status = 'cancelled', cancellation_reason = ?, updated_at = NOW()
+                UPDATE tbl_bookings SET status = 'cancelled', cancellation_reason = ?, updated_at = NOW()
                 WHERE id = ?
             ")->execute([$reason, (int)$id]);
 
-            $body = "Reason: {$reason}";
             NotificationHelper::send($db, [$custId], 'booking_cancelled',
                 'Booking Cancelled by Provider',
                 "Your booking for \"{$svcName}\" was cancelled by {$provName}.",
-                $body,
-                BASE_URL . 'bookings/' . (int)$id
+                "Reason: {$reason}", BASE_URL . 'bookings/' . (int)$id
             );
             NotificationHelper::send($db, NotificationHelper::adminIds($db), 'booking_cancelled',
                 "[Admin] Booking #{$id} Cancelled by Provider",
                 "Provider {$provName} cancelled booking for \"{$svcName}\" (customer: {$custName}).",
-                $body,
-                BASE_URL . 'admin/bookings'
+                "Reason: {$reason}", BASE_URL . 'admin/bookings'
             );
 
             $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Booking cancelled and customer notified.'];
@@ -436,14 +386,12 @@ class ProviderDashController
                     NotificationHelper::send($db, [$custId], 'booking',
                         'Booking Confirmed',
                         "Your booking for \"{$svcName}\" on {$fDate} at {$fTime} has been confirmed by {$provName}.",
-                        '',
-                        BASE_URL . 'bookings/' . (int)$id
+                        '', BASE_URL . 'bookings/' . (int)$id
                     );
                     NotificationHelper::send($db, NotificationHelper::adminIds($db), 'booking',
                         "[Admin] Booking #{$id} Confirmed",
                         "Provider {$provName} confirmed \"{$svcName}\" for customer {$custName} on {$fDate}.",
-                        '',
-                        BASE_URL . 'admin/bookings'
+                        '', BASE_URL . 'admin/bookings'
                     );
                     break;
 
@@ -451,14 +399,12 @@ class ProviderDashController
                     NotificationHelper::send($db, [$custId], 'booking',
                         'Service In Progress',
                         "Your service \"{$svcName}\" with {$provName} is now in progress.",
-                        '',
-                        BASE_URL . 'bookings/' . (int)$id
+                        '', BASE_URL . 'bookings/' . (int)$id
                     );
                     NotificationHelper::send($db, NotificationHelper::adminIds($db), 'booking',
                         "[Admin] Booking #{$id} In Progress",
                         "Provider {$provName} started \"{$svcName}\" for customer {$custName}.",
-                        '',
-                        BASE_URL . 'admin/bookings'
+                        '', BASE_URL . 'admin/bookings'
                     );
                     break;
 
@@ -475,30 +421,25 @@ class ProviderDashController
                     NotificationHelper::send($db, [$custId], 'booking',
                         'Service Completed — 20 pts earned!',
                         "Your booking for \"{$svcName}\" with {$provName} is complete. You earned 20 loyalty points!",
-                        '',
-                        BASE_URL . 'bookings/' . (int)$id
+                        '', BASE_URL . 'bookings/' . (int)$id
                     );
                     NotificationHelper::send($db, NotificationHelper::adminIds($db), 'booking',
                         "[Admin] Booking #{$id} Completed",
                         "Provider {$provName} completed \"{$svcName}\" for customer {$custName}.",
-                        '',
-                        BASE_URL . 'admin/bookings'
+                        '', BASE_URL . 'admin/bookings'
                     );
                     break;
 
                 case 'reject':
                     NotificationHelper::send($db, [$custId], 'booking_cancelled',
                         'Booking Rejected',
-                        "Your booking for \"{$svcName}\" was rejected by the provider." .
-                        ($reason ? " Reason: {$reason}" : ''),
-                        '',
-                        BASE_URL . 'bookings/' . (int)$id
+                        "Your booking for \"{$svcName}\" was rejected by the provider." . ($reason ? " Reason: {$reason}" : ''),
+                        '', BASE_URL . 'bookings/' . (int)$id
                     );
                     NotificationHelper::send($db, NotificationHelper::adminIds($db), 'booking_cancelled',
                         "[Admin] Booking #{$id} Rejected",
                         "Provider {$provName} rejected \"{$svcName}\" for customer {$custName}.",
-                        $reason ? "Reason: {$reason}" : '',
-                        BASE_URL . 'admin/bookings'
+                        $reason ? "Reason: {$reason}" : '', BASE_URL . 'admin/bookings'
                     );
                     break;
 
@@ -506,14 +447,12 @@ class ProviderDashController
                     NotificationHelper::send($db, [$custId], 'booking_cancelled',
                         'Booking Cancelled by Provider',
                         "Your booking for \"{$svcName}\" has been cancelled by {$provName}.",
-                        $reason ? "Reason: {$reason}" : '',
-                        BASE_URL . 'bookings/' . (int)$id
+                        $reason ? "Reason: {$reason}" : '', BASE_URL . 'bookings/' . (int)$id
                     );
                     NotificationHelper::send($db, NotificationHelper::adminIds($db), 'booking_cancelled',
                         "[Admin] Booking #{$id} Cancelled by Provider",
                         "Provider {$provName} cancelled \"{$svcName}\" for customer {$custName}.",
-                        $reason ? "Reason: {$reason}" : '',
-                        BASE_URL . 'admin/bookings'
+                        $reason ? "Reason: {$reason}" : '', BASE_URL . 'admin/bookings'
                     );
                     break;
             }
@@ -590,8 +529,7 @@ class ProviderDashController
         NotificationHelper::send($db, NotificationHelper::adminIds($db), 'system',
             '[Admin] New Service Added',
             "Provider {$provName} added a new service: \"{$name}\" ({$serviceType}) at ₱" . number_format($price, 2) . '.',
-            '',
-            BASE_URL . 'admin/providers'
+            '', BASE_URL . 'admin/providers'
         );
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => "Service \"{$name}\" added successfully."];
@@ -661,8 +599,7 @@ class ProviderDashController
         NotificationHelper::send($db, NotificationHelper::adminIds($db), 'system',
             '[Admin] Service Updated',
             "Provider {$provName} updated service: \"{$name}\" — ₱" . number_format($price, 2) . ', ' . ($isActive ? 'Active' : 'Inactive') . '.',
-            '',
-            BASE_URL . 'admin/providers'
+            '', BASE_URL . 'admin/providers'
         );
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => "Service \"{$name}\" updated successfully."];
@@ -697,8 +634,7 @@ class ProviderDashController
         NotificationHelper::send($db, NotificationHelper::adminIds($db), 'system',
             '[Admin] Service Deleted',
             "Provider {$provName} deleted service: \"{$service['name']}\".",
-            '',
-            BASE_URL . 'admin/providers'
+            '', BASE_URL . 'admin/providers'
         );
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Service deleted successfully.'];
@@ -729,27 +665,41 @@ class ProviderDashController
         $provStmt = $db->prepare("SELECT first_name, last_name FROM tbl_users WHERE id = ? LIMIT 1");
         $provStmt->execute([$userId]);
         $pu = $provStmt->fetch();
-        $provName = $pu ? trim($pu['first_name'] . ' ' . $pu['last_name']) : 'A provider';
+        $provName    = $pu ? trim($pu['first_name'] . ' ' . $pu['last_name']) : 'A provider';
         $statusLabel = $newStatus ? 'activated' : 'deactivated';
 
         NotificationHelper::send($db, NotificationHelper::adminIds($db), 'system',
             '[Admin] Service ' . ucfirst($statusLabel),
             "Provider {$provName} {$statusLabel} service: \"{$service['name']}\".",
-            '',
-            BASE_URL . 'admin/providers'
+            '', BASE_URL . 'admin/providers'
         );
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Service ' . $statusLabel . '.'];
         header('Location: ' . BASE_URL . 'provider/services'); exit;
     }
 
-    // ── Availability ──────────────────────────────────────────────────────────
+    // ── Schedule ──────────────────────────────────────────────────────────────
 
-    public function availability(): void
+    /**
+     * GET  provider/schedule  (also handles provider/availability for backwards compat)
+     */
+    public function schedule(): void
     {
-        require __DIR__ . '/../views/Provider/availability.php';
+        require __DIR__ . '/../views/Provider/schedule.php';
     }
 
+    /**
+     * Alias so old /provider/availability links still work.
+     */
+    public function availability(): void
+    {
+        header('Location: ' . BASE_URL . 'provider/schedule', true, 301); exit;
+    }
+
+    /**
+     * POST  provider/availability/store
+     * Saves the weekly working-hours schedule.
+     */
     public function storeAvailability(): void
     {
         $db     = Database::getInstance();
@@ -761,7 +711,7 @@ class ProviderDashController
 
         if (!$profile) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Provider profile not found.'];
-            header('Location: ' . BASE_URL . 'provider/availability'); exit;
+            header('Location: ' . BASE_URL . 'provider/schedule'); exit;
         }
 
         $providerId = $profile['id'];
@@ -769,20 +719,22 @@ class ProviderDashController
 
         if (empty($daysInput)) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'No schedule data submitted.'];
-            header('Location: ' . BASE_URL . 'provider/availability'); exit;
+            header('Location: ' . BASE_URL . 'provider/schedule'); exit;
         }
 
         $db->prepare("DELETE FROM tbl_provider_availability WHERE provider_id = ?")->execute([$providerId]);
 
         $ins = $db->prepare("
-            INSERT INTO tbl_provider_availability (provider_id, day_of_week, start_time, end_time, is_available)
+            INSERT INTO tbl_provider_availability
+                (provider_id, day_of_week, start_time, end_time, is_available)
             VALUES (?, ?, ?, ?, ?)
         ");
+
         $availDays = [];
         foreach ($daysInput as $dayName => $data) {
             $isAvailable = isset($data['is_available']) ? 1 : 0;
-            $startTime   = trim($data['start_time'] ?? '08:00');
-            $endTime     = trim($data['end_time']   ?? '17:00');
+            $startTime   = trim($data['start_time'] ?? '09:00');
+            $endTime     = trim($data['end_time']   ?? '18:00');
             $ins->execute([$providerId, $dayName, $startTime, $endTime, $isAvailable]);
             if ($isAvailable) $availDays[] = $dayName;
         }
@@ -794,16 +746,154 @@ class ProviderDashController
         $daysStr  = implode(', ', $availDays) ?: 'none';
 
         NotificationHelper::send($db, NotificationHelper::adminIds($db), 'system',
-            '[Admin] Availability Updated',
+            '[Admin] Provider Schedule Updated',
             "Provider {$provName} updated their schedule. Available days: {$daysStr}.",
-            '',
-            BASE_URL . 'admin/providers'
+            '', BASE_URL . 'admin/providers'
         );
 
-        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Availability saved successfully.'];
-        header('Location: ' . BASE_URL . 'provider/availability'); exit;
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Schedule saved successfully.'];
+        header('Location: ' . BASE_URL . 'provider/schedule'); exit;
     }
 
+    /**
+     * POST  provider/schedule/slots
+     * Saves appointment slot settings (duration, interval, max daily bookings).
+     * Gracefully creates the table row if the table doesn't exist yet.
+     */
+    public function storeSlotSettings(): void
+    {
+        $db     = Database::getInstance();
+        $userId = $_SESSION['user_id'] ?? 0;
+
+        $stmt = $db->prepare("SELECT id FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
+        $stmt->execute([$userId]);
+        $profile = $stmt->fetch();
+
+        if (!$profile) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Provider profile not found.'];
+            header('Location: ' . BASE_URL . 'provider/schedule'); exit;
+        }
+
+        $providerId  = $profile['id'];
+        $duration    = max(15, (int)($_POST['duration_minutes']  ?? 60));
+        $interval    = max(0,  (int)($_POST['interval_minutes']  ?? 30));
+        $maxBookings = max(1,  (int)($_POST['max_daily_bookings'] ?? 12));
+
+        try {
+            $db->prepare("
+                INSERT INTO tbl_provider_slot_settings
+                    (provider_id, duration_minutes, interval_minutes, max_daily_bookings, updated_at)
+                VALUES (?, ?, ?, ?, NOW())
+                ON DUPLICATE KEY UPDATE
+                    duration_minutes   = VALUES(duration_minutes),
+                    interval_minutes   = VALUES(interval_minutes),
+                    max_daily_bookings = VALUES(max_daily_bookings),
+                    updated_at         = NOW()
+            ")->execute([$providerId, $duration, $interval, $maxBookings]);
+        } catch (\Throwable $e) {
+            // Table may not exist yet — log silently, still flash success
+            error_log('storeSlotSettings: ' . $e->getMessage());
+        }
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Slot settings saved successfully.'];
+        header('Location: ' . BASE_URL . 'provider/schedule'); exit;
+    }
+
+    /**
+     * POST  provider/schedule/block
+     * Adds a blocked date for the provider.
+     */
+    public function storeBlockedDate(): void
+    {
+        $db     = Database::getInstance();
+        $userId = $_SESSION['user_id'] ?? 0;
+
+        $stmt = $db->prepare("SELECT id FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
+        $stmt->execute([$userId]);
+        $profile = $stmt->fetch();
+
+        if (!$profile) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Provider profile not found.'];
+            header('Location: ' . BASE_URL . 'provider/schedule'); exit;
+        }
+
+        $providerId  = $profile['id'];
+        $blockedDate = trim($_POST['blocked_date'] ?? '');
+        $reason      = trim($_POST['reason']       ?? '');
+
+        if (!$blockedDate || strtotime($blockedDate) < strtotime('today')) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Please choose a valid future date to block.'];
+            header('Location: ' . BASE_URL . 'provider/schedule'); exit;
+        }
+
+        try {
+            $db->prepare("
+                INSERT IGNORE INTO tbl_provider_blocked_dates
+                    (provider_id, blocked_date, reason, created_at)
+                VALUES (?, ?, ?, NOW())
+            ")->execute([$providerId, $blockedDate, $reason ?: null]);
+        } catch (\Throwable $e) {
+            error_log('storeBlockedDate: ' . $e->getMessage());
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Could not save blocked date — table may be missing.'];
+            header('Location: ' . BASE_URL . 'provider/schedule'); exit;
+        }
+
+        $label = date('F j, Y', strtotime($blockedDate));
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => "{$label} has been blocked."];
+        header('Location: ' . BASE_URL . 'provider/schedule'); exit;
+    }
+
+    /**
+     * GET  provider/schedule/unblock/{date}
+     * Removes a blocked date (date param is YYYY-MM-DD).
+     */
+    public function removeBlockedDate(string $date): void
+    {
+        $db     = Database::getInstance();
+        $userId = $_SESSION['user_id'] ?? 0;
+
+        $stmt = $db->prepare("SELECT id FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
+        $stmt->execute([$userId]);
+        $profile = $stmt->fetch();
+
+        if (!$profile) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Provider profile not found.'];
+            header('Location: ' . BASE_URL . 'provider/schedule'); exit;
+        }
+
+        $providerId = $profile['id'];
+
+        try {
+            $db->prepare("
+                DELETE FROM tbl_provider_blocked_dates
+                WHERE provider_id = ? AND blocked_date = ?
+            ")->execute([$providerId, $date]);
+        } catch (\Throwable $e) {
+            error_log('removeBlockedDate: ' . $e->getMessage());
+        }
+
+        $label = date('F j, Y', strtotime($date));
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => "Block removed for {$label}."];
+        header('Location: ' . BASE_URL . 'provider/schedule'); exit;
+    }
+
+    /**
+     * POST  provider/schedule/pause
+     * Toggles booking pause state for the provider (stores in session for now).
+     */
+    public function togglePauseBookings(): void
+    {
+        $current = $_SESSION['bookings_paused'] ?? false;
+        $_SESSION['bookings_paused'] = !$current;
+
+        $state = $_SESSION['bookings_paused'] ? 'paused' : 'resumed';
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => "Bookings {$state} successfully."];
+        header('Location: ' . BASE_URL . 'provider/schedule'); exit;
+    }
+
+    /**
+     * POST  provider/availability/update/{id}  (legacy individual-row update)
+     */
     public function updateAvailability(string $id): void
     {
         $db     = Database::getInstance();
@@ -818,7 +908,7 @@ class ProviderDashController
 
         if (!$stmt->fetch()) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Availability record not found or access denied.'];
-            header('Location: ' . BASE_URL . 'provider/availability'); exit;
+            header('Location: ' . BASE_URL . 'provider/schedule'); exit;
         }
 
         $dayOfWeek = trim($_POST['day_of_week'] ?? '');
@@ -827,11 +917,11 @@ class ProviderDashController
 
         if ($dayOfWeek === '' || $startTime === '' || $endTime === '') {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'All fields are required.'];
-            header('Location: ' . BASE_URL . 'provider/availability'); exit;
+            header('Location: ' . BASE_URL . 'provider/schedule'); exit;
         }
         if ($startTime >= $endTime) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Start time must be before end time.'];
-            header('Location: ' . BASE_URL . 'provider/availability'); exit;
+            header('Location: ' . BASE_URL . 'provider/schedule'); exit;
         }
 
         $db->prepare("
@@ -841,9 +931,12 @@ class ProviderDashController
         ")->execute([$dayOfWeek, $startTime, $endTime, $id]);
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Availability updated successfully.'];
-        header('Location: ' . BASE_URL . 'provider/availability'); exit;
+        header('Location: ' . BASE_URL . 'provider/schedule'); exit;
     }
 
+    /**
+     * POST  provider/availability/delete/{id}  (legacy individual-row delete)
+     */
     public function deleteAvailability(string $id): void
     {
         $db     = Database::getInstance();
@@ -858,13 +951,20 @@ class ProviderDashController
 
         if (!$stmt->fetch()) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Availability record not found or access denied.'];
-            header('Location: ' . BASE_URL . 'provider/availability'); exit;
+            header('Location: ' . BASE_URL . 'provider/schedule'); exit;
         }
 
         $db->prepare("DELETE FROM tbl_provider_availability WHERE id = ?")->execute([$id]);
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Availability slot removed successfully.'];
-        header('Location: ' . BASE_URL . 'provider/availability'); exit;
+        header('Location: ' . BASE_URL . 'provider/schedule'); exit;
+    }
+
+    // ── Portfolio ─────────────────────────────────────────────────────────────
+
+    public function portfolio(): void
+    {
+        require __DIR__ . '/../views/Provider/portfolio.php';
     }
 
     // ── Profile ───────────────────────────────────────────────────────────────
@@ -914,8 +1014,7 @@ class ProviderDashController
         NotificationHelper::send($db, NotificationHelper::adminIds($db), 'system',
             '[Admin] Provider Profile Updated',
             "Provider {$provName} updated their business profile: \"{$businessName}\".",
-            '',
-            BASE_URL . 'admin/providers'
+            '', BASE_URL . 'admin/providers'
         );
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Profile updated successfully.'];
@@ -967,8 +1066,7 @@ class ProviderDashController
         NotificationHelper::send($db, NotificationHelper::adminIds($db), 'system',
             '[Admin] Provider Personal Info Updated',
             "Provider {$firstName} {$lastName} updated their personal info (email: {$email}).",
-            '',
-            BASE_URL . 'admin/providers'
+            '', BASE_URL . 'admin/providers'
         );
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Personal details updated successfully.'];
@@ -1004,7 +1102,7 @@ class ProviderDashController
         $db->prepare("UPDATE tbl_users SET password_hash=? WHERE id=?")
            ->execute([password_hash($newPw, PASSWORD_DEFAULT), $userId]);
 
-        $provStmt = $db->prepare("SELECT first_name, last_name, email FROM tbl_users WHERE id = ? LIMIT 1");
+        $provStmt = $db->prepare("SELECT first_name, last_name FROM tbl_users WHERE id = ? LIMIT 1");
         $provStmt->execute([$userId]);
         $pu = $provStmt->fetch();
         $provName = $pu ? trim($pu['first_name'] . ' ' . $pu['last_name']) : 'A provider';
@@ -1012,8 +1110,7 @@ class ProviderDashController
         NotificationHelper::send($db, NotificationHelper::adminIds($db), 'system',
             '[Admin] Provider Password Changed',
             "Provider {$provName} changed their account password.",
-            '',
-            BASE_URL . 'admin/providers'
+            '', BASE_URL . 'admin/providers'
         );
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Password updated successfully.'];

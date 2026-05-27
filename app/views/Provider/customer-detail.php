@@ -6,11 +6,14 @@ require_once __DIR__ . '/../../../config/database.php';
 $db     = Database::getInstance();
 $userId = (int)($_SESSION['user_id'] ?? 0);
 
-$navUser = $db->prepare("SELECT u.first_name, u.last_name, pp.profile_photo AS nav_photo FROM tbl_users u LEFT JOIN tbl_provider_profiles pp ON pp.user_id = u.id WHERE u.id = ?");
+$navUser = $db->prepare("SELECT u.first_name, u.last_name, u.email, pp.profile_photo AS nav_photo, pp.business_name FROM tbl_users u LEFT JOIN tbl_provider_profiles pp ON pp.user_id = u.id WHERE u.id = ?");
 $navUser->execute([$userId]);
-$navRow    = $navUser->fetch();
-$userName  = htmlspecialchars($navRow['first_name'] ?? '');
-$initials  = strtoupper(substr($navRow['first_name'] ?? 'P', 0, 1) . substr($navRow['last_name'] ?? 'R', 0, 1));
+$navRow       = $navUser->fetch();
+$firstName    = htmlspecialchars($navRow['first_name'] ?? 'Provider');
+$bizName      = htmlspecialchars($navRow['business_name'] ?? $firstName);
+$email        = htmlspecialchars($navRow['email'] ?? '');
+$profilePhoto = $navRow['nav_photo'] ?? null;
+$initials     = strtoupper(substr($bizName, 0, 2));
 
 $stPending = $db->prepare("SELECT COUNT(*) FROM tbl_bookings b JOIN tbl_provider_profiles pp ON pp.id = b.provider_id WHERE pp.user_id = ? AND b.status = 'pending'");
 $stPending->execute([$userId]);
@@ -89,8 +92,36 @@ $currentIdx  = array_search($status, $statusOrder);
     :root { --yellow:#fbbf24; --yellow-soft:rgba(251,191,36,.10); --yellow-border:rgba(251,191,36,.28); }
 
     .pv-nav { position:sticky;top:0;z-index:100; }
-    .pv-nav-logout-icon { width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--text-dim);border:1px solid transparent;font-size:1.25rem;transition:color .2s,background .2s,border-color .2s; }
-    .pv-nav-logout-icon:hover { color:var(--red);background:var(--red-soft);border-color:var(--red-border); }
+
+    /* Profile dropdown trigger */
+    .pv-profile-trigger { display:flex;align-items:center;gap:.65rem;padding:.3rem .55rem .3rem .3rem;border-radius:99px;border:1px solid transparent;cursor:pointer;position:relative;transition:background .2s,border-color .2s;user-select:none; }
+    .pv-profile-trigger:hover, .pv-profile-trigger.is-open { background:var(--surface-md);border-color:var(--gold-border); }
+    .pv-nav-av { width:34px;height:34px;border-radius:99px;background:linear-gradient(135deg,var(--gold-dim),var(--gold));color:#fff8e8;font-family:var(--font-display);font-weight:700;font-size:.72rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 0 2px var(--gold-border),0 2px 10px rgba(201,168,76,.25);overflow:hidden; }
+    .pv-nav-av img { width:100%;height:100%;object-fit:cover;border-radius:99px;display:block; }
+    .pv-nav-user { display:flex;flex-direction:column;line-height:1.2; }
+    .pv-nav-user-name { font-size:.82rem;font-weight:600;color:var(--text-primary);white-space:nowrap; }
+    .pv-profile-chevron { color:var(--text-dim);transition:transform .25s,color .2s;flex-shrink:0; }
+    .pv-profile-trigger.is-open .pv-profile-chevron { transform:rotate(180deg);color:var(--gold-dim); }
+    /* Dropdown panel */
+    .pv-profile-dropdown { position:absolute;top:calc(100% + 10px);right:0;width:260px;background:rgba(255,255,255,0.92);backdrop-filter:blur(28px) saturate(1.8);-webkit-backdrop-filter:blur(28px) saturate(1.8);border:1.5px solid rgba(255,255,255,0.80);border-radius:var(--r-xl);box-shadow:0 20px 60px rgba(139,110,60,.18),0 4px 16px rgba(139,110,60,.10);z-index:900;opacity:0;transform:translateY(-8px) scale(0.97);pointer-events:none;transition:opacity .22s,transform .22s;overflow:hidden; }
+    .pv-profile-dropdown.is-open { opacity:1;transform:translateY(0) scale(1);pointer-events:auto; }
+    .pv-pd-header { display:flex;align-items:center;gap:.85rem;padding:1.1rem 1.2rem 1rem;background:linear-gradient(135deg,#FBF6EC 0%,#F5EDDA 100%); }
+    .pv-pd-avatar { width:44px;height:44px;border-radius:99px;flex-shrink:0;background:linear-gradient(135deg,var(--gold-dim),var(--gold));color:#fff8e8;font-family:var(--font-display);font-weight:700;font-size:.88rem;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2.5px var(--gold-border),0 3px 12px rgba(201,168,76,.28);overflow:hidden; }
+    .pv-pd-avatar img { width:100%;height:100%;object-fit:cover;display:block;border-radius:99px; }
+    .pv-pd-info { min-width:0;flex:1; }
+    .pv-pd-name { font-family:var(--font-display);font-size:.9rem;font-weight:700;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    .pv-pd-email { font-family:var(--font-mono);font-size:.6rem;color:var(--text-muted);margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    .pv-pd-role { display:inline-block;margin-top:.3rem;font-family:var(--font-mono);font-size:.52rem;font-weight:500;letter-spacing:.08em;text-transform:uppercase;background:var(--gold-lt);color:var(--gold-dim);border:1px solid var(--gold-border);padding:.14rem .5rem;border-radius:99px; }
+    .pv-pd-divider { height:1px;background:linear-gradient(90deg,transparent,rgba(201,168,76,.25) 30%,rgba(201,168,76,.25) 70%,transparent); }
+    .pv-pd-item { display:flex;align-items:center;gap:.75rem;padding:.82rem 1.2rem;font-size:.84rem;font-weight:500;color:var(--text-primary);transition:background .15s,color .15s;cursor:pointer; }
+    .pv-pd-item:hover { background:rgba(201,168,76,.07);color:var(--gold-dim); }
+    .pv-pd-item--danger { color:var(--text-muted); }
+    .pv-pd-item--danger:hover { background:var(--red-soft);color:var(--red); }
+    .pv-pd-item-ico { width:30px;height:30px;border-radius:var(--r-sm);flex-shrink:0;background:linear-gradient(135deg,#FBF6EC,#F0E7CC);border:1px solid var(--gold-border);display:flex;align-items:center;justify-content:center;font-size:.8rem;color:var(--gold-dim); }
+    .pv-pd-item--danger .pv-pd-item-ico { background:var(--red-soft);border-color:var(--red-border);color:var(--red); }
+    .pv-pd-item-arrow { margin-left:auto;color:var(--text-dim);flex-shrink:0; }
+    [data-theme="dark"] .pv-profile-dropdown { background:rgba(20,16,8,0.95);border-color:rgba(201,168,76,.18); }
+    [data-theme="dark"] .pv-pd-header { background:linear-gradient(135deg,rgba(28,22,10,.95) 0%,rgba(20,16,8,.98) 100%); }
 
     .pv-hero { min-height:260px; }
     .pv-hero-inner { display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;padding-bottom:2rem; }
@@ -142,45 +173,112 @@ $currentIdx  = array_search($status, $statusOrder);
 
 <div class="grain" aria-hidden="true"></div>
 
-<!-- NAV -->
+<!-- ══════════════════════════════════════
+     NAVBAR
+══════════════════════════════════════ -->
 <nav class="pv-nav" role="navigation" aria-label="Provider navigation">
   <div class="pv-nav-inner">
-    <a href="<?= BASE_URL ?>provider/dashboard" class="pv-logo">
-      Quick<em>Book</em>
+
+    <!-- Logo -->
+    <a href="<?= BASE_URL ?>home" class="pv-logo">
+      <img src="<?= BASE_URL ?>assets/img/QB_LOGO.png" alt="QuickBook Logo"
+           style="width:42px;height:42px;object-fit:contain;display:block;flex-shrink:0;">
+      Quick<span>Book</span>
       <span class="pv-logo-badge">Provider</span>
     </a>
+
+    <!-- Centre nav links -->
     <div class="pv-nav-links">
       <a href="<?= BASE_URL ?>provider/dashboard"    class="pv-nav-link">Dashboard</a>
-      <a href="<?= BASE_URL ?>provider/bookings"     class="pv-nav-link is-active">
-        Bookings
+      <a href="<?= BASE_URL ?>provider/appointments" class="pv-nav-link is-active">
+        Appointments
         <?php if ($pendingCount): ?><sup class="pv-sup"><?= $pendingCount ?></sup><?php endif; ?>
       </a>
-      <a href="<?= BASE_URL ?>provider/services"     class="pv-nav-link">Services</a>
-      <a href="<?= BASE_URL ?>provider/availability" class="pv-nav-link">Availability</a>
-      <a href="<?= BASE_URL ?>provider/profile"      class="pv-nav-link">Profile</a>
+      <a href="<?= BASE_URL ?>provider/services"  class="pv-nav-link">Services</a>
+      <a href="<?= BASE_URL ?>provider/portfolio" class="pv-nav-link">Portfolio</a>
+      <a href="<?= BASE_URL ?>provider/schedule"  class="pv-nav-link">Schedule</a>
     </div>
+
+    <!-- Right-side controls -->
     <div class="pv-nav-end">
       <?php $notifUserId = (int)$userId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
 
-      <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">
-        <svg class="icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <!-- Theme toggle -->
+      <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode">
+        <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+        <svg class="icon-sun" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1"  x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22"  y1="4.22"  x2="5.64"  y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1"  y1="12" x2="3"  y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22"  y1="19.78" x2="5.64"  y2="18.36"/><line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"/>
+        </svg>
       </button>
 
-      <div class="pv-nav-av" aria-hidden="true">
-        <?php if (!empty($navRow['nav_photo'])): ?>
-          <img src="<?= htmlspecialchars($navRow['nav_photo']) ?>" alt="Profile photo" style="width:34px;height:34px;min-width:34px;min-height:34px;max-width:34px;max-height:34px;object-fit:cover;border-radius:99px;display:block;">
-        <?php else: ?>
-          <span><?= $initials ?></span>
-        <?php endif; ?>
+      <!-- Profile dropdown trigger -->
+      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0"
+           aria-haspopup="true" aria-expanded="false">
+        <div class="pv-nav-av">
+          <?php if ($profilePhoto): ?>
+            <img src="<?= htmlspecialchars($profilePhoto) ?>" alt="<?= $bizName ?>">
+          <?php else: ?>
+            <?= $initials ?>
+          <?php endif; ?>
+        </div>
+        <div class="pv-nav-user">
+          <div class="pv-nav-user-name"><?= $firstName ?></div>
+        </div>
+        <svg class="pv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
       </div>
-      <div class="pv-nav-user">
-        <div class="pv-nav-user-name"><?= $userName ?></div>
-        <div class="pv-nav-user-role">Provider</div>
+
+      <!-- Profile dropdown panel -->
+      <div class="pv-profile-dropdown" id="profileDropdown" role="menu">
+        <div class="pv-pd-header">
+          <div class="pv-pd-avatar">
+            <?php if ($profilePhoto): ?>
+              <img src="<?= htmlspecialchars($profilePhoto) ?>" alt="<?= $bizName ?>">
+            <?php else: ?>
+              <?= $initials ?>
+            <?php endif; ?>
+          </div>
+          <div class="pv-pd-info">
+            <div class="pv-pd-name"><?= $bizName ?></div>
+            <div class="pv-pd-email"><?= $email ?></div>
+            <span class="pv-pd-role">Provider</span>
+          </div>
+        </div>
+        <div class="pv-pd-divider"></div>
+        <a href="<?= BASE_URL ?>provider/profile" class="pv-pd-item" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-store"></i></span>
+          <span>Business Profile</span>
+          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </a>
+        <a href="<?= BASE_URL ?>provider/settings" class="pv-pd-item" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-gear"></i></span>
+          <span>Settings</span>
+          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </a>
+        <div class="pv-pd-divider"></div>
+        <a href="<?= BASE_URL ?>auth/logout" class="pv-pd-item pv-pd-item--danger" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-arrow-right-from-bracket"></i></span>
+          <span>Sign Out</span>
+        </a>
       </div>
-      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout-icon" title="Sign out" aria-label="Sign out">
-        <i class="fa-solid fa-arrow-right-from-bracket"></i>
-      </a>
+
     </div>
   </div>
 </nav>
@@ -782,6 +880,19 @@ showToast('<?= addslashes(htmlspecialchars_decode($flash['msg'])) ?>', '<?= $fla
     }
     applyTheme(localStorage.getItem('qb-theme')||'light');
     if(btn) btn.addEventListener('click',function(){ var n=html.getAttribute('data-theme')==='dark'?'light':'dark'; localStorage.setItem('qb-theme',n); applyTheme(n); });
+
+    // Profile dropdown
+    var trigger=document.getElementById('profileTrigger'),
+        dropdown=document.getElementById('profileDropdown');
+    if(trigger&&dropdown){
+      trigger.addEventListener('click',function(e){
+        e.stopPropagation();
+        var open=dropdown.classList.toggle('is-open');
+        trigger.setAttribute('aria-expanded',open);
+      });
+      document.addEventListener('click',function(){ dropdown.classList.remove('is-open'); trigger.setAttribute('aria-expanded','false'); });
+      dropdown.addEventListener('click',function(e){ e.stopPropagation(); });
+    }
   })();
 </script>
 </body>
