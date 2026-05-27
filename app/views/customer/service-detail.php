@@ -3,8 +3,9 @@
 require_once __DIR__ . '/../../../config/database.php';
 $db       = Database::getInstance();
 $userId   = (int)($_SESSION['user_id'] ?? 0);
-$userName = htmlspecialchars($_SESSION['user_name'] ?? 'Customer');
-$initials = strtoupper(substr($userName, 0, 2));
+$name     = htmlspecialchars($_SESSION['user_name']  ?? 'Customer');
+$email    = htmlspecialchars($_SESSION['user_email'] ?? '');
+$initials = strtoupper(substr($name, 0, 2));
 
 $stAv = $db->prepare("SELECT avatar_url FROM tbl_users WHERE id = ? LIMIT 1");
 $stAv->execute([$userId]);
@@ -87,61 +88,97 @@ $shopAddr = $service['address'] ?? '';
 <body>
 
 <div class="grain" aria-hidden="true"></div>
-<div class="bg-orb bg-orb-1" aria-hidden="true"></div>
-<div class="bg-orb bg-orb-2" aria-hidden="true"></div>
 
 <!-- NAV -->
 <nav class="pv-nav" role="navigation" aria-label="Customer navigation">
   <div class="pv-nav-inner">
     <a href="<?= BASE_URL ?>home" class="pv-logo">
+      <img src="<?= BASE_URL ?>assets/img/QB_LOGO.png" alt="QuickBook Logo" style="width:42px;height:42px;object-fit:contain;display:block;flex-shrink:0;">
       Quick<span>Book</span>
       <span class="pv-logo-badge">Customer</span>
     </a>
+
     <div class="pv-nav-links">
       <a href="<?= BASE_URL ?>dashboard"  class="pv-nav-link">Dashboard</a>
+      <a href="<?= BASE_URL ?>browse"     class="pv-nav-link is-active">Browse</a>
       <a href="<?= BASE_URL ?>bookings"   class="pv-nav-link">
-        Bookings
-        <?php if ($upcomingCount): ?><sup class="pv-sup"><?= $upcomingCount ?></sup><?php endif; ?>
+        Bookings<?php if ($upcomingCount): ?><sup class="pv-sup"><?= $upcomingCount ?></sup><?php endif; ?>
       </a>
-      <a href="<?= BASE_URL ?>browse"     class="pv-nav-link is-active">Browse Services</a>
       <a href="<?= BASE_URL ?>loyalty"    class="pv-nav-link">Loyalty</a>
-      <a href="<?= BASE_URL ?>profile"    class="pv-nav-link">Profile</a>
     </div>
+
     <div class="pv-nav-end">
       <?php $notifUserId = (int)$userId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
 
-      <!-- THEME TOGGLE -->
+      <!-- Theme toggle -->
       <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode" title="Toggle theme">
-        <svg class="icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+        <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
              viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
         </svg>
-        <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+        <svg class="icon-sun" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
              viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="5"/>
-          <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          <line x1="12" y1="1"  x2="12" y2="3"/>
+          <line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22"  y1="4.22"  x2="5.64"  y2="5.64"/>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1"  y1="12" x2="3"  y2="12"/>
+          <line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22"  y1="19.78" x2="5.64"  y2="18.36"/>
+          <line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"/>
         </svg>
       </button>
 
-      <div class="pv-nav-av" aria-hidden="true">
-        <?php if ($avatarUrl): ?>
-          <img src="<?= $avatarUrl ?>" alt="<?= $userName ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
-        <?php else: ?>
-          <?= $initials ?>
-        <?php endif; ?>
+      <!-- Profile dropdown trigger -->
+      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false" title="Profile menu">
+        <div class="pv-nav-av">
+          <?php if ($avatarUrl): ?>
+            <img src="<?= $avatarUrl ?>" alt="<?= $name ?>" style="width:36px;height:36px;object-fit:cover;border-radius:50%;display:block;">
+          <?php else: ?>
+            <span class="pv-av-initials"><?= $initials ?></span>
+          <?php endif; ?>
+        </div>
+        <div class="pv-nav-user">
+          <div class="pv-nav-user-name"><?= $name ?></div>
+          <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
+        </div>
+        <svg class="pv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
       </div>
-      <div class="pv-nav-user">
-        <div class="pv-nav-user-name"><?= $userName ?></div>
-        <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
+
+      <!-- Profile dropdown panel -->
+      <div class="pv-profile-dropdown" id="profileDropdown" role="menu">
+        <div class="pv-pd-header">
+          <div class="pv-pd-avatar">
+            <?php if ($avatarUrl): ?>
+              <img src="<?= $avatarUrl ?>" alt="<?= $name ?>">
+            <?php else: ?>
+              <span class="pv-av-initials"><?= $initials ?></span>
+            <?php endif; ?>
+          </div>
+          <div class="pv-pd-info">
+            <div class="pv-pd-name"><?= $name ?></div>
+            <div class="pv-pd-email"><?= $email ?></div>
+            <span class="pv-pd-tier"><?= $loyaltyTier ?> Member</span>
+          </div>
+        </div>
+        <div class="pv-pd-divider"></div>
+        <a href="<?= BASE_URL ?>profile" class="pv-pd-item" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-user"></i></span>
+          <span>My Profile</span>
+          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </a>
+        <div class="pv-pd-divider"></div>
+        <a href="<?= BASE_URL ?>auth/logout" class="pv-pd-item pv-pd-item--danger" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-arrow-right-from-bracket"></i></span>
+          <span>Sign Out</span>
+        </a>
       </div>
-      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout-icon" title="Sign out" aria-label="Sign out">
-        <i class="fa-solid fa-arrow-right-from-bracket"></i>
-      </a>
-    </div>
-  </div>
+
+    </div><!-- /pv-nav-end -->
+  </div><!-- /pv-nav-inner -->
 </nav>
 
 <!-- HERO -->
@@ -903,6 +940,27 @@ function handleFlexLoc(val) {
       applyTheme(next);
     });
   }
+})();
+</script>
+
+<script>
+/* ── Profile Dropdown ── */
+(function () {
+  const trigger  = document.getElementById('profileTrigger');
+  const dropdown = document.getElementById('profileDropdown');
+  if (!trigger || !dropdown) return;
+  function open()   { trigger.classList.add('is-open'); dropdown.classList.add('is-open'); trigger.setAttribute('aria-expanded','true'); }
+  function close()  { trigger.classList.remove('is-open'); dropdown.classList.remove('is-open'); trigger.setAttribute('aria-expanded','false'); }
+  function toggle() { dropdown.classList.contains('is-open') ? close() : open(); }
+  trigger.addEventListener('click', e => { e.stopPropagation(); toggle(); });
+  trigger.addEventListener('keydown', e => {
+    if (e.key==='Enter'||e.key===' ') { e.preventDefault(); toggle(); }
+    if (e.key==='Escape') close();
+  });
+  document.addEventListener('click', e => {
+    if (!dropdown.contains(e.target) && !trigger.contains(e.target)) close();
+  });
+  document.addEventListener('keydown', e => { if (e.key==='Escape') close(); });
 })();
 </script>
 </body>

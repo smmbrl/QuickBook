@@ -32,10 +32,6 @@ $stSpent = $db->prepare("SELECT COALESCE(SUM(s.price),0) FROM tbl_bookings b JOI
 $stSpent->execute([$userId]);
 $totalSpent = (float)$stSpent->fetchColumn();
 
-$stMonthSpent = $db->prepare("SELECT COALESCE(SUM(s.price),0) FROM tbl_bookings b JOIN tbl_services s ON b.service_id = s.id WHERE b.customer_id = ? AND b.status = 'completed' AND MONTH(b.booking_date) = MONTH(CURDATE()) AND YEAR(b.booking_date) = YEAR(CURDATE())");
-$stMonthSpent->execute([$userId]);
-$monthSpent = (float)$stMonthSpent->fetchColumn();
-
 /* ── Loyalty ── */
 $loyaltyTier = match(true) {
     $loyaltyPoints >= 2000 => 'Gold',
@@ -46,57 +42,72 @@ $nextLevel = 500;
 $progress  = min(100, round(($loyaltyPoints % $nextLevel) / $nextLevel * 100));
 $ptsToNext = $nextLevel - ($loyaltyPoints % $nextLevel);
 
-/* ── Recent bookings ── */
-$stRecent = $db->prepare("
-    SELECT b.*, pp.business_name, pp.profile_photo,
-           s.name AS service_name, s.price,
-           s.service_type, s.duration_minutes, s.location_type,
-           CONCAT(u.first_name, ' ', u.last_name) AS provider_name
+/* ── Next upcoming booking (featured hero card) ── */
+$stNextBooking = $db->prepare("
+    SELECT b.*, pp.business_name, s.name AS service_name, s.price, s.duration_minutes
     FROM tbl_bookings b
     JOIN tbl_provider_profiles pp ON b.provider_id = pp.id
-    JOIN tbl_services s           ON b.service_id  = s.id
-    JOIN tbl_users u              ON pp.user_id = u.id
-    WHERE b.customer_id = ?
-    ORDER BY b.created_at DESC LIMIT 5
+    JOIN tbl_services s ON b.service_id = s.id
+    WHERE b.customer_id = ? AND b.status IN ('pending','confirmed') AND b.booking_date >= CURDATE()
+    ORDER BY b.booking_date ASC, b.booking_time ASC LIMIT 1
 ");
-$stRecent->execute([$userId]);
-$recentBookings = $stRecent->fetchAll();
+$stNextBooking->execute([$userId]);
+$nextBooking = $stNextBooking->fetch();
 
-/* ── Upcoming ── */
+/* ── Upcoming list (sidebar) ── */
 $stUpcomingList = $db->prepare("
     SELECT b.*, pp.business_name, s.name AS service_name, s.price
     FROM tbl_bookings b
     JOIN tbl_provider_profiles pp ON b.provider_id = pp.id
-    JOIN tbl_services s           ON b.service_id  = s.id
+    JOIN tbl_services s ON b.service_id = s.id
     WHERE b.customer_id = ? AND b.status IN ('pending','confirmed') AND b.booking_date >= CURDATE()
     ORDER BY b.booking_date ASC LIMIT 3
 ");
 $stUpcomingList->execute([$userId]);
 $upcomingBookings = $stUpcomingList->fetchAll();
 
-/* ── Monthly chart ── */
-$stMonthly = $db->prepare("
-    SELECT DATE_FORMAT(b.booking_date,'%b') AS month,
-           DATE_FORMAT(b.booking_date,'%Y-%m') AS month_key,
-           COALESCE(SUM(s.price),0) AS total, COUNT(*) AS cnt
-    FROM tbl_bookings b JOIN tbl_services s ON b.service_id = s.id
-    WHERE b.customer_id = ? AND b.status = 'completed'
-      AND b.booking_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
-    GROUP BY month_key, month ORDER BY month_key ASC
+/* ── Featured Providers ── */
+$stProviders = $db->prepare("
+    SELECT pp.id, pp.business_name, pp.profile_photo, pp.barangay, pp.city,
+           pp.latitude, pp.longitude,
+           COALESCE(AVG(r.rating), 0) AS avg_rating,
+           COUNT(DISTINCT r.id) AS review_count,
+           COUNT(DISTINCT b.id) AS booking_count,
+           GROUP_CONCAT(DISTINCT s.service_type ORDER BY s.service_type SEPARATOR ', ') AS service_types,
+           MIN(s.price) AS min_price
+    FROM tbl_provider_profiles pp
+    LEFT JOIN tbl_services s ON s.provider_id = pp.id AND s.is_active = 1
+    LEFT JOIN tbl_reviews r ON r.provider_id = pp.id
+    LEFT JOIN tbl_bookings b ON b.provider_id = pp.id AND b.status = 'completed'
+    WHERE pp.is_approved = 1 AND pp.is_active = 1 AND pp.city = 'Bacolod City'
+    GROUP BY pp.id
+    ORDER BY avg_rating DESC, booking_count DESC
+    LIMIT 6
 ");
-$stMonthly->execute([$userId]);
-$monthlyData = $stMonthly->fetchAll();
+$stProviders->execute();
+$featuredProviders = $stProviders->fetchAll();
 
-$chartLabels = array_column($monthlyData, 'month');
-$chartSpend  = array_map(fn($r) => (float)$r['total'], $monthlyData);
-$chartDates  = array_column($monthlyData, 'month');
+/* ── Recent bookings ── */
+$stRecent = $db->prepare("
+    SELECT b.*, pp.business_name, pp.profile_photo,
+           s.name AS service_name, s.price, s.duration_minutes, s.location_type,
+           CONCAT(u.first_name, ' ', u.last_name) AS provider_name
+    FROM tbl_bookings b
+    JOIN tbl_provider_profiles pp ON b.provider_id = pp.id
+    JOIN tbl_services s ON b.service_id = s.id
+    JOIN tbl_users u ON pp.user_id = u.id
+    WHERE b.customer_id = ?
+    ORDER BY b.created_at DESC LIMIT 5
+");
+$stRecent->execute([$userId]);
+$recentBookings = $stRecent->fetchAll();
 
 /* ── Pending review ── */
 $stLastCompleted = $db->prepare("
     SELECT b.*, pp.business_name, s.name AS service_name
     FROM tbl_bookings b
     JOIN tbl_provider_profiles pp ON b.provider_id = pp.id
-    JOIN tbl_services s           ON b.service_id  = s.id
+    JOIN tbl_services s ON b.service_id = s.id
     LEFT JOIN tbl_reviews r ON r.booking_id = b.id
     WHERE b.customer_id = ? AND b.status = 'completed' AND r.id IS NULL
     ORDER BY b.booking_date DESC LIMIT 1
@@ -104,29 +115,62 @@ $stLastCompleted = $db->prepare("
 $stLastCompleted->execute([$userId]);
 $pendingReview = $stLastCompleted->fetch();
 
-/* ── Helpers ── */
-$hour     = (int)date('H');
-$greeting = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good evening');
-$initials = strtoupper(substr($name, 0, 2));
+/* ── Avatar ── */
 $stAv = $db->prepare("SELECT avatar_url FROM tbl_users WHERE id = ? LIMIT 1");
 $stAv->execute([$userId]);
-$avatarUrl = ($av = $stAv->fetchColumn()) ? ($av) : null;
+$avatarUrl = ($av = $stAv->fetchColumn()) ? $av : null;
 
-function serviceIcon(string $n): string {
-    $n = strtolower($n);
-    if (str_contains($n,'massage')||str_contains($n,'spa'))   return '💆';
-    if (str_contains($n,'hair')||str_contains($n,'salon'))    return '✂️';
-    if (str_contains($n,'dental')||str_contains($n,'teeth'))  return '🦷';
-    if (str_contains($n,'gym')||str_contains($n,'train'))     return '🏋️';
-    if (str_contains($n,'pet')||str_contains($n,'groom'))     return '🐾';
-    if (str_contains($n,'clean')||str_contains($n,'laundry')) return '🧹';
-    if (str_contains($n,'repair')||str_contains($n,'plumb'))  return '🔧';
-    return '📋';
+/* ── Helpers ── */
+$hour          = (int)date('H');
+$greeting      = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good evening');
+$initials      = strtoupper(substr($name, 0, 2));
+$firstNameOnly = explode(' ', $name)[0];
+
+/* ── Service categories ── */
+$categories = [
+    ['label' => 'Nail Tech',  'icon' => 'fa-hand-sparkles', 'slug' => 'nail'],
+    ['label' => 'Hair Salon', 'icon' => 'fa-scissors',      'slug' => 'hair'],
+    ['label' => 'Massage',    'icon' => 'fa-spa',           'slug' => 'massage'],
+    ['label' => 'Dental',     'icon' => 'fa-tooth',         'slug' => 'dental'],
+    ['label' => 'Makeup',     'icon' => 'fa-wand-sparkles', 'slug' => 'makeup'],
+    ['label' => 'Cleaning',   'icon' => 'fa-broom',         'slug' => 'cleaning'],
+    ['label' => 'Pet Care',   'icon' => 'fa-paw',           'slug' => 'pet'],
+    ['label' => 'Repair',     'icon' => 'fa-wrench',        'slug' => 'repair'],
+];
+
+/* ── Build provider map data for JS ── */
+$mapProviders = [];
+foreach ($featuredProviders as $p) {
+    $mapProviders[] = [
+        'id'       => (int)$p['id'],
+        'name'     => $p['business_name'],
+        'barangay' => $p['barangay'] ?? '',
+        'lat'      => !empty($p['latitude'])  ? (float)$p['latitude']  : null,
+        'lng'      => !empty($p['longitude']) ? (float)$p['longitude'] : null,
+        'rating'   => round((float)$p['avg_rating'], 1),
+        'category' => !empty($p['service_types']) ? ucwords(strtolower(trim(explode(',', $p['service_types'])[0]))) : '',
+        'urlView'  => BASE_URL . 'provider/' . (int)$p['id'],
+        'urlBook'  => BASE_URL . 'book/'     . (int)$p['id'],
+        'minPrice' => !empty($p['min_price']) ? '₱' . number_format((float)$p['min_price'], 0) : '',
+    ];
 }
+$mapProvidersJson = json_encode($mapProviders, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
 
 function fmtMoney(float $v): string {
     return $v >= 1000 ? '₱'.number_format($v/1000,1).'k' : '₱'.number_format($v,0);
 }
+
+function starRating(float $r): string {
+    $full  = (int)floor($r);
+    $half  = ($r - $full) >= 0.5 ? 1 : 0;
+    $empty = 5 - $full - $half;
+    $out   = '';
+    for ($i = 0; $i < $full;  $i++) $out .= '<i class="fa-solid fa-star"></i>';
+    if ($half)                       $out .= '<i class="fa-solid fa-star-half-stroke"></i>';
+    for ($i = 0; $i < $empty; $i++) $out .= '<i class="fa-regular fa-star"></i>';
+    return $out;
+}
+
 $spentDisplay = fmtMoney($totalSpent);
 ?>
 <!DOCTYPE html>
@@ -135,10 +179,20 @@ $spentDisplay = fmtMoney($totalSpent);
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QuickBook — Dashboard</title>
+
+  <!-- Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- App CSS -->
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_dashboard.css">
+
+  <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <!-- Apply saved theme BEFORE render to prevent flash -->
+
+  <!-- Leaflet CSS — must be in <head> before map renders -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+
+  <!-- Apply saved theme before render to prevent flash -->
   <script>
     (function(){
       var t = localStorage.getItem('qb-theme') || 'light';
@@ -149,6 +203,7 @@ $spentDisplay = fmtMoney($totalSpent);
 <body>
 <div class="grain" aria-hidden="true"></div>
 
+<!-- ══ NAV ══ -->
 <nav class="pv-nav" role="navigation" aria-label="Customer navigation">
   <div class="pv-nav-inner">
     <a href="<?= BASE_URL ?>home" class="pv-logo">
@@ -156,40 +211,31 @@ $spentDisplay = fmtMoney($totalSpent);
       Quick<span>Book</span>
       <span class="pv-logo-badge">Customer</span>
     </a>
+
     <div class="pv-nav-links">
-      <a href="<?= BASE_URL ?>dashboard"  class="pv-nav-link is-active">Dashboard</a>
-      <a href="<?= BASE_URL ?>bookings"   class="pv-nav-link">
+      <a href="<?= BASE_URL ?>dashboard" class="pv-nav-link is-active">Dashboard</a>
+      <a href="<?= BASE_URL ?>browse"    class="pv-nav-link">Browse</a>
+      <a href="<?= BASE_URL ?>bookings"  class="pv-nav-link">
         Bookings
         <?php if ($upcomingCount): ?><sup class="pv-sup"><?= $upcomingCount ?></sup><?php endif; ?>
       </a>
-      <a href="<?= BASE_URL ?>browse"     class="pv-nav-link">Browse Services</a>
-      <a href="<?= BASE_URL ?>loyalty"    class="pv-nav-link">Loyalty</a>
-      <a href="<?= BASE_URL ?>profile"    class="pv-nav-link">Profile</a>
+      <a href="<?= BASE_URL ?>loyalty" class="pv-nav-link">Loyalty</a>
     </div>
+
     <div class="pv-nav-end">
       <?php $notifUserId = (int)$userId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
 
-      <!-- THEME TOGGLE -->
+      <!-- Theme toggle -->
       <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode" title="Toggle theme">
-        <!-- Moon icon (shown in light mode) -->
-        <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-             viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
         </svg>
-        <!-- Sun icon (shown in dark mode) -->
-        <svg class="icon-sun" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-             viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg class="icon-sun" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="5"/>
-          <line x1="12" y1="1"  x2="12" y2="3"/>
-          <line x1="12" y1="21" x2="12" y2="23"/>
-          <line x1="4.22"  y1="4.22"  x2="5.64"  y2="5.64"/>
-          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-          <line x1="1"  y1="12" x2="3"  y2="12"/>
-          <line x1="21" y1="12" x2="23" y2="12"/>
-          <line x1="4.22"  y1="19.78" x2="5.64"  y2="18.36"/>
-          <line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"/>
+          <line x1="12" y1="1"  x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
         </svg>
       </button>
 
@@ -239,35 +285,71 @@ $spentDisplay = fmtMoney($totalSpent);
           <span>Sign Out</span>
         </a>
       </div>
-  </div>
+
+    </div><!-- /pv-nav-end -->
+  </div><!-- /pv-nav-inner -->
 </nav>
 
+<!-- ══ HERO ══ -->
 <header class="pv-hero" role="banner">
   <div class="pv-hero-overlay" aria-hidden="true"></div>
   <div class="pv-hero-inner">
-    <div>
+
+    <!-- Left: greeting -->
+    <div class="pv-hero-left">
       <p class="pv-hero-eyebrow">
         <span class="pv-dot-pulse" aria-hidden="true"></span>
         <?= $greeting ?>
       </p>
-      <h1 class="pv-hero-name"><?= $name ?></h1>
-      <p class="pv-hero-date"><?= date('l, F j, Y') ?></p>
+      <h1 class="pv-hero-name"><?= $firstNameOnly ?></h1>
+      <div class="pv-hero-location">
+        <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+        <span>Bacolod City, Negros Occidental</span>
+      </div>
       <div class="pv-hero-meta">
         <span class="pv-status-badge">
           <span class="pv-status-dot" aria-hidden="true"></span>
           Active Member
         </span>
         <span class="pv-tier-badge">⭐ <?= $loyaltyTier ?></span>
+        <span class="pv-date-badge"><?= date('M j, Y') ?></span>
       </div>
     </div>
-    <?php if ($upcomingCount > 0): ?>
-    <a href="<?= BASE_URL ?>bookings?status=pending" class="pv-points-chip">
-      <span class="pv-points-chip-dot" aria-hidden="true"></span>
-      <?= $upcomingCount ?> upcoming booking<?= $upcomingCount > 1 ? 's' : '' ?>
-      <span aria-hidden="true">→</span>
+
+    <!-- Right: next appointment card -->
+    <?php if ($nextBooking): ?>
+    <a href="<?= BASE_URL ?>bookings/<?= (int)$nextBooking['id'] ?>" class="pv-appt-card" aria-label="View next appointment">
+      <div class="pv-appt-card-tag">
+        <i class="fa-solid fa-calendar-check" aria-hidden="true"></i>
+        Next Appointment
+      </div>
+      <div class="pv-appt-card-service"><?= htmlspecialchars($nextBooking['service_name']) ?></div>
+      <div class="pv-appt-card-biz"><?= htmlspecialchars($nextBooking['business_name']) ?></div>
+      <div class="pv-appt-card-when">
+        <span><i class="fa-regular fa-calendar" aria-hidden="true"></i> <?= date('l, F j', strtotime($nextBooking['booking_date'])) ?></span>
+        <?php if (!empty($nextBooking['booking_time'])): ?>
+        <span><i class="fa-regular fa-clock" aria-hidden="true"></i> <?= date('g:i A', strtotime($nextBooking['booking_time'])) ?></span>
+        <?php endif; ?>
+      </div>
+      <div class="pv-appt-card-footer">
+        <span class="pv-appt-price">₱<?= number_format((float)$nextBooking['price'], 0) ?></span>
+        <span class="pv-appt-cta">View Details →</span>
+      </div>
+    </a>
+    <?php else: ?>
+    <a href="<?= BASE_URL ?>browse" class="pv-appt-card pv-appt-card--empty" aria-label="Browse services">
+      <div class="pv-appt-card-tag">
+        <i class="fa-solid fa-calendar-plus" aria-hidden="true"></i>
+        No Upcoming Booking
+      </div>
+      <div class="pv-appt-empty-body">Ready to book your next service?</div>
+      <div class="pv-appt-cta-big">Browse Services →</div>
     </a>
     <?php endif; ?>
-  </div>
+
+  </div><!-- /pv-hero-inner -->
+
+  <!-- Stats strip -->
   <div class="pv-hero-stats" role="region" aria-label="Quick stats">
     <div class="pv-hs-item">
       <span class="pv-hs-val"><?= $totalBookings ?></span>
@@ -275,8 +357,8 @@ $spentDisplay = fmtMoney($totalSpent);
     </div>
     <div class="pv-hs-div" aria-hidden="true"></div>
     <div class="pv-hs-item">
-      <span class="pv-hs-val accent"><?= $pendingCount ?></span>
-      <span class="pv-hs-label">Pending</span>
+      <span class="pv-hs-val yellow"><?= $upcomingCount ?></span>
+      <span class="pv-hs-label">Upcoming</span>
     </div>
     <div class="pv-hs-div" aria-hidden="true"></div>
     <div class="pv-hs-item">
@@ -285,136 +367,216 @@ $spentDisplay = fmtMoney($totalSpent);
     </div>
     <div class="pv-hs-div" aria-hidden="true"></div>
     <div class="pv-hs-item">
-      <span class="pv-hs-val accent"><?= $spentDisplay ?></span>
-      <span class="pv-hs-label">Total Spent</span>
-    </div>
-    <div class="pv-hs-div" aria-hidden="true"></div>
-    <div class="pv-hs-item">
       <span class="pv-hs-val blue"><?= number_format($loyaltyPoints) ?></span>
       <span class="pv-hs-label">Loyalty Points</span>
     </div>
     <div class="pv-hs-div" aria-hidden="true"></div>
     <div class="pv-hs-item">
-      <span class="pv-hs-val yellow"><?= $upcomingCount ?></span>
-      <span class="pv-hs-label">Upcoming</span>
+      <span class="pv-hs-val accent"><?= $spentDisplay ?></span>
+      <span class="pv-hs-label">Total Spent</span>
     </div>
   </div>
 </header>
 
+<!-- ══ MAIN PAGE ══ -->
 <main class="pv-page" role="main">
 
+  <!-- ── Browse Categories ── -->
+  <section class="pv-section" aria-label="Browse by category">
+    <div class="pv-section-head">
+      <h2 class="pv-section-title">Browse Categories</h2>
+      <a href="<?= BASE_URL ?>browse" class="pv-link">See all →</a>
+    </div>
+    <div class="pv-categories-row">
+      <?php foreach ($categories as $cat): ?>
+      <a href="<?= BASE_URL ?>browse?category=<?= $cat['slug'] ?>" class="pv-cat-pill">
+        <span class="pv-cat-icon" aria-hidden="true"><i class="fa-solid <?= $cat['icon'] ?>"></i></span>
+        <span class="pv-cat-label"><?= $cat['label'] ?></span>
+      </a>
+      <?php endforeach; ?>
+    </div>
+  </section>
+
+  <!-- ── Main layout: providers + sidebar ── -->
   <div class="pv-layout">
 
     <div class="pv-main">
 
-      <!-- Spending Chart -->
-      <div class="pv-card pv-card--trend">
-        <div class="pv-trend-head">
-          <div class="pv-trend-meta">
-            <span class="pv-trend-eyebrow">LAST 6 MONTHS</span>
-            <h2 class="pv-trend-title">Spending Overview</h2>
+      <!-- ── Providers Near You ── -->
+      <section class="pv-section" aria-label="Providers near you">
+        <div class="pv-section-head">
+          <div>
+            <h2 class="pv-section-title">Providers Near You</h2>
+            <p class="pv-section-sub">
+              <i class="fa-solid fa-location-dot" style="color:var(--gold-dim);font-size:.7rem" aria-hidden="true"></i>
+              Bacolod City
+            </p>
           </div>
-          <div class="pv-trend-right">
-            <div class="pv-tabs">
-              <span class="pv-tab active">6M</span>
-              <span class="pv-tab">1Y</span>
-              <span class="pv-tab">All</span>
-            </div>
-          </div>
+          <a href="<?= BASE_URL ?>browse" class="pv-link">View all →</a>
         </div>
-        <div class="pv-trend-canvas-wrap">
-          <canvas id="spendChart"></canvas>
-        </div>
-      </div>
 
-      <!-- Recent Bookings -->
-      <div class="pv-card pv-card--table">
-        <div class="pv-card-head">
-          <h2>Recent Bookings</h2>
-          <a href="<?= BASE_URL ?>bookings" class="pv-link">View all →</a>
-        </div>
-        <?php if (empty($recentBookings)): ?>
+        <?php if (empty($featuredProviders)): ?>
         <div class="pv-empty-state">
-          <div class="pv-empty-icon" aria-hidden="true">📭</div>
-          <p>No bookings yet — find a service to get started.</p>
-          <a href="<?= BASE_URL ?>browse" class="pv-empty-cta">Browse Services →</a>
+          <div class="pv-empty-icon" aria-hidden="true">🏪</div>
+          <p>No providers available yet in your area.</p>
+          <a href="<?= BASE_URL ?>browse" class="pv-empty-cta">Browse Anyway →</a>
         </div>
         <?php else: ?>
-        <div class="pv-rb-table-wrap">
-          <table class="pv-rb-table">
-            <thead>
-              <tr>
-                <th>Service</th>
-                <th>Provider</th>
-                <th>Price</th>
-                <th>Duration</th>
-                <th>Location</th>
-                <th>Status</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              <?php foreach ($recentBookings as $b):
-                $dm     = (int)($b['duration_minutes'] ?? 0);
-                $dLabel = $dm ? (($dm >= 60 && $dm % 60 === 0) ? ($dm/60).' hr' : $dm.' min') : '—';
-              ?>
-              <tr>
-                <td>
-                  <div class="pv-rb-name">
-                    <?= htmlspecialchars($b['service_name']) ?>
-                  </div>
-                </td>
-                <td><?= htmlspecialchars($b['provider_name'] ?? '—') ?></td>
-                <td class="pv-rb-price">₱<?= number_format((float)$b['price'], 2) ?></td>
-                <td><?= $dLabel ?></td>
-                <td><?= htmlspecialchars($b['location_type'] ?? '—') ?></td>
-                <td>
-                  <span class="pv-rb-badge pv-rb-badge--<?= $b['status'] ?>">
-                    <?= ucfirst(str_replace('_', ' ', $b['status'])) ?>
-                  </span>
-                </td>
-                <td class="pv-rb-date"><?= date('M d, Y', strtotime($b['booking_date'])) ?></td>
-              </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
+
+        <!-- Leaflet Map -->
+        <div class="pv-map-wrap">
+          <div id="providerMap" class="pv-map" aria-label="Map of providers near you"></div>
         </div>
+
+        <!-- Provider Cards -->
+        <div class="pv-provider-grid">
+          <?php foreach ($featuredProviders as $p):
+            $avgRating   = round((float)$p['avg_rating'], 1);
+            $categoryRaw = strtolower($p['service_types'] ?? '');
+            $catEmoji    = '🏪';
+            if      (str_contains($categoryRaw, 'nail'))                                           $catEmoji = '💅';
+            elseif  (str_contains($categoryRaw, 'hair'))                                           $catEmoji = '✂️';
+            elseif  (str_contains($categoryRaw, 'massage') || str_contains($categoryRaw, 'spa'))   $catEmoji = '🧖';
+            elseif  (str_contains($categoryRaw, 'dental'))                                         $catEmoji = '🦷';
+            elseif  (str_contains($categoryRaw, 'clean'))                                          $catEmoji = '🧹';
+            elseif  (str_contains($categoryRaw, 'pet'))                                            $catEmoji = '🐾';
+            elseif  (str_contains($categoryRaw, 'repair'))                                         $catEmoji = '🔧';
+            $firstCategory = !empty($p['service_types'])
+                ? ucwords(strtolower(trim(explode(',', $p['service_types'])[0])))
+                : '';
+          ?>
+          <div class="pv-provider-card" data-provider-id="<?= (int)$p['id'] ?>">
+            <div class="pv-provider-photo">
+              <?php if (!empty($p['profile_photo'])): ?>
+                <img src="<?= htmlspecialchars($p['profile_photo']) ?>" alt="<?= htmlspecialchars($p['business_name']) ?>">
+              <?php else: ?>
+                <div class="pv-provider-photo-placeholder"><?= $catEmoji ?></div>
+              <?php endif; ?>
+              <?php if ($avgRating >= 4.5): ?>
+                <div class="pv-provider-top-badge">⭐ Top Rated</div>
+              <?php endif; ?>
+            </div>
+            <div class="pv-provider-body">
+              <div class="pv-provider-name"><?= htmlspecialchars($p['business_name']) ?></div>
+              <?php if ($firstCategory): ?>
+              <div class="pv-provider-category"><?= htmlspecialchars($firstCategory) ?></div>
+              <?php endif; ?>
+              <div class="pv-provider-meta-row">
+                <span class="pv-provider-stars" aria-label="Rated <?= $avgRating ?> out of 5">
+                  <?= starRating($avgRating) ?>
+                  <span class="pv-stars-val"><?= $avgRating > 0 ? number_format($avgRating, 1) : 'New' ?></span>
+                  <?php if ((int)$p['review_count'] > 0): ?>
+                  <span class="pv-stars-count">(<?= (int)$p['review_count'] ?>)</span>
+                  <?php endif; ?>
+                </span>
+              </div>
+              <div class="pv-provider-loc">
+                <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+                <?= !empty($p['barangay']) ? htmlspecialchars($p['barangay']) . ', Bacolod City' : 'Bacolod City' ?>
+              </div>
+              <?php if (!empty($p['min_price'])): ?>
+              <div class="pv-provider-from">From <strong><?= fmtMoney((float)$p['min_price']) ?></strong></div>
+              <?php endif; ?>
+            </div>
+            <div class="pv-provider-actions">
+              <a href="<?= BASE_URL ?>provider/<?= (int)$p['id'] ?>" class="pv-provider-btn pv-provider-btn--outline">View Profile</a>
+              <a href="<?= BASE_URL ?>book/<?= (int)$p['id'] ?>"    class="pv-provider-btn pv-provider-btn--primary">Book Now</a>
+            </div>
+          </div>
+          <?php endforeach; ?>
+        </div>
+
         <?php endif; ?>
-      </div>
+      </section>
+
+      <!-- ── Recent Bookings ── -->
+      <?php if (!empty($recentBookings)): ?>
+      <section class="pv-section" aria-label="Recent bookings">
+        <div class="pv-section-head">
+          <h2 class="pv-section-title">Recent Bookings</h2>
+          <a href="<?= BASE_URL ?>bookings" class="pv-link">View all →</a>
+        </div>
+        <div class="pv-card pv-card--table">
+          <div class="pv-rb-table-wrap">
+            <table class="pv-rb-table">
+              <thead>
+                <tr>
+                  <th>Service</th>
+                  <th>Provider</th>
+                  <th>Price</th>
+                  <th>Duration</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                <?php foreach ($recentBookings as $b):
+                  $dm     = (int)($b['duration_minutes'] ?? 0);
+                  $dLabel = $dm ? (($dm >= 60 && $dm % 60 === 0) ? ($dm/60).' hr' : $dm.' min') : '—';
+                ?>
+                <tr>
+                  <td><div class="pv-rb-name"><?= htmlspecialchars($b['service_name']) ?></div></td>
+                  <td><?= htmlspecialchars($b['provider_name'] ?? '—') ?></td>
+                  <td class="pv-rb-price">₱<?= number_format((float)$b['price'], 2) ?></td>
+                  <td><?= $dLabel ?></td>
+                  <td>
+                    <span class="pv-rb-badge pv-rb-badge--<?= $b['status'] ?>">
+                      <?= ucfirst(str_replace('_', ' ', $b['status'])) ?>
+                    </span>
+                  </td>
+                  <td class="pv-rb-date"><?= date('M d, Y', strtotime($b['booking_date'])) ?></td>
+                </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <?php endif; ?>
 
     </div><!-- /pv-main -->
 
+    <!-- ── SIDEBAR ── -->
     <aside class="pv-sidebar" aria-label="Sidebar">
 
       <!-- Quick Actions -->
       <div class="pv-card">
         <div class="pv-card-head"><h2>Quick Actions</h2></div>
         <div class="pv-actions">
-          <a href="<?= BASE_URL ?>bookings?status=pending" class="pv-action is-primary">
-            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-clock"></i></span>
+          <a href="<?= BASE_URL ?>browse" class="pv-action is-primary">
+            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-magnifying-glass"></i></span>
             <div class="pv-action-txt">
-              <strong>Pending Bookings</strong>
-              <span>Review &amp; manage</span>
+              <strong>Browse Services</strong>
+              <span>Find providers near you</span>
             </div>
           </a>
-          <a href="<?= BASE_URL ?>browse" class="pv-action">
-            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-magnifying-glass"></i></span>
-            <div class="pv-action-txt"><strong>Browse Services</strong><span>Find providers near you</span></div>
+          <?php if ($upcomingCount > 0): ?>
+          <a href="<?= BASE_URL ?>bookings?status=pending" class="pv-action">
+            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-clock"></i></span>
+            <div class="pv-action-txt">
+              <strong>Upcoming Bookings</strong>
+              <span><?= $upcomingCount ?> appointment<?= $upcomingCount > 1 ? 's' : '' ?> scheduled</span>
+            </div>
           </a>
+          <?php endif; ?>
           <a href="<?= BASE_URL ?>loyalty" class="pv-action">
             <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-star"></i></span>
-            <div class="pv-action-txt"><strong>Loyalty Points</strong><span>Redeem <?= number_format($loyaltyPoints) ?> pts</span></div>
+            <div class="pv-action-txt">
+              <strong>Loyalty Rewards</strong>
+              <span>Redeem <?= number_format($loyaltyPoints) ?> pts</span>
+            </div>
           </a>
           <a href="<?= BASE_URL ?>profile" class="pv-action">
             <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-user"></i></span>
-            <div class="pv-action-txt"><strong>My Profile</strong><span>Update account details</span></div>
+            <div class="pv-action-txt">
+              <strong>My Profile</strong>
+              <span>Update account details</span>
+            </div>
           </a>
         </div>
       </div>
 
-
-
-      <!-- Upcoming Bookings -->
+      <!-- Upcoming Appointments -->
       <div class="pv-card">
         <div class="pv-card-head">
           <h2>Upcoming</h2>
@@ -442,13 +604,13 @@ $spentDisplay = fmtMoney($totalSpent);
                 <?= htmlspecialchars($u['business_name']) ?>
               </div>
             </div>
-            <div class="pv-upcoming-price">₱<?= number_format($u['price'],0) ?></div>
+            <div class="pv-upcoming-price">₱<?= number_format($u['price'], 0) ?></div>
           </div>
           <?php endforeach; endif; ?>
         </div>
       </div>
 
-      <!-- Loyalty -->
+      <!-- Loyalty Status -->
       <div class="pv-card">
         <div class="pv-card-head">
           <h2>Loyalty Status</h2>
@@ -479,6 +641,7 @@ $spentDisplay = fmtMoney($totalSpent);
 
   </div><!-- /pv-layout -->
 
+  <!-- ── Review Nudge Banner ── -->
   <?php if ($pendingReview): ?>
   <div class="pv-review-banner">
     <div class="pv-review-icon" aria-hidden="true">⭐</div>
@@ -492,9 +655,106 @@ $spentDisplay = fmtMoney($totalSpent);
 
 </main>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<!-- ══ SCRIPTS ══ -->
+
+<!-- Leaflet JS — load before map init script -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
 <script>
-/* ── THEME TOGGLE ── */
+/* ── Leaflet Map Init ── */
+(function () {
+  var mapEl = document.getElementById('providerMap');
+  if (!mapEl) return;
+
+  var BACOLOD = [10.6840, 122.9560];
+
+  var map = L.map('providerMap', {
+    center: BACOLOD,
+    zoom: 13,
+    zoomControl: true,
+    scrollWheelZoom: false,
+    attributionControl: true
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>',
+    maxZoom: 18
+  }).addTo(map);
+
+  var providers = <?= $mapProvidersJson ?>;
+
+  if (!providers.length) return;
+
+  var bounds = [];
+
+  providers.forEach(function (p, idx) {
+    var lat = p.lat, lng = p.lng;
+
+    /* Fallback scatter around Bacolod if no coords saved yet */
+    if (!lat || !lng) {
+      var angle  = (idx / providers.length) * 2 * Math.PI;
+      var radius = 0.012 + (idx % 3) * 0.006;
+      lat = BACOLOD[0] + radius * Math.cos(angle);
+      lng = BACOLOD[1] + radius * Math.sin(angle);
+    }
+
+    bounds.push([lat, lng]);
+
+    /* Custom gold pin icon */
+    var icon = L.divIcon({
+      className: '',
+      html: '<div class="pv-map-pin"><i class="fa-solid fa-location-dot"></i></div>',
+      iconSize:   [28, 34],
+      iconAnchor: [14, 34],
+      popupAnchor:[0, -36]
+    });
+
+    var locLine   = p.barangay ? p.barangay + ', Bacolod City' : 'Bacolod City';
+    var ratingStr = p.rating > 0 ? '&#9733; ' + p.rating : 'New';
+    var priceStr  = p.minPrice ? '<div class="pv-map-popup-price">From ' + p.minPrice + '</div>' : '';
+    var catStr    = p.category ? '<div class="pv-map-popup-cat">' + p.category + '</div>' : '';
+    var dirUrl    = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(locLine);
+
+    var popupHtml =
+      '<div class="pv-map-popup">' +
+        '<div class="pv-map-popup-name">' + p.name + '</div>' +
+        catStr +
+        '<div class="pv-map-popup-meta">' + ratingStr + ' &nbsp;&middot;&nbsp; &#128205; ' + locLine + '</div>' +
+        priceStr +
+        '<div class="pv-map-popup-actions">' +
+          '<a href="' + p.urlView + '" class="pv-map-popup-btn pv-map-popup-btn--outline">View Profile</a>' +
+          '<a href="' + p.urlBook + '" class="pv-map-popup-btn pv-map-popup-btn--primary">Book Now</a>' +
+        '</div>' +
+        '<a href="' + dirUrl + '" target="_blank" rel="noopener" class="pv-map-popup-directions">&#128506; Get Directions</a>' +
+      '</div>';
+
+    var marker = L.marker([lat, lng], { icon: icon }).addTo(map);
+    marker.bindPopup(popupHtml, { maxWidth: 240, closeButton: false });
+
+    /* Highlight matching provider card on marker click */
+    marker.on('click', function () {
+      document.querySelectorAll('.pv-provider-card').forEach(function (c) {
+        c.classList.remove('is-highlighted');
+      });
+      var card = document.querySelector('[data-provider-id="' + p.id + '"]');
+      if (card) {
+        card.classList.add('is-highlighted');
+        setTimeout(function () { card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 200);
+      }
+    });
+  });
+
+  /* Fit map to show all markers */
+  if (bounds.length === 1) {
+    map.setView(bounds[0], 15);
+  } else if (bounds.length > 1) {
+    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+  }
+})();
+</script>
+
+<script>
+/* ── Theme Toggle ── */
 (function () {
   var btn  = document.getElementById('themeToggle');
   var moon = document.querySelector('.icon-moon');
@@ -512,330 +772,38 @@ $spentDisplay = fmtMoney($totalSpent);
     }
   }
 
-  var saved = localStorage.getItem('qb-theme') || 'light';
-  applyTheme(saved);
+  applyTheme(localStorage.getItem('qb-theme') || 'light');
 
   if (btn) {
     btn.addEventListener('click', function () {
-      var current = document.documentElement.getAttribute('data-theme');
-      var next = current === 'dark' ? 'light' : 'dark';
+      var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
       localStorage.setItem('qb-theme', next);
       applyTheme(next);
     });
   }
 })();
 </script>
-<script>
-(function () {
-  const labels = <?= json_encode(array_values($chartLabels)) ?>;
-  const spend  = <?= json_encode(array_values($chartSpend)) ?>;
 
-  const ctx = document.getElementById('spendChart');
-  if (!ctx) return;
-
-  const chart2d = ctx.getContext('2d');
-
-  const isDark = () => document.documentElement.getAttribute('data-theme') === 'dark';
-
-  function buildGradients() {
-    const dark = isDark();
-
-    const gradGold = chart2d.createLinearGradient(0, 0, 0, 220);
-    if (dark) {
-      gradGold.addColorStop(0,   'rgba(201,168,76,0.55)');
-      gradGold.addColorStop(0.55,'rgba(201,168,76,0.22)');
-      gradGold.addColorStop(1,   'rgba(201,168,76,0.00)');
-    } else {
-      gradGold.addColorStop(0,   'rgba(201,168,76,0.38)');
-      gradGold.addColorStop(0.55,'rgba(201,168,76,0.16)');
-      gradGold.addColorStop(1,   'rgba(201,168,76,0.00)');
-    }
-
-    const gradWarm = chart2d.createLinearGradient(0, 0, 0, 220);
-    if (dark) {
-      gradWarm.addColorStop(0,   'rgba(139,110,32,0.30)');
-      gradWarm.addColorStop(0.6, 'rgba(139,110,32,0.10)');
-      gradWarm.addColorStop(1,   'rgba(139,110,32,0.00)');
-    } else {
-      gradWarm.addColorStop(0,   'rgba(232,201,106,0.20)');
-      gradWarm.addColorStop(0.6, 'rgba(232,201,106,0.08)');
-      gradWarm.addColorStop(1,   'rgba(232,201,106,0.00)');
-    }
-
-    return { gradGold, gradWarm };
-  }
-
-  function getChartColors() {
-    const dark = isDark();
-    return {
-      borderColor:  dark ? '#C9A84C' : '#8B6E20',
-      xTickColor:   dark ? 'rgba(237,227,204,0.35)' : 'rgba(28,23,16,0.40)',
-      yTickColor:   dark ? 'rgba(237,227,204,0.30)' : 'rgba(28,23,16,0.38)',
-      gridColor:    dark ? 'rgba(201,168,76,0.08)'  : 'rgba(201,168,76,0.10)',
-    };
-  }
-
-  /* Track hovered index */
-  let hoveredIdx = null;
-
-  const hoverPlugin = {
-    id: 'hoverDotTooltip',
-    afterDraw(chart) {
-      if (hoveredIdx === null) return;
-
-      const { ctx: c, chartArea, scales } = chart;
-      const idx   = hoveredIdx;
-      const x     = scales.x.getPixelForValue(idx);
-      const y     = scales.y.getPixelForValue(spend[idx]);
-      const label = labels[idx] ?? '';
-      const raw   = spend[idx] ?? 0;
-
-      c.save();
-
-      /* ── Dashed vertical line ── */
-      c.beginPath();
-      c.setLineDash([4, 4]);
-      c.strokeStyle = 'rgba(201,168,76,0.50)';
-      c.lineWidth   = 1.5;
-      c.moveTo(x, chartArea.top);
-      c.lineTo(x, chartArea.bottom);
-      c.stroke();
-      c.setLineDash([]);
-
-      /* ── Dot ── */
-      c.beginPath();
-      c.arc(x, y, 7, 0, Math.PI * 2);
-      c.fillStyle = '#1C1710';
-      c.fill();
-      c.beginPath();
-      c.arc(x, y, 4, 0, Math.PI * 2);
-      c.fillStyle = '#E8C96A';
-      c.fill();
-
-      /* ── Tooltip card ── */
-      const sym  = '₱ ';
-      const num  = Number(raw).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-      c.font = "500 10px 'DM Mono', monospace";
-      const labelW = c.measureText(label).width;
-      c.font = "700 11px 'DM Mono', monospace";
-      const symW = c.measureText(sym).width;
-      const numW = c.measureText(num).width;
-      const amountW = symW + numW;
-
-      const padX = 10, padY = 6;
-      const pw = Math.max(labelW, amountW) + padX * 2;
-      const ph = 40;
-      const rx = 8;
-
-      let px = x - pw / 2;
-      px = Math.max(chartArea.left, Math.min(px, chartArea.right - pw));
-      const py = Math.max(chartArea.top + 4, y - ph - 20);
-
-      /* Card background */
-      const dark = isDark();
-      c.beginPath();
-      c.roundRect(px, py, pw, ph, rx);
-      c.fillStyle     = dark ? '#1E2535' : '#FFFFFF';
-      c.shadowColor   = 'rgba(0,0,0,0.18)';
-      c.shadowBlur    = 16;
-      c.shadowOffsetY = 5;
-      c.fill();
-      c.shadowBlur = 0; c.shadowOffsetY = 0;
-
-      /* Card border */
-      c.beginPath();
-      c.roundRect(px, py, pw, ph, rx);
-      c.strokeStyle = 'rgba(201,168,76,0.45)';
-      c.lineWidth   = 1;
-      c.stroke();
-
-      /* Month label */
-      c.font         = "500 10px 'DM Mono', monospace";
-      c.fillStyle    = dark ? 'rgba(237,227,204,0.45)' : 'rgba(28,23,16,0.45)';
-      c.textAlign    = 'center';
-      c.textBaseline = 'middle';
-      c.fillText(label.toUpperCase(), px + pw / 2, py + 11);
-
-      /* Divider */
-      c.beginPath();
-      c.moveTo(px + 8, py + 20);
-      c.lineTo(px + pw - 8, py + 20);
-      c.strokeStyle = 'rgba(201,168,76,0.20)';
-      c.lineWidth   = 1;
-      c.stroke();
-
-      /* Amount */
-      const startX = px + pw / 2 - amountW / 2;
-      const midY   = py + 31;
-      c.textAlign    = 'left';
-      c.textBaseline = 'middle';
-      c.font         = "700 11px 'DM Mono', monospace";
-      c.fillStyle    = '#A88A38';
-      c.fillText(sym, startX, midY);
-      c.fillStyle    = dark ? '#EDE3CC' : '#1C1710';
-      c.fillText(num, startX + symW, midY);
-
-      c.restore();
-    }
-  };
-
-  let { gradGold, gradWarm } = buildGradients();
-  let colors = getChartColors();
-
-  const chart = new Chart(ctx, {
-    type: 'line',
-    plugins: [hoverPlugin],
-    data: {
-      labels,
-      datasets: [
-        {
-          label: 'Spending (₱)',
-          data: spend,
-          borderColor: colors.borderColor,
-          backgroundColor: gradGold,
-          borderWidth: 2.5,
-          tension: 0.48,
-          fill: true,
-          pointRadius: 0,
-          pointHoverRadius: 0,
-          order: 1,
-        },
-        {
-          label: '_bg',
-          data: spend.map((v, i) => {
-            const shift = Math.sin((i / (Math.max(spend.length - 1, 1))) * Math.PI * 1.5) * Math.max(...spend, 1) * 0.18;
-            return Math.max(0, v - shift);
-          }),
-          borderColor: 'transparent',
-          backgroundColor: gradWarm,
-          borderWidth: 0,
-          tension: 0.48,
-          fill: true,
-          pointRadius: 0,
-          pointHoverRadius: 0,
-          order: 2,
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { display: false },
-        tooltip: { enabled: false }
-      },
-      scales: {
-        x: {
-          grid: { color: colors.gridColor, lineWidth: 1, drawBorder: false },
-          ticks: { color: colors.xTickColor, font: { family:"'DM Mono',monospace", size: 10, weight: '500' }, maxRotation: 0 },
-          border: { display: false }
-        },
-        y: {
-          min: 0,
-          ticks: {
-            color: colors.yTickColor,
-            font: { family:"'DM Mono',monospace", size: 10 },
-            callback: v => v,
-            stepSize: 100,
-            maxTicksLimit: 8,
-          },
-          grid: { color: colors.gridColor, lineWidth: 1, drawBorder: false },
-          border: { display: false }
-        }
-      }
-    }
-  });
-
-  /* ── Redraw chart with correct colors when theme toggles ── */
-  const themeBtn = document.getElementById('themeToggle');
-  if (themeBtn) {
-    themeBtn.addEventListener('click', () => {
-      setTimeout(() => {
-        const g = buildGradients();
-        const c = getChartColors();
-        chart.data.datasets[0].backgroundColor = g.gradGold;
-        chart.data.datasets[0].borderColor      = c.borderColor;
-        chart.data.datasets[1].backgroundColor  = g.gradWarm;
-        chart.options.scales.x.grid.color       = c.gridColor;
-        chart.options.scales.x.ticks.color      = c.xTickColor;
-        chart.options.scales.y.grid.color       = c.gridColor;
-        chart.options.scales.y.ticks.color      = c.yTickColor;
-        chart.update();
-      }, 50);
-    });
-  }
-
-  /* ── Mouse tracking ── */
-  ctx.addEventListener('mousemove', function (e) {
-    const rect   = ctx.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const xScale = chart.scales.x;
-    let   closest = null, minDist = Infinity;
-
-    labels.forEach((_, i) => {
-      const px   = xScale.getPixelForValue(i);
-      const dist = Math.abs(mouseX - px);
-      if (dist < minDist) { minDist = dist; closest = i; }
-    });
-
-    if (hoveredIdx !== closest) {
-      hoveredIdx = closest;
-      chart.draw();
-    }
-  });
-
-  ctx.addEventListener('mouseleave', function () {
-    hoveredIdx = null;
-    chart.draw();
-  });
-
-  document.querySelectorAll('.pv-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      tab.closest('.pv-tabs').querySelectorAll('.pv-tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-    });
-  });
-})();
-</script>
 <script>
 /* ── Profile Dropdown ── */
 (function () {
-  const trigger  = document.getElementById('profileTrigger');
-  const dropdown = document.getElementById('profileDropdown');
+  var trigger  = document.getElementById('profileTrigger');
+  var dropdown = document.getElementById('profileDropdown');
   if (!trigger || !dropdown) return;
 
-  function open() {
-    trigger.classList.add('is-open');
-    dropdown.classList.add('is-open');
-    trigger.setAttribute('aria-expanded', 'true');
-  }
-  function close() {
-    trigger.classList.remove('is-open');
-    dropdown.classList.remove('is-open');
-    trigger.setAttribute('aria-expanded', 'false');
-  }
-  function toggle() {
-    dropdown.classList.contains('is-open') ? close() : open();
-  }
+  function open()   { trigger.classList.add('is-open'); dropdown.classList.add('is-open'); trigger.setAttribute('aria-expanded', 'true'); }
+  function close()  { trigger.classList.remove('is-open'); dropdown.classList.remove('is-open'); trigger.setAttribute('aria-expanded', 'false'); }
+  function toggle() { dropdown.classList.contains('is-open') ? close() : open(); }
 
-  trigger.addEventListener('click', function (e) {
-    e.stopPropagation();
-    toggle();
-  });
+  trigger.addEventListener('click', function (e) { e.stopPropagation(); toggle(); });
   trigger.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
     if (e.key === 'Escape') close();
   });
-  document.addEventListener('click', function (e) {
-    if (!dropdown.contains(e.target) && !trigger.contains(e.target)) close();
-  });
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') close();
-  });
+  document.addEventListener('click',   function (e) { if (!dropdown.contains(e.target) && !trigger.contains(e.target)) close(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
 })();
-
 </script>
+
 </body>
 </html>
