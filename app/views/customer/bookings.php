@@ -3,8 +3,9 @@
 require_once __DIR__ . '/../../../config/database.php';
 $db     = Database::getInstance();
 $userId = (int)($_SESSION['user_id'] ?? 0);
-$userName = htmlspecialchars($_SESSION['user_name'] ?? 'Customer');
-$initials = strtoupper(substr($userName, 0, 2));
+$name      = htmlspecialchars($_SESSION['user_name']  ?? 'Customer');
+$email     = htmlspecialchars($_SESSION['user_email'] ?? '');
+$initials  = strtoupper(substr($name, 0, 2));
 $stAv = $db->prepare("SELECT avatar_url FROM tbl_users WHERE id = ? LIMIT 1");
 $stAv->execute([$userId]);
 $avatarUrl = ($av = $stAv->fetchColumn()) ? ($av) : null;
@@ -162,7 +163,7 @@ function pvPaymentIcon(string $method): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QuickBook — My Bookings</title>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_bookings.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script>
@@ -175,9 +176,8 @@ function pvPaymentIcon(string $method): string {
 <body>
 
 <div class="grain" aria-hidden="true"></div>
-<div class="bg-orb bg-orb-1" aria-hidden="true"></div>
-<div class="bg-orb bg-orb-2" aria-hidden="true"></div>
 
+<!-- ══ NAV ══ -->
 <nav class="pv-nav" role="navigation" aria-label="Customer navigation">
   <div class="pv-nav-inner">
 
@@ -189,12 +189,11 @@ function pvPaymentIcon(string $method): string {
 
     <div class="pv-nav-links">
       <a href="<?= BASE_URL ?>dashboard" class="pv-nav-link">Dashboard</a>
+      <a href="<?= BASE_URL ?>browse"    class="pv-nav-link">Browse</a>
       <a href="<?= BASE_URL ?>bookings" class="pv-nav-link is-active">
         Bookings<?php if ($upcomingCount): ?><sup class="pv-sup"><?= $upcomingCount ?></sup><?php endif; ?>
       </a>
-      <a href="<?= BASE_URL ?>browse" class="pv-nav-link">Browse Services</a>
-      <a href="<?= BASE_URL ?>loyalty" class="pv-nav-link">Loyalty</a>
-      <a href="<?= BASE_URL ?>profile" class="pv-nav-link">Profile</a>
+      <a href="<?= BASE_URL ?>loyalty"   class="pv-nav-link">Loyalty</a>
     </div>
 
     <div class="pv-nav-end">
@@ -222,16 +221,16 @@ function pvPaymentIcon(string $method): string {
         </svg>
       </button>
 
-     <!-- Profile dropdown trigger -->
-      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false">
+      <!-- Profile dropdown trigger -->
+      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false" title="Profile menu">
         <div class="pv-nav-av">
           <?php if ($avatarUrl): ?>
-            <img src="<?= $avatarUrl ?>" alt="<?= $name ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
+            <img src="<?= $avatarUrl ?>" alt="<?= $name ?>" style="width:36px;height:36px;object-fit:cover;border-radius:50%;display:block;">
           <?php else: ?>
-            <?= $initials ?>
+            <span class="pv-av-initials"><?= $initials ?></span>
           <?php endif; ?>
         </div>
-      <div class="pv-nav-user">
+        <div class="pv-nav-user">
           <div class="pv-nav-user-name"><?= $name ?></div>
           <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
         </div>
@@ -247,7 +246,7 @@ function pvPaymentIcon(string $method): string {
             <?php if ($avatarUrl): ?>
               <img src="<?= $avatarUrl ?>" alt="<?= $name ?>">
             <?php else: ?>
-              <?= $initials ?>
+              <span class="pv-av-initials"><?= $initials ?></span>
             <?php endif; ?>
           </div>
           <div class="pv-pd-info">
@@ -267,8 +266,10 @@ function pvPaymentIcon(string $method): string {
           <span class="pv-pd-item-ico"><i class="fa-solid fa-arrow-right-from-bracket"></i></span>
           <span>Sign Out</span>
         </a>
-      </div>
-  </div>
+      </div><!-- /pv-profile-dropdown -->
+
+    </div><!-- /pv-nav-end -->
+  </div><!-- /pv-nav-inner -->
 </nav>
 
 <header class="pv-hero" role="banner">

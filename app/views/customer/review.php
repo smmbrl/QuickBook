@@ -5,8 +5,14 @@
 require_once __DIR__ . '/../../../config/database.php';
 $db       = Database::getInstance();
 $userId   = (int)($_SESSION['user_id'] ?? 0);
-$userName = htmlspecialchars(trim(($_SESSION['first_name'] ?? '') . ' ' . ($_SESSION['last_name'] ?? '')) ?: ($_SESSION['user_name'] ?? 'Customer'));
-$initials = strtoupper(substr($_SESSION['first_name'] ?? $userName, 0, 1) . substr($_SESSION['last_name'] ?? '', 0, 1));
+$userName  = htmlspecialchars(trim(($_SESSION['first_name'] ?? '') . ' ' . ($_SESSION['last_name'] ?? '')) ?: ($_SESSION['user_name'] ?? 'Customer'));
+$userEmail = htmlspecialchars($_SESSION['user_email'] ?? '');
+$initials  = strtoupper(substr($_SESSION['first_name'] ?? $userName, 0, 1) . substr($_SESSION['last_name'] ?? '', 0, 1));
+
+// Fetch avatar
+$stAvR = $db->prepare("SELECT avatar_url FROM tbl_users WHERE id = ? LIMIT 1");
+$stAvR->execute([$userId]);
+$avatarUrl = ($av = $stAvR->fetchColumn()) ? $av : null;
 
 // Nav badges
 $stPoints = $db->prepare("SELECT COALESCE(SUM(points),0) FROM tbl_loyalty_points WHERE user_id = ?");
@@ -132,13 +138,13 @@ $avgRating    = $totalReviews
       <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false">
         <div class="pv-nav-av">
           <?php if ($avatarUrl): ?>
-            <img src="<?= $avatarUrl ?>" alt="<?= $name ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
+            <img src="<?= $avatarUrl ?>" alt="<?= $userName ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
           <?php else: ?>
             <?= $initials ?>
           <?php endif; ?>
         </div>
         <div class="pv-nav-user">
-          <div class="pv-nav-user-name"><?= $name ?></div>
+          <div class="pv-nav-user-name"><?= $userName ?></div>
           <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
         </div>
         <svg class="pv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -151,14 +157,14 @@ $avgRating    = $totalReviews
         <div class="pv-pd-header">
           <div class="pv-pd-avatar">
             <?php if ($avatarUrl): ?>
-              <img src="<?= $avatarUrl ?>" alt="<?= $name ?>">
+              <img src="<?= $avatarUrl ?>" alt="<?= $userName ?>">
             <?php else: ?>
               <?= $initials ?>
             <?php endif; ?>
           </div>
           <div class="pv-pd-info">
-            <div class="pv-pd-name"><?= $name ?></div>
-            <div class="pv-pd-email"><?= $email ?></div>
+            <div class="pv-pd-name"><?= $userName ?></div>
+            <div class="pv-pd-email"><?= $userEmail ?></div>
             <span class="pv-pd-tier"><?= $loyaltyTier ?> Member</span>
           </div>
         </div>

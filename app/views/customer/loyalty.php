@@ -100,27 +100,28 @@ unset($_SESSION['flash']);
 <!-- ══ NAV ══ -->
 <nav class="pv-nav" role="navigation" aria-label="Customer navigation">
   <div class="pv-nav-inner">
-
     <a href="<?= BASE_URL ?>home" class="pv-logo">
       <img src="<?= BASE_URL ?>assets/img/QB_LOGO.png" alt="QuickBook Logo" style="width:42px;height:42px;object-fit:contain;display:block;flex-shrink:0;">
       Quick<span>Book</span>
       <span class="pv-logo-badge">Customer</span>
     </a>
 
+    <!-- Navigation Links -->
     <div class="pv-nav-links">
       <a href="<?= BASE_URL ?>dashboard" class="pv-nav-link">Dashboard</a>
+      <a href="<?= BASE_URL ?>browse" class="pv-nav-link">Browse</a>
       <a href="<?= BASE_URL ?>bookings" class="pv-nav-link">
         Bookings
         <?php if ($upcomingCount): ?><sup class="pv-sup"><?= $upcomingCount ?></sup><?php endif; ?>
       </a>
-      <a href="<?= BASE_URL ?>browse" class="pv-nav-link">Browse Services</a>
       <a href="<?= BASE_URL ?>loyalty" class="pv-nav-link is-active">Loyalty</a>
-      <a href="<?= BASE_URL ?>profile" class="pv-nav-link">Profile</a>
     </div>
 
+    <!-- Navigation End (Notifications, Theme, Profile) -->
     <div class="pv-nav-end">
       <?php $notifUserId = (int)$userId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
 
+      <!-- Theme Toggle -->
       <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode" title="Toggle theme">
         <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
              viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -142,13 +143,13 @@ unset($_SESSION['flash']);
         </svg>
       </button>
 
-    <!-- Profile dropdown trigger -->
-      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false">
+      <!-- Profile Dropdown Trigger -->
+      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false" title="Profile menu">
         <div class="pv-nav-av">
           <?php if ($avatarUrl): ?>
-            <img src="<?= $avatarUrl ?>" alt="<?= $name ?>" style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
+            <img src="<?= $avatarUrl ?>" alt="<?= $name ?>" style="width:36px;height:36px;object-fit:cover;border-radius:50%;display:block;">
           <?php else: ?>
-            <?= $initials ?>
+            <span class="pv-av-initials"><?= $initials ?></span>
           <?php endif; ?>
         </div>
         <div class="pv-nav-user">
@@ -160,14 +161,14 @@ unset($_SESSION['flash']);
         </svg>
       </div>
 
-      <!-- Profile dropdown panel -->
+      <!-- Profile Dropdown Panel -->
       <div class="pv-profile-dropdown" id="profileDropdown" role="menu">
         <div class="pv-pd-header">
           <div class="pv-pd-avatar">
             <?php if ($avatarUrl): ?>
               <img src="<?= $avatarUrl ?>" alt="<?= $name ?>">
             <?php else: ?>
-              <?= $initials ?>
+              <span class="pv-av-initials"><?= $initials ?></span>
             <?php endif; ?>
           </div>
           <div class="pv-pd-info">
@@ -189,7 +190,8 @@ unset($_SESSION['flash']);
         </a>
       </div>
 
-  </div>
+    </div><!-- /pv-nav-end -->
+  </div><!-- /pv-nav-inner -->
 </nav>
 
 <!-- ══ HERO ══ -->

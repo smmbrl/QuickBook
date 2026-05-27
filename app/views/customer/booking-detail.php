@@ -4,8 +4,9 @@
 require_once __DIR__ . '/../../../config/database.php';
 $db       = Database::getInstance();
 $userId   = (int)($_SESSION['user_id'] ?? 0);
-$userName = htmlspecialchars($_SESSION['user_name'] ?? 'Customer');
-$initials = strtoupper(substr($userName, 0, 2));
+$userName  = htmlspecialchars($_SESSION['user_name']  ?? 'Customer');
+$userEmail = htmlspecialchars($_SESSION['user_email'] ?? '');
+$initials  = strtoupper(substr($userName, 0, 2));
 
 // $booking is already fetched & validated by CustomerController::bookingDetail()
 
@@ -154,7 +155,7 @@ $bdAvg    = $bdTotal
           <?php endif; ?>
         </div>
         <div class="pv-nav-user">
-          <div class="pv-nav-user-name"><?= $name ?></div>
+          <div class="pv-nav-user-name"><?= $userName ?></div>
           <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
         </div>
         <svg class="pv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -167,14 +168,14 @@ $bdAvg    = $bdTotal
         <div class="pv-pd-header">
           <div class="pv-pd-avatar">
             <?php if ($avatarUrl): ?>
-              <img src="<?= $avatarUrl ?>" alt="<?= $name ?>">
+              <img src="<?= $avatarUrl ?>" alt="<?= $userName ?>">
             <?php else: ?>
               <?= $initials ?>
             <?php endif; ?>
           </div>
           <div class="pv-pd-info">
-            <div class="pv-pd-name"><?= $name ?></div>
-            <div class="pv-pd-email"><?= $email ?></div>
+            <div class="pv-pd-name"><?= $userName ?></div>
+            <div class="pv-pd-email"><?= $userEmail ?></div>
             <span class="pv-pd-tier"><?= $loyaltyTier ?> Member</span>
           </div>
         </div>
