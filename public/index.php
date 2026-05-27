@@ -90,12 +90,17 @@ $routes = [
     'POST:provider/service/delete/{any}'      => ['ProviderDashController', 'deleteService'],
     'POST:provider/service/toggle/{any}'      => ['ProviderDashController', 'toggleService'],
 
-    // Availability / Schedule
-    'GET:provider/availability'               => ['ProviderDashController', 'availability'],
-    'GET:provider/schedule'                   => ['ProviderDashController', 'availability'],
+    // Schedule (Provider working hours, slots, blocked dates)
+    'GET:provider/schedule'                   => ['ProviderDashController', 'schedule'],
+    'GET:provider/availability'               => ['ProviderDashController', 'availability'],   // Legacy redirect to /schedule
     'POST:provider/availability/store'        => ['ProviderDashController', 'storeAvailability'],
-    'POST:provider/availability/update/{any}' => ['ProviderDashController', 'updateAvailability'],
-    'POST:provider/availability/delete/{any}' => ['ProviderDashController', 'deleteAvailability'],
+    'POST:provider/schedule/store'            => ['ProviderDashController', 'storeAvailability'],
+    'POST:provider/schedule/slots'            => ['ProviderDashController', 'storeSlotSettings'],
+    'POST:provider/schedule/block'            => ['ProviderDashController', 'storeBlockedDate'],
+    'GET:provider/schedule/unblock/{any}'     => ['ProviderDashController', 'removeBlockedDate'],
+    'POST:provider/schedule/pause'            => ['ProviderDashController', 'togglePauseBookings'],
+    'POST:provider/availability/update/{any}' => ['ProviderDashController', 'updateAvailability'],   // Legacy
+    'POST:provider/availability/delete/{any}' => ['ProviderDashController', 'deleteAvailability'],   // Legacy
 
     // Profile
     'GET:provider/profile'                    => ['ProviderDashController', 'profile'],
@@ -105,8 +110,11 @@ $routes = [
     'POST:provider/profile/update-password'   => ['ProviderDashController', 'updatePassword'],
     'POST:provider/profile/upload-photo'      => ['ProviderDashController', 'uploadProfilePhoto'],
 
-    // Portfolio (placeholder — add a portfolioController method when ready)
-    'GET:provider/portfolio'                  => ['ProviderDashController', 'index'],
+    // Portfolio
+    'GET:provider/portfolio'                  => ['ProviderDashController', 'portfolio'],
+    'POST:provider/portfolio/upload'          => ['ProviderDashController', 'portfolio'],
+    'POST:provider/portfolio/delete/{any}'    => ['ProviderDashController', 'portfolio'],
+    'POST:provider/portfolio/feature/{any}'   => ['ProviderDashController', 'portfolio'],
 
     // Settings (placeholder)
     'GET:provider/settings'                   => ['ProviderDashController', 'profile'],
