@@ -15,18 +15,21 @@ if (!$providerId && $userId) {
     $providerId = (int)$stPid->fetchColumn();
 }
 
-/* ── Business info (JOIN with categories to get category_name) ── */
+/* ── Business info (JOIN with categories and users) ── */
 $stBiz = $db->prepare("
-    SELECT pp.*, c.name AS category_name
+    SELECT pp.*, c.name AS category_name, u.first_name, u.last_name, u.email AS user_email
     FROM tbl_provider_profiles pp
     LEFT JOIN tbl_categories c ON pp.category_id = c.id
+    LEFT JOIN tbl_users u ON pp.user_id = u.id
     WHERE pp.id = ? LIMIT 1
 ");
 $stBiz->execute([$providerId]);
 $biz = $stBiz->fetch() ?: [];
-$bizName      = htmlspecialchars($biz['business_name'] ?? $name); 
-$firstName = htmlspecialchars(explode(' ', $name)[0]);
+$bizName      = htmlspecialchars($biz['business_name'] ?? $name);
+$firstName    = htmlspecialchars($biz['first_name'] ?? explode(' ', $name)[0]);
+$provFullName = htmlspecialchars(trim(($biz['first_name'] ?? '') . ' ' . ($biz['last_name'] ?? '')) ?: $name);
 $bizCategory  = htmlspecialchars($biz['category_name'] ?? 'Service Provider');
+$categoryId   = (int)($biz['category_id'] ?? 0);
 $profilePhoto = $biz['profile_photo'] ?? null;
 
 /* ── Rating from stored columns (updated by DB trigger on review insert) ── */
@@ -65,7 +68,7 @@ $stMonthEarn = $db->prepare("
 $stMonthEarn->execute([$providerId]);
 $monthEarnings = (float)$stMonthEarn->fetchColumn();
 
-/* ── Unique customers served (replaces profile views — no tbl_provider_views in schema) ── */
+/* ── Unique customers served ── */
 $stCustomers = $db->prepare("
     SELECT COUNT(DISTINCT customer_id)
     FROM tbl_bookings
@@ -117,7 +120,7 @@ $monthlyData   = $stMonthly->fetchAll();
 $chartLabels   = array_column($monthlyData, 'month');
 $chartEarnings = array_map(fn($r) => (float)$r['total'], $monthlyData);
 
-/* ── Portfolio — uses tbl_provider_gallery (not tbl_portfolio) ── */
+/* ── Portfolio — uses tbl_provider_gallery ── */
 $stPortfolio = $db->prepare("
     SELECT * FROM tbl_provider_gallery
     WHERE provider_id = ?
@@ -186,6 +189,416 @@ function starFill(float $avg, int $pos): string {
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/provider_dashboard.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    /* ════════════════════════════════════════
+       ENHANCED PORTFOLIO CARD STYLING
+    ════════════════════════════════════════ */
+
+    /* Primary Action Card Style */
+    .pv-action--primary {
+      background: linear-gradient(135deg, var(--gold-soft) 0%, rgba(201,168,76,.08) 100%) !important;
+      border: 1.5px solid var(--gold-border-md) !important;
+      box-shadow: 0 4px 16px rgba(201,168,76,.12), inset 0 1px 0 rgba(255,255,255,.40) !important;
+      transform: translateY(0) !important;
+      transition: all .28s var(--ease-out) !important;
+    }
+
+    .pv-action--primary:hover {
+      background: linear-gradient(135deg, var(--gold-soft-md) 0%, rgba(201,168,76,.12) 100%) !important;
+      border-color: var(--gold-border-md) !important;
+      box-shadow: 0 8px 28px rgba(201,168,76,.20), inset 0 1px 0 rgba(255,255,255,.50) !important;
+      transform: translateY(-4px) !important;
+    }
+
+    .pv-action--primary .pv-action-ico {
+      background: linear-gradient(135deg, var(--gold-dim), var(--gold-bright));
+      color: #fff8e8;
+      box-shadow: 0 2px 8px rgba(201,168,76,.25);
+      transform: scale(1);
+      transition: all .25s var(--ease-out);
+    }
+
+    .pv-action--primary:hover .pv-action-ico {
+      transform: scale(1.15) rotate(12deg);
+      box-shadow: 0 4px 16px rgba(201,168,76,.35);
+    }
+
+    /* Featured Card */
+    .pv-card--featured {
+      background: linear-gradient(135deg, rgba(255,255,255,.72) 0%, rgba(255,253,248,.55) 100%);
+      border: 1.5px solid var(--gold-border-md);
+      box-shadow: 0 8px 32px rgba(201,168,76,.16), inset 0 1px 0 rgba(255,255,255,.90);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .pv-card--featured::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -20%;
+      width: 280px;
+      height: 280px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(201,168,76,.08) 0%, transparent 70%);
+      pointer-events: none;
+      animation: float 6s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0) translateX(0); }
+      50% { transform: translateY(-20px) translateX(-10px); }
+    }
+
+    /* Portfolio Empty State — Minimalist */
+    .pv-portfolio-empty {
+      display: flex;
+      align-items: center;
+      gap: .8rem;
+      padding: 1rem;
+      background: var(--gold-lt);
+      border: 1.5px solid var(--gold-border-md);
+      border-radius: var(--r-md);
+      position: relative;
+      z-index: 1;
+    }
+
+    .pv-portfolio-empty-icon {
+      font-size: 2rem;
+      opacity: .9;
+      flex-shrink: 0;
+    }
+
+    .pv-portfolio-empty-title {
+      font-family: var(--font-body);
+      font-size: .9rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: .15rem;
+      letter-spacing: 0;
+    }
+
+    .pv-portfolio-empty-sub {
+      font-size: .78rem;
+      color: var(--text-dim);
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    /* Large Upload Button */
+    .pv-port-upload-btn--lg {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: .5rem;
+      padding: .65rem 1.2rem;
+      border-radius: 9px;
+      background: var(--gold-lt);
+      color: var(--gold-dim);
+      border: 1.5px solid var(--gold-border-md);
+      font-family: var(--font-body);
+      font-size: .83rem;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(201,168,76,.10);
+      transition: all .2s var(--ease-out);
+      white-space: nowrap;
+    }
+
+    .pv-port-upload-btn--lg:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px rgba(201,168,76,.18);
+      background: var(--gold-soft-md);
+      border-color: var(--gold);
+      color: var(--gold);
+    }
+
+    .pv-port-upload-btn--lg:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 6px rgba(201,168,76,.12);
+    }
+
+    .pv-port-upload-btn--lg i {
+      font-size: .9rem;
+      transition: transform .2s var(--ease-out);
+    }
+
+    .pv-port-upload-btn--lg:hover i {
+      transform: scale(1.1);
+    }
+
+    /* Standard Upload Button Enhancement */
+    .pv-port-upload-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: .5rem;
+      width: 100%;
+      padding: .85rem 1.2rem;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--gold-soft) 0%, rgba(201,168,76,.08) 100%);
+      color: var(--gold-dim);
+      border: 1.5px solid var(--gold-border-md);
+      font-family: var(--font-body);
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(201,168,76,.10);
+      transition: all .2s var(--ease-out);
+      margin-top: 1.2rem;
+    }
+
+    .pv-port-upload-btn:hover {
+      background: linear-gradient(135deg, var(--gold-soft-md) 0%, rgba(201,168,76,.12) 100%);
+      border-color: var(--gold);
+      color: var(--gold);
+      box-shadow: 0 4px 16px rgba(201,168,76,.18);
+      transform: translateY(-2px);
+    }
+
+    .pv-port-upload-btn i {
+      transition: transform .2s var(--ease-out);
+    }
+
+    .pv-port-upload-btn:hover i {
+      transform: scale(1.15);
+    }
+
+    /* Portfolio Grid with Hover Effects */
+    .pv-portfolio-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: .75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .pv-port-thumb {
+      aspect-ratio: 1;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1.5px solid var(--gold-border);
+      background: rgba(255,255,255,.55);
+      cursor: pointer;
+      position: relative;
+      transition: all .25s var(--ease-out);
+      box-shadow: 0 2px 8px rgba(201,168,76,.08);
+    }
+
+    .pv-port-thumb:hover {
+      border-color: var(--gold-border-md);
+      box-shadow: 0 6px 20px rgba(201,168,76,.16);
+      transform: translateY(-4px);
+    }
+
+    .pv-port-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform .3s var(--ease-out);
+    }
+
+    .pv-port-thumb:hover img {
+      transform: scale(1.08);
+    }
+
+    .pv-port-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(201,168,76,.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity .25s var(--ease-out);
+    }
+
+    .pv-port-thumb:hover .pv-port-overlay {
+      opacity: 1;
+    }
+
+    .pv-port-overlay-ico {
+      color: #fff8e8;
+      font-size: 1.5rem;
+      transform: scale(.85);
+      transition: transform .25s var(--ease-out);
+    }
+
+    .pv-port-thumb:hover .pv-port-overlay-ico {
+      transform: scale(1.1);
+    }
+
+    .pv-port-thumb-empty {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      color: var(--gold-border);
+      background: linear-gradient(135deg, rgba(201,168,76,.04) 0%, rgba(201,168,76,.02) 100%);
+      transition: all .2s var(--ease-out);
+    }
+
+    .pv-port-thumb:hover .pv-port-thumb-empty {
+      color: var(--gold-dim);
+      background: linear-gradient(135deg, rgba(201,168,76,.08) 0%, rgba(201,168,76,.04) 100%);
+    }
+
+    /* Portfolio Stats */
+    .pv-port-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: .8rem;
+      padding: 1.2rem 0;
+      border-top: 1.5px solid var(--gold-border);
+      border-bottom: 1.5px solid var(--gold-border);
+    }
+
+    .pv-port-stat {
+      text-align: center;
+      padding: .6rem 0;
+    }
+
+    .pv-port-stat-val {
+      font-family: var(--font-display);
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--gold-dim);
+      display: block;
+      line-height: 1;
+      margin-bottom: .3rem;
+    }
+
+    .pv-port-stat-label {
+      font-size: .7rem;
+      font-family: var(--font-mono);
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      font-weight: 500;
+    }
+
+    /* Dark Mode Enhancements */
+    [data-theme="dark"] .pv-card--featured {
+      background: linear-gradient(135deg, rgba(20,26,42,.90) 0%, rgba(18,23,35,.80) 100%);
+      border-color: rgba(201,168,76,.22);
+      box-shadow: 0 8px 32px rgba(0,0,0,.40), inset 0 1px 0 rgba(255,255,255,.06);
+    }
+
+    [data-theme="dark"] .pv-action--primary {
+      background: linear-gradient(135deg, rgba(201,168,76,.16) 0%, rgba(201,168,76,.08) 100%) !important;
+      border-color: rgba(201,168,76,.28) !important;
+      box-shadow: 0 4px 16px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.04) !important;
+    }
+
+    [data-theme="dark"] .pv-action--primary:hover {
+      background: linear-gradient(135deg, rgba(201,168,76,.22) 0%, rgba(201,168,76,.14) 100%) !important;
+      border-color: rgba(201,168,76,.40) !important;
+      box-shadow: 0 8px 28px rgba(0,0,0,.50), inset 0 1px 0 rgba(255,255,255,.08) !important;
+    }
+
+    [data-theme="dark"] .pv-portfolio-empty {
+      background: rgba(201,168,76,.12);
+      border-color: rgba(201,168,76,.24);
+    }
+
+    [data-theme="dark"] .pv-portfolio-empty-title {
+      color: #EDE3CC;
+    }
+
+    [data-theme="dark"] .pv-portfolio-empty-sub {
+      color: rgba(237,227,204,.45);
+    }
+
+    [data-theme="dark"] .pv-port-upload-btn--lg {
+      background: rgba(201,168,76,.12);
+      border-color: rgba(201,168,76,.24);
+      color: var(--gold);
+      box-shadow: 0 2px 8px rgba(0,0,0,.20);
+    }
+
+    [data-theme="dark"] .pv-port-upload-btn--lg:hover {
+      background: rgba(201,168,76,.20);
+      border-color: rgba(201,168,76,.38);
+      color: var(--gold-bright);
+      box-shadow: 0 4px 16px rgba(0,0,0,.30);
+    }
+
+    [data-theme="dark"] .pv-port-thumb {
+      background: rgba(22,28,48,.65);
+      border-color: rgba(201,168,76,.18);
+      box-shadow: 0 2px 8px rgba(0,0,0,.25);
+    }
+
+    [data-theme="dark"] .pv-port-thumb:hover {
+      border-color: rgba(201,168,76,.32);
+      box-shadow: 0 6px 20px rgba(0,0,0,.40);
+    }
+
+    [data-theme="dark"] .pv-port-stats {
+      border-top-color: rgba(201,168,76,.16);
+      border-bottom-color: rgba(201,168,76,.16);
+    }
+
+    [data-theme="dark"] .pv-port-stat-val {
+      color: var(--gold);
+    }
+
+    [data-theme="dark"] .pv-port-stat-label {
+      color: rgba(237,227,204,.40);
+    }
+
+    [data-theme="dark"] .pv-port-upload-btn {
+      background: linear-gradient(135deg, rgba(201,168,76,.14) 0%, rgba(201,168,76,.06) 100%);
+      border-color: rgba(201,168,76,.24);
+      color: var(--gold);
+      box-shadow: 0 2px 8px rgba(0,0,0,.20);
+    }
+
+    [data-theme="dark"] .pv-port-upload-btn:hover {
+      background: linear-gradient(135deg, rgba(201,168,76,.22) 0%, rgba(201,168,76,.12) 100%);
+      border-color: rgba(201,168,76,.38);
+      color: var(--gold-bright);
+      box-shadow: 0 4px 16px rgba(0,0,0,.30);
+    }
+
+    /* Responsive Adjustments */
+    @media (max-width: 768px) {
+      .pv-portfolio-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: .6rem;
+      }
+
+      .pv-portfolio-empty-title {
+        font-size: 1.15rem;
+      }
+
+      .pv-port-upload-btn--lg {
+        padding: .85rem 1.4rem;
+        font-size: .88rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .pv-portfolio-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .pv-port-stats {
+        grid-template-columns: 1fr;
+        gap: .6rem;
+      }
+
+      .pv-portfolio-empty {
+        padding: 2.2rem 1.2rem 2rem;
+      }
+
+      .pv-portfolio-empty-icon {
+        font-size: 2.8rem;
+        margin-bottom: .8rem;
+      }
+    }
+  </style>
   <script>
     (function(){
       var t = localStorage.getItem('qb-theme') || 'light';
@@ -217,9 +630,9 @@ function starFill(float $avg, int $pos): string {
         Appointments
         <?php if ($pendingCount): ?><sup class="pv-sup"><?= $pendingCount ?></sup><?php endif; ?>
       </a>
-      <a href="<?= BASE_URL ?>provider/services"   class="pv-nav-link">Services</a>
       <a href="<?= BASE_URL ?>provider/portfolio"  class="pv-nav-link">Portfolio</a>
       <a href="<?= BASE_URL ?>provider/schedule"   class="pv-nav-link">Schedule</a>
+      <a href="<?= BASE_URL ?>provider/reviews"    class="pv-nav-link">Reviews</a>
     </div>
 
     <!-- Right-side controls -->
@@ -255,8 +668,8 @@ function starFill(float $avg, int $pos): string {
           <?php endif; ?>
         </div>
         <div class="pv-nav-user">
-  <div class="pv-nav-user-name"><?= $firstName ?></div>
-</div>
+          <div class="pv-nav-user-name"><?= $firstName ?></div>
+        </div>
         <svg class="pv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
              viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
              stroke-linecap="round" stroke-linejoin="round">
@@ -275,9 +688,9 @@ function starFill(float $avg, int $pos): string {
             <?php endif; ?>
           </div>
           <div class="pv-pd-info">
-            <div class="pv-pd-name"><?= $bizName ?></div>
+            <div class="pv-pd-name"><?= $provFullName ?></div>
             <div class="pv-pd-email"><?= $email ?></div>
-            <span class="pv-pd-role">Provider</span>
+            <span class="pv-pd-role"><?= $bizCategory ?></span>
           </div>
         </div>
         <div class="pv-pd-divider"></div>
@@ -307,7 +720,7 @@ function starFill(float $avg, int $pos): string {
 </nav>
 
 <!-- ══════════════════════════════════════
-     HERO BANNER
+     HERO BANNER — UPDATED WITH CATEGORY
 ══════════════════════════════════════ -->
 <header class="pv-hero" role="banner">
   <div class="pv-hero-overlay" aria-hidden="true"></div>
@@ -318,13 +731,16 @@ function starFill(float $avg, int $pos): string {
         <?= $greeting ?>
       </p>
       <h1 class="pv-hero-name"><?= $bizName ?></h1>
-      <p class="pv-hero-sub"><?= $bizCategory ?> · <?= date('l, F j, Y') ?></p>
+      <p class="pv-hero-sub">
+        <span class="pv-category-badge"><?= $bizCategory ?></span>
+        · <?= date('l, F j, Y') ?>
+      </p>
       <div class="pv-hero-meta">
         <span class="pv-status-badge">
           <span class="pv-status-dot" aria-hidden="true"></span>
           Active Business
         </span>
-        <span class="pv-tier-badge">⭐ <?= number_format($avgRating, 1) ?> Rating</span>
+    
       </div>
     </div>
     <div class="pv-hero-right">
@@ -335,33 +751,20 @@ function starFill(float $avg, int $pos): string {
         <span aria-hidden="true">→</span>
       </a>
       <?php endif; ?>
-      <a href="<?= BASE_URL ?>provider/appointments?date=today" class="pv-hero-chip">
-        <i class="fa-regular fa-calendar-check" style="font-size:.75rem"></i>
-        <?= count($todaySlots) ?> today
-      </a>
+  
     </div>
   </div>
 
-  <!-- Stats strip -->
+  <!-- Stats strip — PORTFOLIO-FOCUSED -->
   <div class="pv-hero-stats" role="region" aria-label="Business quick stats">
     <div class="pv-hs-item">
-      <span class="pv-hs-val"><?= $totalBookings ?></span>
+      <span class="pv-hs-val"><?= $totalPortfolio ?></span>
+      <span class="pv-hs-label">Portfolio Works</span>
+    </div>
+    <div class="pv-hs-div" aria-hidden="true"></div>
+    <div class="pv-hs-item">
+      <span class="pv-hs-val accent"><?= $totalBookings ?></span>
       <span class="pv-hs-label">Total Bookings</span>
-    </div>
-    <div class="pv-hs-div" aria-hidden="true"></div>
-    <div class="pv-hs-item">
-      <span class="pv-hs-val accent"><?= $pendingCount ?></span>
-      <span class="pv-hs-label">Pending</span>
-    </div>
-    <div class="pv-hs-div" aria-hidden="true"></div>
-    <div class="pv-hs-item">
-      <span class="pv-hs-val green"><?= fmtMoney($totalEarnings) ?></span>
-      <span class="pv-hs-label">Total Earnings</span>
-    </div>
-    <div class="pv-hs-div" aria-hidden="true"></div>
-    <div class="pv-hs-item">
-      <span class="pv-hs-val accent"><?= fmtMoney($monthEarnings) ?></span>
-      <span class="pv-hs-label">This Month</span>
     </div>
     <div class="pv-hs-div" aria-hidden="true"></div>
     <div class="pv-hs-item">
@@ -370,8 +773,18 @@ function starFill(float $avg, int $pos): string {
     </div>
     <div class="pv-hs-div" aria-hidden="true"></div>
     <div class="pv-hs-item">
+      <span class="pv-hs-val green"><?= number_format($reviewCount) ?></span>
+      <span class="pv-hs-label">Reviews</span>
+    </div>
+    <div class="pv-hs-div" aria-hidden="true"></div>
+    <div class="pv-hs-item">
       <span class="pv-hs-val blue"><?= number_format($uniqueCustomers) ?></span>
-      <span class="pv-hs-label">Customers Served</span>
+      <span class="pv-hs-label">Customers</span>
+    </div>
+    <div class="pv-hs-div" aria-hidden="true"></div>
+    <div class="pv-hs-item">
+      <span class="pv-hs-val gold"><?= fmtMoney($totalEarnings) ?></span>
+      <span class="pv-hs-label">Total Earnings</span>
     </div>
   </div>
 </header>
@@ -381,33 +794,6 @@ function starFill(float $avg, int $pos): string {
 ══════════════════════════════════════ -->
 <main class="pv-page" role="main">
 
-  <!-- KPI Cards — Row 1 -->
-  <div class="pv-kpi-row">
-    <div class="pv-kpi pv-kpi--gold">
-      <div class="pv-kpi-ico"><i class="fa-solid fa-calendar-check"></i></div>
-      <div class="pv-kpi-val"><?= $totalBookings ?></div>
-      <div class="pv-kpi-label">Total Bookings</div>
-      <div class="pv-kpi-sub"><?= $monthBookings ?> this month</div>
-    </div>
-    <div class="pv-kpi pv-kpi--green">
-      <div class="pv-kpi-ico"><i class="fa-solid fa-peso-sign"></i></div>
-      <div class="pv-kpi-val"><?= fmtMoney($totalEarnings) ?></div>
-      <div class="pv-kpi-label">Total Earnings</div>
-      <div class="pv-kpi-sub"><?= fmtMoney($monthEarnings) ?> this month</div>
-    </div>
-    <div class="pv-kpi pv-kpi--yellow">
-      <div class="pv-kpi-ico"><i class="fa-solid fa-star"></i></div>
-      <div class="pv-kpi-val"><?= number_format($avgRating, 1) ?></div>
-      <div class="pv-kpi-label">Customer Rating</div>
-      <div class="pv-kpi-sub"><?= number_format($reviewCount) ?> review<?= $reviewCount !== 1 ? 's' : '' ?></div>
-    </div>
-    <div class="pv-kpi pv-kpi--blue">
-      <div class="pv-kpi-ico"><i class="fa-solid fa-users"></i></div>
-      <div class="pv-kpi-val"><?= number_format($uniqueCustomers) ?></div>
-      <div class="pv-kpi-label">Customers Served</div>
-      <div class="pv-kpi-sub"><?= $completedCount ?> completed</div>
-    </div>
-  </div>
 
   <div class="pv-layout">
 
@@ -442,9 +828,9 @@ function starFill(float $avg, int $pos): string {
         </div>
         <?php if (empty($upcomingApts)): ?>
         <div class="pv-empty-state">
-          <div class="pv-empty-icon" aria-hidden="true">📭</div>
-          <p>No upcoming appointments yet.</p>
-          <a href="<?= BASE_URL ?>provider/services" class="pv-empty-cta">Manage Services →</a>
+          <div class="pv-empty-icon" aria-hidden="true">📅</div>
+          <p class="pv-empty-title">No upcoming appointments</p>
+          <a href="<?= BASE_URL ?>provider/appointments" class="pv-empty-cta">View Your Appointments →</a>
         </div>
         <?php else: ?>
         <div class="pv-apt-table-wrap">
@@ -520,77 +906,32 @@ function starFill(float $avg, int $pos): string {
 
     </div><!-- /pv-main -->
 
-    <!-- ── SIDEBAR column ── -->
+    <!-- ── SIDEBAR column — REDESIGNED ── -->
     <aside class="pv-sidebar" aria-label="Provider sidebar">
 
-      <!-- Quick Actions -->
-      <div class="pv-card">
+      <!-- PORTFOLIO-FIRST Quick Actions -->
+      <div class="pv-card" style="position: relative; z-index: 2;">
         <div class="pv-card-head"><h2>Quick Actions</h2></div>
         <div class="pv-actions">
-          <a href="<?= BASE_URL ?>provider/services/create" class="pv-action">
-            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-plus"></i></span>
+          <a href="<?= BASE_URL ?>provider/portfolio/upload" class="pv-action pv-action--primary">
+            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-cloud-arrow-up"></i></span>
             <div class="pv-action-txt">
-              <strong>Add Service</strong>
-              <span>Create a new offering</span>
+              <strong>Upload Portfolio Work</strong>
+              <span>Attract customers with your best work</span>
             </div>
-          </a>
-          <a href="<?= BASE_URL ?>provider/portfolio/upload" class="pv-action">
-            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-images"></i></span>
-            <div class="pv-action-txt"><strong>Upload Portfolio</strong><span>Showcase your work</span></div>
-          </a>
-          <a href="<?= BASE_URL ?>provider/schedule" class="pv-action">
-            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-clock"></i></span>
-            <div class="pv-action-txt"><strong>Update Schedule</strong><span>Set availability</span></div>
           </a>
           <a href="<?= BASE_URL ?>provider/profile" class="pv-action">
             <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-store"></i></span>
-            <div class="pv-action-txt"><strong>View Profile</strong><span>See public listing</span></div>
+            <div class="pv-action-txt"><strong>View Public Profile</strong><span>See your public listing</span></div>
           </a>
-        </div>
-      </div>
-
-      <!-- Portfolio Insights -->
-      <div class="pv-card">
-        <div class="pv-card-head">
-          <h2>Portfolio</h2>
-          <a href="<?= BASE_URL ?>provider/portfolio" class="pv-link">Manage →</a>
-        </div>
-        <div class="pv-portfolio-body">
-          <div class="pv-portfolio-grid">
-            <?php for ($i = 0; $i < 6; $i++):
-              $item = $portfolioItems[$i] ?? null; ?>
-            <div class="pv-port-thumb">
-              <?php if ($item && !empty($item['image_url'])): ?>
-                <img src="<?= htmlspecialchars($item['image_url']) ?>"
-                     alt="<?= htmlspecialchars($item['caption'] ?? 'Portfolio') ?>">
-                <div class="pv-port-overlay">
-                  <i class="fa-solid fa-expand pv-port-overlay-ico"></i>
-                </div>
-              <?php else: ?>
-                <div class="pv-port-thumb-empty" aria-hidden="true">📷</div>
-              <?php endif; ?>
-            </div>
-            <?php endfor; ?>
-          </div>
-          <div class="pv-port-stats">
-            <div class="pv-port-stat">
-              <div class="pv-port-stat-val"><?= $totalPortfolio ?></div>
-              <div class="pv-port-stat-label">Uploads</div>
-            </div>
-            <div class="pv-port-stat">
-              <div class="pv-port-stat-val"><?= $reviewCount ?></div>
-              <div class="pv-port-stat-label">Reviews</div>
-            </div>
-            <div class="pv-port-stat">
-              <div class="pv-port-stat-val"><?= $uniqueCustomers ?></div>
-              <div class="pv-port-stat-label">Clients</div>
-            </div>
-          </div>
-          <button class="pv-port-upload-btn"
-                  onclick="location.href='<?= BASE_URL ?>provider/portfolio/upload'">
-            <i class="fa-solid fa-cloud-arrow-up"></i>
-            Upload New Work
-          </button>
+          <a href="<?= BASE_URL ?>provider/schedule" class="pv-action">
+            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-clock"></i></span>
+            <div class="pv-action-txt"><strong>Update Schedule</strong><span>Manage availability</span></div>
+          </a>
+          <a href="<?= BASE_URL ?>provider/settings" class="pv-action">
+            <span class="pv-action-ico" aria-hidden="true"><i class="fa-solid fa-gear"></i></span>
+            <div class="pv-action-txt"><strong>Settings</strong><span>Account & business info</span></div>
+          </a>
         </div>
       </div>
 
@@ -601,9 +942,9 @@ function starFill(float $avg, int $pos): string {
           <a href="<?= BASE_URL ?>provider/schedule" class="pv-link">Manage →</a>
         </div>
         <div class="pv-schedule-body">
-          <div class="pv-schedule-status <?= empty($todaySlots) ? 'is-closed' : '' ?>">
+          <div class="pv-schedule-status">
             <span class="pv-sched-label">
-              <?= empty($todaySlots) ? 'No Bookings Today' : 'Open Today' ?>
+              <?= empty($todaySlots) ? 'No Appointments Today' : 'Open Today' ?>
             </span>
             <button class="pv-sched-toggle">Edit</button>
           </div>
@@ -624,7 +965,7 @@ function starFill(float $avg, int $pos): string {
           </div>
           <?php else: ?>
           <p class="pv-schedule-next" style="text-align:center;padding:.5rem 0;opacity:.55">
-            No appointments for today.
+            No appointments scheduled for today.
           </p>
           <?php endif; ?>
         </div>
@@ -633,7 +974,7 @@ function starFill(float $avg, int $pos): string {
       <!-- Customer Ratings -->
       <div class="pv-card">
         <div class="pv-card-head">
-          <h2>Customer Ratings</h2>
+          <h2>Customer Reviews</h2>
           <a href="<?= BASE_URL ?>provider/reviews" class="pv-link">All reviews →</a>
         </div>
         <div class="pv-rating-body">

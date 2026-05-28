@@ -7,12 +7,15 @@ $email        = htmlspecialchars($_SESSION['user_email'] ?? '');
 $firstName    = htmlspecialchars(explode(' ', $_SESSION['user_name'] ?? 'Provider')[0]);
 
 /* ── Provider profile ── */
-$stmt = $db->prepare("SELECT * FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
+$stmt = $db->prepare("SELECT pp.*, c.name AS category_name, u.first_name, u.last_name FROM tbl_provider_profiles pp LEFT JOIN tbl_categories c ON pp.category_id = c.id LEFT JOIN tbl_users u ON pp.user_id = u.id WHERE pp.user_id = ? LIMIT 1");
 $stmt->execute([$providerId]);
 $profile      = $stmt->fetch();
 $profileId    = $profile['id'] ?? 0;
+$firstName    = htmlspecialchars($profile['first_name'] ?? explode(' ', $providerName)[0]);
+$provFullName = htmlspecialchars(trim(($profile['first_name'] ?? '') . ' ' . ($profile['last_name'] ?? '')) ?: $providerName);
 $initials     = strtoupper(substr($providerName, 0, 2));
 $profilePhoto = $profile['profile_photo'] ?? null;
+$bizCategory  = htmlspecialchars($profile['category_name'] ?? 'Service Provider');
 
 /* ── Pending bookings count ── */
 $stmt = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ? AND status = 'pending'");
@@ -118,6 +121,21 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
       if (t === 'dark') document.documentElement.setAttribute('data-theme','dark');
     })();
   </script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const isOpen = <?= $isOpenToday ? 'true' : 'false' ?>;
+      const badge = document.querySelector('.pv-hero-meta .pv-status-badge');
+      if (badge) {
+        if (isOpen) {
+          badge.classList.add('status-available');
+          badge.classList.remove('status-unavailable');
+        } else {
+          badge.classList.add('status-unavailable');
+          badge.classList.remove('status-available');
+        }
+      }
+    });
+  </script>
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
@@ -128,7 +146,6 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
 <nav class="pv-nav" role="navigation" aria-label="Provider navigation">
   <div class="pv-nav-inner">
 
-    <!-- Logo -->
     <a href="<?= BASE_URL ?>home" class="pv-logo">
       <img src="<?= BASE_URL ?>assets/img/QB_LOGO.png" alt="QuickBook Logo"
            style="width:42px;height:42px;object-fit:contain;display:block;flex-shrink:0;">
@@ -136,43 +153,26 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
       <span class="pv-logo-badge">Provider</span>
     </a>
 
-    <!-- Centre nav links -->
     <div class="pv-nav-links">
-      <a href="<?= BASE_URL ?>provider/dashboard"     class="pv-nav-link">Dashboard</a>
-      <a href="<?= BASE_URL ?>provider/appointments"  class="pv-nav-link">
+      <a href="<?= BASE_URL ?>provider/dashboard"    class="pv-nav-link">Dashboard</a>
+      <a href="<?= BASE_URL ?>provider/appointments" class="pv-nav-link">
         Appointments
         <?php if ($pendingBookings): ?><sup class="pv-sup"><?= $pendingBookings ?></sup><?php endif; ?>
       </a>
-      <a href="<?= BASE_URL ?>provider/services"   class="pv-nav-link">Services</a>
       <a href="<?= BASE_URL ?>provider/portfolio"  class="pv-nav-link">Portfolio</a>
       <a href="<?= BASE_URL ?>provider/schedule"   class="pv-nav-link is-active">Schedule</a>
+      <a href="<?= BASE_URL ?>provider/reviews"    class="pv-nav-link">Reviews</a>
     </div>
 
-    <!-- Right-side controls -->
     <div class="pv-nav-end">
       <?php $notifUserId = (int)$providerId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
 
-      <!-- Theme toggle -->
       <button class="pv-theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode">
-        <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-        </svg>
-        <svg class="icon-sun" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="5"/>
-          <line x1="12" y1="1"  x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-          <line x1="4.22"  y1="4.22"  x2="5.64"  y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-          <line x1="1"  y1="12" x2="3"  y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-          <line x1="4.22"  y1="19.78" x2="5.64"  y2="18.36"/><line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"/>
-        </svg>
+        <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
       </button>
 
-      <!-- Profile dropdown trigger -->
-      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0"
-           aria-haspopup="true" aria-expanded="false">
+      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false">
         <div class="pv-nav-av">
           <?php if($profilePhoto):?><img src="<?=htmlspecialchars($profilePhoto)?>" alt="<?=$providerName?>"><?php else:?><?=$initials?><?php endif;?>
         </div>
@@ -180,15 +180,14 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
         <svg class="pv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </div>
 
-      <!-- Profile dropdown menu -->
       <div class="pv-profile-dropdown" id="profileDropdown" role="menu">
         <div class="pv-pd-header">
           <div class="pv-pd-avatar"><?php if($profilePhoto):?><img src="<?=htmlspecialchars($profilePhoto)?>" alt=""><?php else:?><?=$initials?><?php endif;?></div>
-          <div class="pv-pd-info"><div class="pv-pd-name"><?=$providerName?></div><div class="pv-pd-email"><?=$email?></div><span class="pv-pd-role">Provider</span></div>
+          <div class="pv-pd-info"><div class="pv-pd-name"><?=$provFullName?></div><div class="pv-pd-email"><?=$email?></div><span class="pv-pd-role"><?=$bizCategory?></span></div>
         </div>
         <div class="pv-pd-divider"></div>
-        <a href="<?= BASE_URL ?>provider/profile"   class="pv-pd-item" role="menuitem"><span class="pv-pd-item-ico"><i class="fa-solid fa-store"></i></span><span>Business Profile</span><svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></a>
-        <a href="<?= BASE_URL ?>provider/settings"  class="pv-pd-item" role="menuitem"><span class="pv-pd-item-ico"><i class="fa-solid fa-gear"></i></span><span>Settings</span><svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></a>
+        <a href="<?= BASE_URL ?>provider/profile"  class="pv-pd-item" role="menuitem"><span class="pv-pd-item-ico"><i class="fa-solid fa-store"></i></span><span>Business Profile</span><svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></a>
+        <a href="<?= BASE_URL ?>provider/settings" class="pv-pd-item" role="menuitem"><span class="pv-pd-item-ico"><i class="fa-solid fa-gear"></i></span><span>Settings</span><svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></a>
         <div class="pv-pd-divider"></div>
         <a href="<?= BASE_URL ?>auth/logout" class="pv-pd-item pv-pd-item--danger" role="menuitem"><span class="pv-pd-item-ico"><i class="fa-solid fa-arrow-right-from-bracket"></i></span><span>Sign Out</span></a>
       </div>
@@ -197,40 +196,28 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
 </nav>
 
 <!-- ══════════════════════════════════════
-     HERO SECTION WITH BACKGROUND
+     HERO
 ══════════════════════════════════════ -->
 <header class="pv-hero" style="--hero-img: url('<?= BASE_URL ?>assets/img/provider_bg.png');" role="banner">
   <div class="pv-hero-overlay" aria-hidden="true"></div>
-  
   <div class="pv-hero-inner">
-    <!-- Left content -->
     <div>
       <p class="pv-hero-eyebrow"><span class="pv-dot-pulse" aria-hidden="true"></span>Schedule Management</p>
-      <h1 class="pv-hero-name">Manage your <em>availability</em></h1>
-      <p class="pv-hero-sub">and booking schedule.</p>
+      <h1 class="pv-hero-name">Manage your <span class="pv-hero-highlight">availability</span><br>and booking <span class="pv-hero-highlight">schedule</span></h1>
       <p class="pv-hero-description">Set your working hours and control appointment availability across all your services.</p>
       <div class="pv-hero-meta">
         <span class="pv-status-badge">
-          <span class="pv-status-dot"></span>
-          <?php if($isOpenToday): ?>Open Today<?php else: ?>Closed Today<?php endif; ?>
-        </span>
-        <span class="pv-hero-stat">
-          <strong><?= $activeDays ?></strong> Active Days
+          <?php if($isOpenToday): ?>Available<?php else: ?>Unavailable<?php endif; ?>
         </span>
       </div>
     </div>
 
-    <!-- Right: Status Card -->
     <div class="pv-status-card">
       <div class="pv-status-top">
         <?php if($isOpenToday): ?>
-          <span class="pv-status-badge-open">
-            <span class="pv-status-dot"></span>Available Today
-          </span>
+          <span class="pv-status-badge-open"><span class="pv-status-dot"></span>Open Today</span>
         <?php else: ?>
-          <span class="pv-status-badge-closed">
-            <span class="pv-status-dot" style="background:var(--red);animation:none;"></span>Unavailable Today
-          </span>
+          <span class="pv-status-badge-closed"><span class="pv-status-dot" style="background:var(--red);animation:none;"></span>Closed Today</span>
         <?php endif; ?>
         <span class="pv-status-day"><?= date('l, M j') ?></span>
       </div>
@@ -259,24 +246,6 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
     </div>
   </div>
 </header>
-
-<!-- ══ QUICK ACTIONS ══ -->
-<div class="pv-actions-bar">
-  <div class="pv-actions-inner">
-    <button class="pv-action-btn pv-action-btn--primary" onclick="document.getElementById('avForm').scrollIntoView({behavior:'smooth'})">
-      <i class="fa-solid fa-plus"></i>Add Time Slot
-    </button>
-    <button class="pv-action-btn" onclick="document.getElementById('blockSection').scrollIntoView({behavior:'smooth'})">
-      <i class="fa-regular fa-calendar-xmark"></i>Block Date
-    </button>
-    <button class="pv-action-btn" id="pauseBtn" onclick="togglePause(this)">
-      <i class="fa-solid fa-pause"></i>Pause Bookings
-    </button>
-    <button class="pv-action-btn" onclick="openCalPreview()">
-      <i class="fa-regular fa-eye"></i>Preview Availability
-    </button>
-  </div>
-</div>
 
 <!-- ══ FLASH ══ -->
 <?php if($flash): ?>
@@ -317,13 +286,21 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
               $start    = substr($row['start_time'] ?? '09:00', 0, 5);
               $end      = substr($row['end_time']   ?? '18:00', 0, 5);
               $isWeekend = in_array($day, ['Saturday','Sunday']);
-              $abbr      = substr($day, 0, 3);
             ?>
             <div class="sc-day-row <?= $isActive ? 'is-active' : '' ?> <?= $isWeekend ? 'is-weekend' : '' ?>"
                  id="row-<?= $day ?>" data-day="<?= $day ?>">
 
+              <div class="sc-day-checkbox">
+                <label class="sc-checkbox" aria-label="Toggle <?= $day ?>">
+                  <input type="checkbox" name="days[<?= $day ?>][is_available]" value="1"
+                         <?= $isActive?'checked':'' ?>
+                         onchange="toggleDay('<?= $day ?>',this.checked)"
+                         class="sc-checkbox-input">
+                  <span class="sc-checkbox-mark"></span>
+                </label>
+              </div>
+
               <div class="sc-day-meta">
-                <div class="sc-day-abbr"><?= $abbr ?></div>
                 <div class="sc-day-info">
                   <span class="sc-day-name"><?= $day ?></span>
                   <span class="sc-day-status" id="status-<?= $day ?>"><?= $isActive ? $start.' – '.$end : 'Unavailable' ?></span>
@@ -335,7 +312,9 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
                   <label class="sc-time-lbl" for="start-<?= $day ?>">Opens</label>
                   <div class="sc-time-wrap">
                     <i class="fa-regular fa-clock sc-time-ico"></i>
-                    <input type="time" id="start-<?= $day ?>" name="days[<?= $day ?>][start_time]" value="<?= $start ?>" class="sc-time-input" <?= $isActive?'':'disabled' ?> onchange="updateStatus('<?= $day ?>')">
+                    <input type="time" id="start-<?= $day ?>" name="days[<?= $day ?>][start_time]"
+                           value="<?= $start ?>" class="sc-time-input"
+                           <?= $isActive?'':'disabled' ?> onchange="updateStatus('<?= $day ?>')">
                   </div>
                 </div>
                 <span class="sc-time-arrow">→</span>
@@ -343,16 +322,17 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
                   <label class="sc-time-lbl" for="end-<?= $day ?>">Closes</label>
                   <div class="sc-time-wrap">
                     <i class="fa-regular fa-clock sc-time-ico"></i>
-                    <input type="time" id="end-<?= $day ?>" name="days[<?= $day ?>][end_time]" value="<?= $end ?>" class="sc-time-input" <?= $isActive?'':'disabled' ?> onchange="updateStatus('<?= $day ?>')">
+                    <input type="time" id="end-<?= $day ?>" name="days[<?= $day ?>][end_time]"
+                           value="<?= $end ?>" class="sc-time-input"
+                           <?= $isActive?'':'disabled' ?> onchange="updateStatus('<?= $day ?>')">
                   </div>
                 </div>
                 <span class="sc-hours-badge" id="badge-<?= $day ?>"></span>
               </div>
 
-              <!-- Break time toggle -->
               <div class="sc-break-wrap" id="break-wrap-<?= $day ?>">
                 <button type="button" class="sc-break-toggle" onclick="toggleBreak('<?= $day ?>')" id="break-btn-<?= $day ?>">
-                  <i class="fa-solid fa-coffee"></i>
+                  <i class="fa-solid fa-plus" id="break-icon-<?= $day ?>"></i>
                   <span id="break-btn-label-<?= $day ?>">Add Break</span>
                 </button>
                 <div class="sc-break-fields" id="break-fields-<?= $day ?>" style="display:none">
@@ -374,13 +354,6 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
                 </div>
               </div>
 
-              <div class="sc-day-toggle">
-                <label class="sc-toggle" aria-label="Toggle <?= $day ?>">
-                  <input type="checkbox" name="days[<?= $day ?>][is_available]" value="1" <?= $isActive?'checked':'' ?> onchange="toggleDay('<?= $day ?>',this.checked)" class="sc-toggle-input">
-                  <span class="sc-toggle-track"><span class="sc-toggle-thumb"></span></span>
-                </label>
-              </div>
-
             </div>
             <?php endforeach; ?>
           </div>
@@ -389,14 +362,70 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
             <div class="sc-unsaved" id="changeIndicator" style="opacity:0">
               <span class="sc-unsaved-dot"></span>Unsaved changes
             </div>
-            <button type="submit" class="sc-save-btn">
+            <button type="submit" class="sc-save-btn" onclick="showToast('check','Saved successfully!')">
               <i class="fa-solid fa-floppy-disk"></i>Save Schedule
             </button>
           </div>
         </form>
       </section>
 
-      <!-- ─── SECTION 2: APPOINTMENT SLOT SETTINGS ─── -->
+      <!-- ─── SECTION 2: SLOT SETTINGS ─── -->
+
+      <!-- Slot Settings Modal -->
+      <div class="sc-block-modal-overlay" id="slotModalOverlay" onclick="closeSlotModal(event)">
+        <div class="sc-block-modal" role="dialog" aria-modal="true" aria-labelledby="slotModalTitle">
+          <div class="sc-block-modal-head">
+            <div class="sc-block-modal-head-left">
+              <span class="sc-block-modal-icon" style="background:var(--blue-lt);border-color:var(--blue-border);color:var(--blue)"><i class="fa-solid fa-sliders"></i></span>
+              <div>
+                <h3 class="sc-block-modal-title" id="slotModalTitle">Edit Slot Settings</h3>
+                <p class="sc-block-modal-sub">Duration, interval &amp; daily capacity</p>
+              </div>
+            </div>
+            <button class="sc-block-modal-close" onclick="closeSlotModal()" aria-label="Close">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <div class="sc-block-modal-body">
+            <div class="sc-slot-modal-grid">
+              <div class="sc-slot-modal-field">
+                <div class="sc-slot-icon sc-slot-icon--gold"><i class="fa-regular fa-hourglass-half"></i></div>
+                <label class="sc-time-lbl" for="slotDuration">Appointment Duration</label>
+                <div class="sc-slot-input-wrap">
+                  <input type="number" id="slotDuration" class="sc-slot-input" value="<?= $slotDuration ?>" min="15" max="480" step="15" oninput="syncSlotDisplay()">
+                  <span class="sc-slot-unit">min</span>
+                </div>
+                <p class="sc-slot-hint">How long each appointment takes</p>
+              </div>
+              <div class="sc-slot-modal-field">
+                <div class="sc-slot-icon sc-slot-icon--blue"><i class="fa-solid fa-arrows-left-right-to-line"></i></div>
+                <label class="sc-time-lbl" for="slotInterval">Booking Interval</label>
+                <div class="sc-slot-input-wrap">
+                  <input type="number" id="slotInterval" class="sc-slot-input" value="<?= $slotInterval ?>" min="0" max="120" step="15" oninput="syncSlotDisplay()">
+                  <span class="sc-slot-unit">min</span>
+                </div>
+                <p class="sc-slot-hint">Gap between consecutive bookings</p>
+              </div>
+              <div class="sc-slot-modal-field">
+                <div class="sc-slot-icon sc-slot-icon--green"><i class="fa-solid fa-users"></i></div>
+                <label class="sc-time-lbl" for="maxBookings">Max Daily Bookings</label>
+                <div class="sc-slot-input-wrap">
+                  <input type="number" id="maxBookings" class="sc-slot-input" value="<?= $maxDaily ?>" min="1" max="100" oninput="syncSlotDisplay()">
+                  <span class="sc-slot-unit">/ day</span>
+                </div>
+                <p class="sc-slot-hint">Maximum appointments per day</p>
+              </div>
+            </div>
+          </div>
+          <div class="sc-block-modal-footer">
+            <button type="button" class="sc-block-modal-cancel" onclick="closeSlotModal()">Cancel</button>
+            <button type="button" class="sc-save-btn sc-save-btn--outline" onclick="saveSlotSettings()">
+              <i class="fa-solid fa-floppy-disk"></i>Save Settings
+            </button>
+          </div>
+        </div>
+      </div>
+
       <section class="sc-card" id="slotSection" aria-label="Appointment slot settings">
         <div class="sc-card-head">
           <div class="sc-card-head-left">
@@ -406,31 +435,34 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
               <p class="sc-card-sub">Control appointment duration, intervals, and daily booking capacity</p>
             </div>
           </div>
+          <button type="button" class="sc-open-block-btn sc-open-slot-btn" onclick="openSlotModal()">
+            <i class="fa-solid fa-pen-to-square"></i>Edit Settings
+          </button>
         </div>
         <div class="sc-slot-grid">
           <div class="sc-slot-item">
             <div class="sc-slot-icon sc-slot-icon--gold"><i class="fa-regular fa-hourglass-half"></i></div>
-            <label class="sc-slot-label" for="slotDuration">Appointment Duration</label>
-            <div class="sc-slot-input-wrap">
-              <input type="number" id="slotDuration" class="sc-slot-input" value="<?= $slotDuration ?>" min="15" max="480" step="15">
+            <span class="sc-slot-label">Appointment Duration</span>
+            <div class="sc-slot-display-wrap">
+              <span class="sc-slot-display-val" id="displayDuration"><?= $slotDuration ?></span>
               <span class="sc-slot-unit">min</span>
             </div>
             <p class="sc-slot-hint">How long each appointment takes</p>
           </div>
           <div class="sc-slot-item">
             <div class="sc-slot-icon sc-slot-icon--blue"><i class="fa-solid fa-arrows-left-right-to-line"></i></div>
-            <label class="sc-slot-label" for="slotInterval">Booking Interval</label>
-            <div class="sc-slot-input-wrap">
-              <input type="number" id="slotInterval" class="sc-slot-input" value="<?= $slotInterval ?>" min="0" max="120" step="15">
+            <span class="sc-slot-label">Booking Interval</span>
+            <div class="sc-slot-display-wrap">
+              <span class="sc-slot-display-val" id="displayInterval"><?= $slotInterval ?></span>
               <span class="sc-slot-unit">min</span>
             </div>
             <p class="sc-slot-hint">Gap between consecutive bookings</p>
           </div>
           <div class="sc-slot-item">
             <div class="sc-slot-icon sc-slot-icon--green"><i class="fa-solid fa-users"></i></div>
-            <label class="sc-slot-label" for="maxBookings">Max Daily Bookings</label>
-            <div class="sc-slot-input-wrap">
-              <input type="number" id="maxBookings" class="sc-slot-input" value="<?= $maxDaily ?>" min="1" max="100">
+            <span class="sc-slot-label">Max Daily Bookings</span>
+            <div class="sc-slot-display-wrap">
+              <span class="sc-slot-display-val" id="displayMaxBookings"><?= $maxDaily ?></span>
               <span class="sc-slot-unit">/ day</span>
             </div>
             <p class="sc-slot-hint">Maximum appointments per day</p>
@@ -441,13 +473,133 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
             <i class="fa-solid fa-circle-info"></i>
             Auto-blocking is active — confirmed bookings automatically become unavailable to prevent double-booking.
           </div>
-          <button type="button" class="sc-save-btn sc-save-btn--outline" onclick="saveSlotSettings()">
-            <i class="fa-solid fa-floppy-disk"></i>Save Settings
-          </button>
         </div>
       </section>
 
       <!-- ─── SECTION 3: BLOCKED DATES ─── -->
+      <!-- Block Date Modal -->
+      <div class="sc-block-modal-overlay" id="blockModalOverlay" onclick="closeBlockModal(event)">
+        <div class="sc-block-modal sc-block-modal--range" role="dialog" aria-modal="true" aria-labelledby="blockModalTitle">
+          <div class="sc-block-modal-head">
+            <div class="sc-block-modal-head-left">
+              <span class="sc-block-modal-icon"><i class="fa-regular fa-calendar-xmark"></i></span>
+              <div>
+                <h3 class="sc-block-modal-title" id="blockModalTitle">Block Time Off</h3>
+                <p class="sc-block-modal-sub">Block a single day or a date range</p>
+              </div>
+            </div>
+            <button class="sc-block-modal-close" onclick="closeBlockModal()" aria-label="Close">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <div class="sc-block-modal-body">
+
+            <!-- Date range row -->
+            <div class="sc-block-range-row">
+              <div class="sc-block-modal-field sc-block-range-field">
+                <label class="sc-time-lbl" for="blockDateFrom">
+                  <i class="fa-regular fa-calendar"></i> From
+                </label>
+                <input type="date" id="blockDateFrom" class="sc-date-input"
+                       min="<?= date('Y-m-d') ?>"
+                       onchange="onBlockRangeChange()">
+              </div>
+              <div class="sc-block-range-arrow">
+                <i class="fa-solid fa-arrow-right"></i>
+              </div>
+              <div class="sc-block-modal-field sc-block-range-field">
+                <label class="sc-time-lbl" for="blockDateTo">
+                  <i class="fa-regular fa-calendar"></i> To
+                </label>
+                <input type="date" id="blockDateTo" class="sc-date-input"
+                       min="<?= date('Y-m-d') ?>"
+                       onchange="onBlockRangeChange()">
+              </div>
+            </div>
+
+            <!-- Live day count badge -->
+            <div class="sc-block-range-summary" id="blockRangeSummary" style="display:none">
+              <i class="fa-solid fa-circle-info"></i>
+              <span id="blockRangeSummaryText"></span>
+            </div>
+
+            <!-- Reason -->
+            <div class="sc-block-modal-field">
+              <label class="sc-time-lbl" for="blockReason">
+                Reason <span class="sc-block-modal-optional">(Optional)</span>
+              </label>
+              <input type="text" id="blockReason" class="sc-text-input"
+                     placeholder="e.g. Vacation, Holiday, Personal Leave">
+            </div>
+
+          </div>
+          <div class="sc-block-modal-footer">
+            <button type="button" class="sc-block-modal-cancel" onclick="closeBlockModal()">Cancel</button>
+            <button type="button" class="sc-add-block-btn" id="blockSubmitBtn" onclick="addBlockDate()">
+              <i class="fa-solid fa-ban"></i><span id="blockSubmitLabel">Block Date</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Confirm Delete Modal -->
+      <div class="sc-block-modal-overlay" id="confirmDeleteOverlay" onclick="closeConfirmDelete(event)">
+        <div class="sc-block-modal sc-confirm-modal" role="dialog" aria-modal="true">
+          <div class="sc-confirm-icon-wrap">
+            <span class="sc-confirm-icon"><i class="fa-solid fa-trash"></i></span>
+          </div>
+          <h3 class="sc-confirm-title">Remove Blocked Date?</h3>
+          <p class="sc-confirm-msg" id="confirmDeleteMsg"></p>
+          <div class="sc-confirm-actions">
+            <button type="button" class="sc-block-modal-cancel" onclick="closeConfirmDelete()">Cancel</button>
+            <button type="button" class="sc-confirm-delete-btn" id="confirmDeleteBtn" onclick="confirmDelete()">
+              <i class="fa-solid fa-trash"></i>Yes, Remove
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Edit Block Modal -->
+      <div class="sc-block-modal-overlay" id="editBlockModalOverlay" onclick="closeEditBlockModal(event)">
+        <div class="sc-block-modal" role="dialog" aria-modal="true" aria-labelledby="editBlockModalTitle">
+          <div class="sc-block-modal-head">
+            <div class="sc-block-modal-head-left">
+              <span class="sc-block-modal-icon"><i class="fa-solid fa-pen"></i></span>
+              <div>
+                <h3 class="sc-block-modal-title" id="editBlockModalTitle">Edit Blocked Date</h3>
+                <p class="sc-block-modal-sub" id="editBlockModalSub">Update the reason for this block</p>
+              </div>
+            </div>
+            <button class="sc-block-modal-close" onclick="closeEditBlockModal()" aria-label="Close">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <div class="sc-block-modal-body">
+            <input type="hidden" id="editBlockOriginalDate">
+            <div class="sc-block-modal-field">
+              <label class="sc-time-lbl" for="editBlockDate">
+                <i class="fa-regular fa-calendar"></i> Date
+              </label>
+              <input type="date" id="editBlockDate" class="sc-date-input"
+                     min="<?= date('Y-m-d') ?>">
+            </div>
+            <div class="sc-block-modal-field">
+              <label class="sc-time-lbl" for="editBlockReason">
+                Reason <span class="sc-block-modal-optional">(Optional)</span>
+              </label>
+              <input type="text" id="editBlockReason" class="sc-text-input"
+                     placeholder="e.g. Vacation, Holiday, Personal Leave">
+            </div>
+          </div>
+          <div class="sc-block-modal-footer">
+            <button type="button" class="sc-block-modal-cancel" onclick="closeEditBlockModal()">Cancel</button>
+            <button type="button" class="sc-add-block-btn" onclick="saveEditBlock()">
+              <i class="fa-solid fa-floppy-disk"></i>Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+
       <section class="sc-card" id="blockSection" aria-label="Blocked dates">
         <div class="sc-card-head">
           <div class="sc-card-head-left">
@@ -457,26 +609,10 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
               <p class="sc-card-sub">Block specific dates for vacations, holidays, or emergencies</p>
             </div>
           </div>
+          <button type="button" class="sc-open-block-btn" onclick="openBlockModal()">
+            <i class="fa-solid fa-ban"></i>Block a Date
+          </button>
         </div>
-
-        <!-- Add block form -->
-        <div class="sc-block-form">
-          <div class="sc-block-form-row">
-            <div class="sc-block-field">
-              <label class="sc-time-lbl" for="blockDate">Date to Block</label>
-              <input type="date" id="blockDate" class="sc-date-input" min="<?= date('Y-m-d') ?>">
-            </div>
-            <div class="sc-block-field sc-block-field--grow">
-              <label class="sc-time-lbl" for="blockReason">Reason (optional)</label>
-              <input type="text" id="blockReason" class="sc-text-input" placeholder="e.g. Vacation, Holiday, Personal Leave">
-            </div>
-            <button type="button" class="sc-add-block-btn" onclick="addBlockDate()">
-              <i class="fa-solid fa-ban"></i>Block Date
-            </button>
-          </div>
-        </div>
-
-        <!-- Blocked dates list -->
         <div class="sc-block-list" id="blockList">
           <?php if(empty($blockedDates)): ?>
           <div class="sc-block-empty" id="blockEmpty">
@@ -485,7 +621,7 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
           </div>
           <?php else: ?>
             <?php foreach($blockedDates as $bd): ?>
-            <div class="sc-block-item" data-date="<?= htmlspecialchars($bd['blocked_date']) ?>">
+            <div class="sc-block-item" data-date="<?= htmlspecialchars($bd['blocked_date']) ?>" data-reason="<?= htmlspecialchars($bd['reason'] ?? '') ?>">
               <div class="sc-block-item-left">
                 <span class="sc-block-item-ico"><i class="fa-solid fa-ban"></i></span>
                 <div>
@@ -493,9 +629,14 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
                   <span class="sc-block-item-reason"><?= htmlspecialchars($bd['reason'] ?? 'No reason given') ?></span>
                 </div>
               </div>
-              <button type="button" class="sc-block-remove" onclick="removeBlock(this, '<?= htmlspecialchars($bd['blocked_date']) ?>')" aria-label="Remove block">
-                <i class="fa-solid fa-xmark"></i>
-              </button>
+              <div class="sc-block-actions">
+                <button type="button" class="sc-block-action-btn sc-block-action-btn--edit" onclick="editBlock(this, '<?= htmlspecialchars($bd['blocked_date']) ?>')" aria-label="Edit reason">
+                  <i class="fa-solid fa-pen"></i>
+                </button>
+                <button type="button" class="sc-block-action-btn sc-block-action-btn--remove" onclick="removeBlock(this, '<?= htmlspecialchars($bd['blocked_date']) ?>')" aria-label="Remove block">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </div>
             </div>
             <?php endforeach; ?>
           <?php endif; ?>
@@ -509,22 +650,28 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
 
       <!-- ─── SECTION 4: CALENDAR VIEW ─── -->
       <div class="sc-card sc-card--calendar">
-        <div class="sc-card-head sc-card-head--compact">
-          <div class="sc-card-head-left">
-            <span class="sc-card-icon sc-card-icon--gold"><i class="fa-regular fa-calendar"></i></span>
-            <h3 class="sc-card-title">Availability Calendar</h3>
-          </div>
-          <div class="sc-cal-nav">
-            <button class="sc-cal-nav-btn" id="calPrev" onclick="calNav(-1)" aria-label="Previous month"><i class="fa-solid fa-chevron-left"></i></button>
-            <span class="sc-cal-month" id="calMonth"></span>
-            <button class="sc-cal-nav-btn" id="calNext" onclick="calNav(1)" aria-label="Next month"><i class="fa-solid fa-chevron-right"></i></button>
-          </div>
+
+        <!-- Row 1: Icon + Title -->
+        <div class="sc-cal-title-row">
+          <span class="sc-card-icon"><i class="fa-regular fa-calendar"></i></span>
+          <h3 class="sc-card-title">Availability Calendar</h3>
+        </div>
+
+        <!-- Row 2: Month navigation -->
+        <div class="sc-cal-nav-row">
+          <button class="sc-cal-nav-btn" id="calPrev" onclick="calNav(-1)" aria-label="Previous month">
+            <i class="fa-solid fa-chevron-left"></i>
+          </button>
+          <span class="sc-cal-month" id="calMonth"></span>
+          <button class="sc-cal-nav-btn" id="calNext" onclick="calNav(1)" aria-label="Next month">
+            <i class="fa-solid fa-chevron-right"></i>
+          </button>
         </div>
 
         <!-- Calendar grid -->
         <div class="sc-cal-body">
           <div class="sc-cal-weekdays">
-            <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+            <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
           </div>
           <div class="sc-cal-grid" id="calGrid"></div>
         </div>
@@ -536,9 +683,10 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
           <span class="sc-legend-item"><span class="sc-legend-dot sc-legend-dot--full"></span>Full</span>
           <span class="sc-legend-item"><span class="sc-legend-dot sc-legend-dot--blocked"></span>Blocked</span>
         </div>
+
       </div>
 
-      <!-- ─── SECTION 5: UPCOMING SCHEDULE SUMMARY ─── -->
+      <!-- ─── SECTION 5: UPCOMING SCHEDULE ─── -->
       <div class="sc-card">
         <div class="sc-card-head sc-card-head--compact">
           <div class="sc-card-head-left">
@@ -547,8 +695,6 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
           </div>
           <a href="<?= BASE_URL ?>provider/appointments" class="sc-link">View all →</a>
         </div>
-
-        <!-- Today's quick stats -->
         <div class="sc-today-stats">
           <div class="sc-today-stat">
             <div class="sc-today-val"><?= $todayCount ?></div>
@@ -563,8 +709,6 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
             <div class="sc-today-lbl">Next Booking</div>
           </div>
         </div>
-
-        <!-- Upcoming list -->
         <?php if(empty($upcomingList)): ?>
         <div class="sc-empty">
           <i class="fa-regular fa-calendar-check"></i>
@@ -618,26 +762,26 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
         </div>
       </div>
 
-    </aside><!-- /sc-sidebar -->
-  </div><!-- /sc-layout -->
+    </aside>
+  </div>
 </main>
 
 <!-- ══ SCRIPTS ══ -->
 <script>
-// ── Calendar data from PHP ──
-const calBookings   = <?= json_encode($calBookings) ?>;
-const maxDaily      = <?= (int)$maxDaily ?>;
-const availWeekdays = <?= json_encode($availWeekdays) ?>;
+const BASE_URL         = '<?= BASE_URL ?>';
+const calBookings      = <?= json_encode($calBookings) ?>;
+const maxDaily         = <?= (int)$maxDaily ?>;
+const availWeekdays    = <?= json_encode($availWeekdays) ?>;
 const blockedDatesData = <?= json_encode($blockedArr) ?>;
 
-let calYear = <?= $calYear ?>, calMonth = <?= $calMonth - 1 ?>; // JS months 0-indexed
+let calYear = <?= $calYear ?>, calMonth = <?= $calMonth - 1 ?>;
 
 function renderCalendar(year, month) {
-  const today = new Date();
-  const firstDay = new Date(year, month, 1);
-  const lastDay  = new Date(year, month + 1, 0);
-  const startWd  = firstDay.getDay();
-  const weekdays = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const today     = new Date();
+  const firstDay  = new Date(year, month, 1);
+  const lastDay   = new Date(year, month + 1, 0);
+  const startWd   = firstDay.getDay();
+  const weekdays  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
   document.getElementById('calMonth').textContent = monthNames[month] + ' ' + year;
@@ -645,7 +789,6 @@ function renderCalendar(year, month) {
   const grid = document.getElementById('calGrid');
   grid.innerHTML = '';
 
-  // Empty cells
   for (let i = 0; i < startWd; i++) {
     const el = document.createElement('div');
     el.className = 'sc-cal-cell sc-cal-cell--empty';
@@ -665,13 +808,13 @@ function renderCalendar(year, month) {
     const isPast    = new Date(year, month, d) < new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
     let cls = 'sc-cal-cell';
-    if (isBlocked)       cls += ' sc-cal-cell--blocked';
-    else if (isDayOff)   cls += ' sc-cal-cell--off';
+    if (isBlocked)            cls += ' sc-cal-cell--blocked';
+    else if (isDayOff)        cls += ' sc-cal-cell--off';
     else if (cnt >= maxDaily) cls += ' sc-cal-cell--full';
-    else if (cnt > 0)    cls += ' sc-cal-cell--partial';
-    else                 cls += ' sc-cal-cell--avail';
-    if (isToday)         cls += ' sc-cal-cell--today';
-    if (isPast)          cls += ' sc-cal-cell--past';
+    else if (cnt > 0)         cls += ' sc-cal-cell--partial';
+    else                      cls += ' sc-cal-cell--avail';
+    if (isToday) cls += ' sc-cal-cell--today';
+    if (isPast)  cls += ' sc-cal-cell--past';
 
     const el = document.createElement('div');
     el.className = cls;
@@ -688,7 +831,6 @@ function calNav(dir) {
   renderCalendar(calYear, calMonth);
 }
 
-// ── Toggle day on/off ──
 function toggleDay(day, active) {
   const row   = document.getElementById('row-' + day);
   const times = document.getElementById('times-' + day);
@@ -708,8 +850,8 @@ function toggleDay(day, active) {
 }
 
 function updateStatus(day) {
-  const s = document.getElementById('start-' + day);
-  const e = document.getElementById('end-'   + day);
+  const s  = document.getElementById('start-' + day);
+  const e  = document.getElementById('end-'   + day);
   const st = document.getElementById('status-' + day);
   if (!s || !e) return;
   if (s.value && e.value) {
@@ -769,9 +911,11 @@ function setAll(active) {
 function toggleBreak(day) {
   const fields = document.getElementById('break-fields-' + day);
   const btn    = document.getElementById('break-btn-label-' + day);
+  const icon   = document.getElementById('break-icon-' + day);
   const show   = fields.style.display === 'none';
   fields.style.display = show ? 'flex' : 'none';
-  if (btn) btn.textContent = show ? 'Remove Break' : 'Add Break';
+  if (btn)  btn.textContent  = show ? 'Remove Break' : 'Add Break';
+  if (icon) icon.className   = show ? 'fa-solid fa-minus' : 'fa-solid fa-plus';
 }
 
 function markUnsaved() {
@@ -779,95 +923,393 @@ function markUnsaved() {
   if (el) el.style.opacity = '1';
 }
 
-// ── Block date UI (client-side preview; needs backend wiring) ──
-function addBlockDate() {
-  const dateEl   = document.getElementById('blockDate');
-  const reasonEl = document.getElementById('blockReason');
-  const date     = dateEl.value;
-  if (!date) { dateEl.focus(); return; }
-  const reason = reasonEl.value || 'No reason given';
-
-  const empty = document.getElementById('blockEmpty');
-  if (empty) empty.remove();
-
-  const list = document.getElementById('blockList');
-  const item = document.createElement('div');
-  item.className = 'sc-block-item';
-  item.dataset.date = date;
-
-  const d = new Date(date + 'T00:00:00');
-  const label = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-
-  item.innerHTML = `
-    <div class="sc-block-item-left">
-      <span class="sc-block-item-ico"><i class="fa-solid fa-ban"></i></span>
-      <div>
-        <span class="sc-block-item-date">${label}</span>
-        <span class="sc-block-item-reason">${reason}</span>
-      </div>
-    </div>
-    <button type="button" class="sc-block-remove" onclick="removeBlock(this,'${date}')" aria-label="Remove block">
-      <i class="fa-solid fa-xmark"></i>
-    </button>`;
-
-  list.appendChild(item);
-  dateEl.value = ''; reasonEl.value = '';
-
-  // Re-render calendar to reflect new block
-  const yr = parseInt(date.split('-')[0]);
-  const mo = parseInt(date.split('-')[1]) - 1;
-  if (yr === calYear && mo === calMonth) {
-    if (!blockedDatesData.includes(date)) blockedDatesData.push(date);
-    renderCalendar(calYear, calMonth);
-  }
+function openBlockModal() {
+  document.getElementById('blockModalOverlay').classList.add('sc-block-modal-overlay--open');
+  // Reset fields
+  document.getElementById('blockDateFrom').value = '';
+  document.getElementById('blockDateTo').value   = '';
+  document.getElementById('blockReason').value   = '';
+  document.getElementById('blockRangeSummary').style.display = 'none';
+  document.getElementById('blockSubmitLabel').textContent = 'Block Date';
+  setTimeout(() => document.getElementById('blockDateFrom').focus(), 80);
+  document.body.style.overflow = 'hidden';
 }
 
+function onBlockRangeChange() {
+  const fromEl = document.getElementById('blockDateFrom');
+  const toEl   = document.getElementById('blockDateTo');
+  const sumDiv = document.getElementById('blockRangeSummary');
+  const sumTxt = document.getElementById('blockRangeSummaryText');
+  const btnLbl = document.getElementById('blockSubmitLabel');
+
+  const from = fromEl.value;
+  const to   = toEl.value;
+
+  // Auto-set To min to From value
+  if (from) toEl.min = from;
+
+  // If To is before From, reset To
+  if (from && to && to < from) { toEl.value = ''; return; }
+
+  if (!from) { sumDiv.style.display = 'none'; btnLbl.textContent = 'Block Date'; return; }
+
+  const fromDate = new Date(from + 'T00:00:00');
+  const toDate   = to ? new Date(to + 'T00:00:00') : fromDate;
+  const days     = Math.round((toDate - fromDate) / 86400000) + 1;
+  const fmt      = { month: 'short', day: 'numeric', year: 'numeric' };
+  const fmtShort = { month: 'short', day: 'numeric' };
+
+  const fromLabel = fromDate.toLocaleDateString('en-US', fmt);
+  const toLabel   = toDate.toLocaleDateString('en-US', fmt);
+
+  if (!to || from === to) {
+    sumTxt.textContent = '1 day blocked  ·  ' + fromLabel;
+  } else {
+    const fromShort = fromDate.toLocaleDateString('en-US', fmtShort);
+    sumTxt.textContent = days + ' days blocked  ·  ' + fromShort + ' – ' + toLabel;
+  }
+  sumDiv.style.display = 'flex';
+  btnLbl.textContent = 'Block Date';
+}
+
+function closeBlockModal(e) {
+  if (e && e.target !== document.getElementById('blockModalOverlay')) return;
+  document.getElementById('blockModalOverlay').classList.remove('sc-block-modal-overlay--open');
+  document.body.style.overflow = '';
+}
+
+function editBlock(btn, date) {
+  const item   = btn.closest('.sc-block-item');
+  const reason = item.dataset.reason || '';
+  const label  = item.querySelector('.sc-block-item-date').textContent;
+
+  document.getElementById('editBlockOriginalDate').value = date;   // keep track of old date
+  document.getElementById('editBlockDate').value         = date;   // editable date field
+  document.getElementById('editBlockReason').value       = reason;
+  document.getElementById('editBlockModalSub').textContent = label;
+
+  document.getElementById('editBlockModalOverlay').classList.add('sc-block-modal-overlay--open');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => document.getElementById('editBlockDate').focus(), 80);
+}
+
+function closeEditBlockModal(e) {
+  if (e && e.target !== document.getElementById('editBlockModalOverlay')) return;
+  document.getElementById('editBlockModalOverlay').classList.remove('sc-block-modal-overlay--open');
+  document.body.style.overflow = '';
+}
+
+function saveEditBlock() {
+  const originalDate = document.getElementById('editBlockOriginalDate').value;
+  const newDate      = document.getElementById('editBlockDate').value;
+  const reason       = document.getElementById('editBlockReason').value.trim();
+
+  if (!newDate) {
+    document.getElementById('editBlockDate').focus();
+    return;
+  }
+
+  document.getElementById('editBlockModalOverlay').classList.remove('sc-block-modal-overlay--open');
+  document.body.style.overflow = '';
+
+  const fmt   = { month: 'long', day: 'numeric', year: 'numeric' };
+  const dNew  = new Date(newDate + 'T00:00:00');
+  const label = dNew.toLocaleDateString('en-US', fmt);
+  const dateChanged = originalDate !== newDate;
+
+  const doUpdate = () => {
+    const fd = new FormData();
+    fd.append('blocked_date', newDate);
+    fd.append('reason', reason);
+    return fetch(BASE_URL + 'provider/schedule/block/edit', { method: 'POST', body: fd, redirect: 'follow' });
+  };
+
+  const doUnblock = () =>
+    fetch(BASE_URL + 'provider/schedule/unblock/' + originalDate, { method: 'GET', redirect: 'follow' });
+
+  const doBlock = () => {
+    const fd = new FormData();
+    fd.append('blocked_date', newDate);
+    fd.append('reason', reason);
+    return fetch(BASE_URL + 'provider/schedule/block', { method: 'POST', body: fd, redirect: 'follow' });
+  };
+
+  // If date changed: delete old date, insert new one. Otherwise just update reason.
+  const serverOp = dateChanged ? doUnblock().then(doBlock) : doUpdate();
+
+  serverOp
+    .then(res => {
+      if (res && !res.ok && !res.redirected) throw new Error('Server error ' + res.status);
+
+      // Update DOM
+      const oldItem = document.querySelector(`.sc-block-item[data-date="${originalDate}"]`);
+      if (oldItem) {
+        oldItem.dataset.date   = newDate;
+        oldItem.dataset.reason = reason;
+        oldItem.querySelector('.sc-block-item-date').textContent   = label;
+        oldItem.querySelector('.sc-block-item-reason').textContent = reason || 'No reason given';
+        // Update inline onclick attributes on the two action buttons
+        oldItem.querySelectorAll('[onclick]').forEach(el => {
+          el.setAttribute('onclick', el.getAttribute('onclick').replace(originalDate, newDate));
+        });
+
+        // Update calendar data
+        const oldIdx = blockedDatesData.indexOf(originalDate);
+        if (oldIdx > -1) blockedDatesData.splice(oldIdx, 1);
+        if (!blockedDatesData.includes(newDate)) blockedDatesData.push(newDate);
+        renderCalendar(calYear, calMonth);
+      }
+
+      showToast('check','Updated successfully!');
+    })
+    .catch(err => {
+      console.error('saveEditBlock error:', err);
+      showToast('check', 'Could not save changes — please try again.');
+      // Re-open modal so user doesn't lose their edits
+      document.getElementById('editBlockModalOverlay').classList.add('sc-block-modal-overlay--open');
+      document.body.style.overflow = 'hidden';
+    });
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    ['blockModalOverlay','editBlockModalOverlay','slotModalOverlay','confirmDeleteOverlay'].forEach(id => {
+      document.getElementById(id).classList.remove('sc-block-modal-overlay--open');
+    });
+    document.body.style.overflow = '';
+  }
+});
+
+function addBlockDate() {
+  const fromEl   = document.getElementById('blockDateFrom');
+  const toEl     = document.getElementById('blockDateTo');
+  const reasonEl = document.getElementById('blockReason');
+  const from     = fromEl.value;
+  if (!from) { fromEl.focus(); return; }
+  const to     = toEl.value || from;
+  const reason = reasonEl.value.trim();
+
+  // Build list of all dates in range
+  const dates = [];
+  const cursor = new Date(from + 'T00:00:00');
+  const end    = new Date(to   + 'T00:00:00');
+  while (cursor <= end) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  // Close modal immediately
+  document.getElementById('blockModalOverlay').classList.remove('sc-block-modal-overlay--open');
+  document.body.style.overflow = '';
+
+  const fmt = { month: 'long', day: 'numeric', year: 'numeric' };
+  const list  = document.getElementById('blockList');
+  const empty = document.getElementById('blockEmpty');
+
+  // POST each date to server and add to DOM on success
+  const postDate = (dateStr) => {
+    const fd = new FormData();
+    fd.append('blocked_date', dateStr);
+    fd.append('reason', reason);
+    return fetch(BASE_URL + 'provider/schedule/block', { method: 'POST', body: fd, redirect: 'follow' })
+      .then(res => {
+        if (res.ok || res.redirected) {
+          if (blockedDatesData.includes(dateStr)) return; // already blocked
+          if (empty && empty.parentNode) empty.remove();
+
+          const d     = new Date(dateStr + 'T00:00:00');
+          const label = d.toLocaleDateString('en-US', fmt);
+          const item  = document.createElement('div');
+          item.className   = 'sc-block-item';
+          item.dataset.date = dateStr;
+          item.dataset.reason = reason;
+          item.innerHTML = `
+            <div class="sc-block-item-left">
+              <span class="sc-block-item-ico"><i class="fa-solid fa-ban"></i></span>
+              <div>
+                <span class="sc-block-item-date">${label}</span>
+                <span class="sc-block-item-reason">${reason || 'No reason given'}</span>
+              </div>
+            </div>
+            <div class="sc-block-actions">
+              <button type="button" class="sc-block-action-btn sc-block-action-btn--edit" onclick="editBlock(this,'${dateStr}')" aria-label="Edit reason">
+                <i class="fa-solid fa-pen"></i>
+              </button>
+              <button type="button" class="sc-block-action-btn sc-block-action-btn--remove" onclick="removeBlock(this,'${dateStr}')" aria-label="Remove block">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>`;
+          list.appendChild(item);
+          blockedDatesData.push(dateStr);
+        }
+      });
+  };
+
+  // Fire all requests, then refresh calendar + toast once
+  Promise.all(dates.map(postDate))
+    .then(() => {
+      renderCalendar(calYear, calMonth);
+      const count = dates.length;
+      if (count === 1) {
+        const label = new Date(dates[0] + 'T00:00:00').toLocaleDateString('en-US', fmt);
+        showToast('ban','Blocked successfully!');
+      } else {
+        const fromLabel = new Date(dates[0]           + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const toLabel   = new Date(dates[count - 1]   + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        showToast('ban','Blocked successfully!');
+      }
+    })
+    .catch(() => showToast('check','Something went wrong — please try again.'));
+}
+
+// Holds pending delete state
+let _pendingDelete = null;
+
 function removeBlock(btn, date) {
-  btn.closest('.sc-block-item').remove();
+  const item      = btn.closest('.sc-block-item');
+  const dateLabel = item.querySelector('.sc-block-item-date').textContent;
+
+  // Store pending state
+  _pendingDelete = { btn, date, item, dateLabel, snapshot: item.outerHTML, nextSib: item.nextSibling };
+
+  // Populate and open confirm modal
+  document.getElementById('confirmDeleteMsg').textContent =
+    dateLabel + ' will be unblocked and available for bookings again.';
+  document.getElementById('confirmDeleteOverlay').classList.add('sc-block-modal-overlay--open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeConfirmDelete(e) {
+  if (e && e.target !== document.getElementById('confirmDeleteOverlay')) return;
+  document.getElementById('confirmDeleteOverlay').classList.remove('sc-block-modal-overlay--open');
+  document.body.style.overflow = '';
+  _pendingDelete = null;
+}
+
+function confirmDelete() {
+  if (!_pendingDelete) return;
+  const { date, item, dateLabel, snapshot, nextSib } = _pendingDelete;
+  _pendingDelete = null;
+
+  document.getElementById('confirmDeleteOverlay').classList.remove('sc-block-modal-overlay--open');
+  document.body.style.overflow = '';
+
+  const list = document.getElementById('blockList');
+
+  // Optimistic remove
+  item.remove();
   const idx = blockedDatesData.indexOf(date);
   if (idx > -1) blockedDatesData.splice(idx, 1);
   renderCalendar(calYear, calMonth);
+
   if (!document.querySelector('#blockList .sc-block-item')) {
-    const list = document.getElementById('blockList');
     list.innerHTML = '<div class="sc-block-empty" id="blockEmpty"><i class="fa-regular fa-calendar-check"></i><p>No blocked dates — you\'re available on all working days.</p></div>';
   }
+
+  fetch(BASE_URL + 'provider/schedule/unblock/' + date, { method: 'GET', redirect: 'follow' })
+    .then(res => {
+      if (res.ok || res.redirected) {
+        showToast('check', 'Removed successfully!');
+      } else {
+        throw new Error('Server returned ' + res.status);
+      }
+    })
+    .catch(err => {
+      console.error('confirmDelete error:', err);
+      // Rollback
+      const emptyEl = document.getElementById('blockEmpty');
+      if (emptyEl) emptyEl.remove();
+      list.insertAdjacentHTML(nextSib ? 'afterbegin' : 'beforeend', snapshot);
+      if (!blockedDatesData.includes(date)) blockedDatesData.push(date);
+      renderCalendar(calYear, calMonth);
+      showToast('check', 'Could not remove — please try again.');
+    });
 }
 
-// ── Slot settings save (toaster — needs backend wiring) ──
-function saveSlotSettings() {
+function openSlotModal() {
+  document.getElementById('slotModalOverlay').classList.add('sc-block-modal-overlay--open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeSlotModal(e) {
+  if (e && e.target !== document.getElementById('slotModalOverlay')) return;
+  document.getElementById('slotModalOverlay').classList.remove('sc-block-modal-overlay--open');
+  document.body.style.overflow = '';
+}
+
+function syncSlotDisplay() {
   const d = document.getElementById('slotDuration').value;
   const i = document.getElementById('slotInterval').value;
   const m = document.getElementById('maxBookings').value;
-  showToast('Slot settings saved: ' + d + 'min duration, ' + i + 'min interval, max ' + m + '/day');
+  if (d) document.getElementById('displayDuration').textContent   = d;
+  if (i !== '') document.getElementById('displayInterval').textContent   = i;
+  if (m) document.getElementById('displayMaxBookings').textContent = m;
 }
 
-function togglePause(btn) {
-  btn.classList.toggle('sc-action-btn--active');
-  const paused = btn.classList.contains('sc-action-btn--active');
-  btn.innerHTML = paused
-    ? '<i class="fa-solid fa-play"></i>Resume Bookings'
-    : '<i class="fa-solid fa-pause"></i>Pause Bookings';
-  showToast(paused ? 'Bookings paused — new customers cannot book.' : 'Bookings resumed.');
+function saveSlotSettings() {
+  const duration    = document.getElementById('slotDuration').value;
+  const interval    = document.getElementById('slotInterval').value;
+  const maxBookings = document.getElementById('maxBookings').value;
+
+  // Close modal immediately
+  syncSlotDisplay();
+  document.getElementById('slotModalOverlay').classList.remove('sc-block-modal-overlay--open');
+  document.body.style.overflow = '';
+
+  // POST to server
+  const fd = new FormData();
+  fd.append('duration_minutes',  duration);
+  fd.append('interval_minutes',  interval);
+  fd.append('max_daily_bookings', maxBookings);
+
+  fetch(BASE_URL + 'provider/schedule/slots', { method: 'POST', body: fd, redirect: 'follow' })
+    .then(res => {
+      if (res.ok || res.redirected) {
+        showToast('check','Saved successfully!');
+      } else {
+        showToast('check','Could not save — please try again.');
+      }
+    })
+    .catch(() => showToast('check','Something went wrong — please try again.'));
 }
 
-function openCalPreview() {
-  document.querySelector('.sc-card--calendar').scrollIntoView({ behavior: 'smooth' });
+function saveSlotDuration() {
+  const d = document.getElementById('slotDuration').value;
+  showToast('check','Saved successfully!');
 }
 
-function showToast(msg) {
+function saveSlotInterval() {
+  const i = document.getElementById('slotInterval').value;
+  showToast('check','Saved successfully!');
+}
+
+function saveMaxBookings() {
+  const m = document.getElementById('maxBookings').value;
+  showToast('check','Saved successfully!');
+}
+
+function showToast(icon, msg) {
+  // Remove any existing toast
+  document.querySelectorAll('.sc-toast').forEach(el => el.remove());
+  const icons = {
+    check:  'fa-circle-check',
+    ban:    'fa-ban',
+    trash:  'fa-circle-check',
+    clock:  'fa-clock',
+    save:   'fa-floppy-disk'
+  };
   const t = document.createElement('div');
-  t.className = 'sc-toast'; t.textContent = msg;
+  t.className = 'sc-toast';
+  t.innerHTML = `<i class="fa-solid ${icons[icon] || 'fa-circle-check'}"></i><span>${msg}</span>`;
   document.body.appendChild(t);
   requestAnimationFrame(() => t.classList.add('sc-toast--in'));
-  setTimeout(() => { t.classList.remove('sc-toast--in'); setTimeout(() => t.remove(), 300); }, 3000);
+  setTimeout(() => { t.classList.remove('sc-toast--in'); setTimeout(() => t.remove(), 350); }, 3200);
 }
 
-// ── Init ──
 document.addEventListener('DOMContentLoaded', () => {
   renderCalendar(calYear, calMonth);
   document.getElementById('avForm').addEventListener('change', markUnsaved);
 
-  // Init badges + glance
   ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].forEach(day => {
     const row = document.getElementById('row-' + day);
     const s   = document.getElementById('start-' + day);
@@ -878,7 +1320,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Stagger row animation
   document.querySelectorAll('.sc-day-row').forEach((el, i) => {
     el.style.animationDelay = (i * 0.055) + 's';
   });
