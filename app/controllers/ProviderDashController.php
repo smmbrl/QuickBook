@@ -246,7 +246,7 @@ class ProviderDashController
             header('Location: ' . BASE_URL . 'provider/appointments'); exit;
         }
 
-        require __DIR__ . '/../views/Provider/customer-detail.php';
+        require __DIR__ . '/../views/Provider/appointment-detail.php';
     }
 
     public function updateBooking(string $id): void
@@ -844,6 +844,49 @@ class ProviderDashController
     }
 
     /**
+     * POST  provider/schedule/block/edit
+     * Updates the reason for an existing blocked date.
+     */
+    public function editBlockedDate(): void
+    {
+        $db     = Database::getInstance();
+        $userId = $_SESSION['user_id'] ?? 0;
+
+        $stmt = $db->prepare("SELECT id FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
+        $stmt->execute([$userId]);
+        $profile = $stmt->fetch();
+
+        if (!$profile) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Provider profile not found.']);
+            return;
+        }
+
+        $providerId  = $profile['id'];
+        $blockedDate = trim($_POST['blocked_date'] ?? '');
+        $reason      = trim($_POST['reason']       ?? '');
+
+        if (!$blockedDate) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Missing date.']);
+            return;
+        }
+
+        try {
+            $db->prepare("
+                UPDATE tbl_provider_blocked_dates
+                SET reason = ?
+                WHERE provider_id = ? AND blocked_date = ?
+            ")->execute([$reason ?: null, $providerId, $blockedDate]);
+        } catch (\Throwable $e) {
+            error_log('editBlockedDate: ' . $e->getMessage());
+        }
+
+        header('Content-Type: application/json');
+        echo json_encode(['success' => true]);
+    }
+
+    /**
      * GET  provider/schedule/unblock/{date}
      * Removes a blocked date (date param is YYYY-MM-DD).
      */
@@ -962,9 +1005,409 @@ class ProviderDashController
 
     // ── Portfolio ─────────────────────────────────────────────────────────────
 
+    /** Ensure tbl_portfolio exists (safe to call on every request) */
+    private function _ensurePortfolioTable($db): void
+    {
+        $db->exec("
+            CREATE TABLE IF NOT EXISTS tbl_portfolio (
+                id           INT AUTO_INCREMENT PRIMARY KEY,
+                provider_id  INT         NOT NULL,
+                service_id   INT         DEFAULT NULL,
+                title        VARCHAR(200) NOT NULL,
+                caption      TEXT        DEFAULT NULL,
+                price        VARCHAR(50)  DEFAULT NULL,
+                image_url    MEDIUMTEXT   DEFAULT NULL,
+                before_url   MEDIUMTEXT   DEFAULT NULL,
+                after_url    MEDIUMTEXT   DEFAULT NULL,
+                is_featured      TINYINT(1) NOT NULL DEFAULT 0,
+                is_before_after  TINYINT(1) NOT NULL DEFAULT 0,
+                views        INT NOT NULL DEFAULT 0,
+                likes        INT NOT NULL DEFAULT 0,
+                created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_provider (provider_id),
+                INDEX idx_featured (provider_id, is_featured)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+    }
+
     public function portfolio(): void
     {
+        $db = Database::getInstance();
+        $this->_ensurePortfolioTable($db);
         require __DIR__ . '/../views/Provider/portfolio.php';
+    }
+
+    /** POST provider/portfolio/upload */
+    public function portfolioUpload(): void
+    {
+        $db        = Database::getInstance();
+        $userId    = (int)($_SESSION['user_id'] ?? 0);
+        $this->_ensurePortfolioTable($db);
+
+        // Fetch provider profile id
+        $stmt = $db->prepare("SELECT id FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
+        $stmt->execute([$userId]);
+        $profile = $stmt->fetch();
+        if (!$profile) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Provider profile not found.'];
+            header('Location: ' . BASE_URL . 'provider/portfolio'); exit;
+        }
+        $providerId = (int)$profile['id'];
+
+        $title         = trim($_POST['title']   ?? '');
+        $caption       = trim($_POST['caption'] ?? '');
+        $price         = trim($_POST['price']   ?? '');
+        $serviceId     = (int)($_POST['service_id'] ?? 0) ?: null;
+        $isFeatured    = isset($_POST['is_featured'])    ? 1 : 0;
+        $isBeforeAfter = isset($_POST['is_before_after']) ? 1 : 0;
+
+        if (empty($title)) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Work title is required.'];
+            header('Location: ' . BASE_URL . 'provider/portfolio'); exit;
+        }
+
+        $allowed  = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+        $maxBytes = 5 * 1024 * 1024;
+
+        // Helper: encode uploaded file to base64
+        $encodeFile = function(array $file) use ($allowed, $maxBytes): ?string {
+            if ($file['error'] !== UPLOAD_ERR_OK) return null;
+            $mime = mime_content_type($file['tmp_name']);
+            if (!isset($allowed[$mime]))            return null;
+            if ($file['size'] > $maxBytes)          return null;
+            return 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($file['tmp_name']));
+        };
+
+        // Main images (multiple allowed)
+        $images = $_FILES['portfolio_images'] ?? [];
+        $imageUrl = null;
+        if (!empty($images['tmp_name'])) {
+            $files = is_array($images['tmp_name']) ? $images['tmp_name'] : [$images['tmp_name']];
+            foreach ($files as $i => $tmp) {
+                $f = [
+                    'tmp_name' => $tmp,
+                    'error'    => is_array($images['error'])    ? $images['error'][$i]    : $images['error'],
+                    'size'     => is_array($images['size'])     ? $images['size'][$i]     : $images['size'],
+                    'name'     => is_array($images['name'])     ? $images['name'][$i]     : $images['name'],
+                ];
+                $encoded = $encodeFile($f);
+                if ($encoded) { $imageUrl = $encoded; break; } // use first valid image
+            }
+        }
+
+        $beforeUrl = null;
+        $afterUrl  = null;
+        if ($isBeforeAfter) {
+            if (!empty($_FILES['before_image'])) $beforeUrl = $encodeFile($_FILES['before_image']);
+            if (!empty($_FILES['after_image']))  $afterUrl  = $encodeFile($_FILES['after_image']);
+        }
+
+        $db->prepare("
+            INSERT INTO tbl_portfolio
+                (provider_id, service_id, title, caption, price, image_url, before_url, after_url,
+                 is_featured, is_before_after, views, likes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NOW())
+        ")->execute([
+            $providerId,
+            $serviceId,
+            $title,
+            $caption ?: null,
+            $price   ?: null,
+            $imageUrl,
+            $beforeUrl,
+            $afterUrl,
+            $isFeatured,
+            $isBeforeAfter,
+        ]);
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => "uploaded:\"{$title}\" has been uploaded to your portfolio."];
+        header('Location: ' . BASE_URL . 'provider/portfolio'); exit;
+    }
+
+    /** POST provider/portfolio/update/{id} */
+    public function portfolioUpdate(string $id): void
+    {
+        $db         = Database::getInstance();
+        $userId     = (int)($_SESSION['user_id'] ?? 0);
+        $itemId     = (int)$id;
+        $this->_ensurePortfolioTable($db);
+
+        // Verify ownership
+        $stmt = $db->prepare("
+            SELECT p.* FROM tbl_portfolio p
+            JOIN tbl_provider_profiles pp ON pp.id = p.provider_id
+            WHERE p.id = ? AND pp.user_id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$itemId, $userId]);
+        $item = $stmt->fetch();
+        if (!$item) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Portfolio item not found.'];
+            header('Location: ' . BASE_URL . 'provider/portfolio'); exit;
+        }
+
+        $title      = trim($_POST['title']   ?? '');
+        $caption    = trim($_POST['caption'] ?? '');
+        $price      = trim($_POST['price']   ?? '');
+        $serviceId  = (int)($_POST['service_id'] ?? 0) ?: null;
+        $isFeatured = isset($_POST['is_featured']) ? 1 : 0;
+
+        if (empty($title)) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Work title is required.'];
+            header('Location: ' . BASE_URL . 'provider/portfolio'); exit;
+        }
+
+        // Optional image replacement
+        $imageUrl = $item['image_url'];
+        if (!empty($_FILES['portfolio_image']) && $_FILES['portfolio_image']['error'] === UPLOAD_ERR_OK) {
+            $file    = $_FILES['portfolio_image'];
+            $allowed = ['image/jpeg', 'image/png', 'image/webp'];
+            $mime    = mime_content_type($file['tmp_name']);
+            if (in_array($mime, $allowed, true) && $file['size'] <= 5 * 1024 * 1024) {
+                $imageUrl = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($file['tmp_name']));
+            }
+        }
+
+        $db->prepare("
+            UPDATE tbl_portfolio
+               SET title=?, caption=?, price=?, service_id=?, is_featured=?, image_url=?
+             WHERE id=?
+        ")->execute([
+            $title,
+            $caption  ?: null,
+            $price    ?: null,
+            $serviceId,
+            $isFeatured,
+            $imageUrl,
+            $itemId,
+        ]);
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => "updated:\"{$title}\" has been updated successfully."];
+        header('Location: ' . BASE_URL . 'provider/portfolio'); exit;
+    }
+
+    /** POST provider/portfolio/delete/{id} */
+    public function portfolioDelete(string $id): void
+    {
+        $db     = Database::getInstance();
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $itemId = (int)$id;
+        $this->_ensurePortfolioTable($db);
+
+        // Verify ownership before deleting
+        $stmt = $db->prepare("
+            SELECT p.title FROM tbl_portfolio p
+            JOIN tbl_provider_profiles pp ON pp.id = p.provider_id
+            WHERE p.id = ? AND pp.user_id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$itemId, $userId]);
+        $item = $stmt->fetch();
+
+        if (!$item) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Portfolio item not found or access denied.'];
+            header('Location: ' . BASE_URL . 'provider/portfolio'); exit;
+        }
+
+        $db->prepare("DELETE FROM tbl_portfolio WHERE id = ?")->execute([$itemId]);
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => "deleted:\"{$item['title']}\" has been deleted from your portfolio."];
+        header('Location: ' . BASE_URL . 'provider/portfolio'); exit;
+    }
+
+    /** POST provider/portfolio/feature/{id}  — returns JSON */
+    public function portfolioFeature(string $id): void
+    {
+        header('Content-Type: application/json');
+        $db     = Database::getInstance();
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $itemId = (int)$id;
+        $this->_ensurePortfolioTable($db);
+
+        // Verify ownership
+        $stmt = $db->prepare("
+            SELECT p.id, p.is_featured FROM tbl_portfolio p
+            JOIN tbl_provider_profiles pp ON pp.id = p.provider_id
+            WHERE p.id = ? AND pp.user_id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$itemId, $userId]);
+        $item = $stmt->fetch();
+
+        if (!$item) {
+            echo json_encode(['success' => false, 'message' => 'Item not found.']); exit;
+        }
+
+        $newVal = $item['is_featured'] ? 0 : 1;
+        $db->prepare("UPDATE tbl_portfolio SET is_featured = ? WHERE id = ?")
+           ->execute([$newVal, $itemId]);
+
+        echo json_encode(['success' => true, 'is_featured' => $newVal]); exit;
+    }
+
+    // ── Reviews ───────────────────────────────────────────────────────────────
+
+    public function reviews(): void
+    {
+        require __DIR__ . '/../views/Provider/reviews.php';
+    }
+
+    /**
+     * POST  provider/reviews/reply/{reviewId}
+     * Save a new reply to a customer review and notify the customer.
+     */
+    public function storeReply(string $reviewId): void
+    {
+        $db     = Database::getInstance();
+        $userId = $_SESSION['user_id'] ?? 0;
+
+        // Ensure reply table exists
+        $db->exec("
+            CREATE TABLE IF NOT EXISTS tbl_review_replies (
+                id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                review_id   INT UNSIGNED NOT NULL,
+                provider_id INT UNSIGNED NOT NULL,
+                reply       TEXT NOT NULL,
+                created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_review_reply (review_id),
+                INDEX idx_provider (provider_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+
+        // Verify review belongs to this provider
+        $stProv = $db->prepare("SELECT id FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
+        $stProv->execute([$userId]);
+        $provProfileId = (int)$stProv->fetchColumn();
+
+        $stRev = $db->prepare("SELECT r.id, r.customer_id, r.rating, r.comment, s.name AS service_name FROM tbl_reviews r LEFT JOIN tbl_services s ON s.id = r.service_id WHERE r.id = ? AND r.provider_id = ? LIMIT 1");
+        $stRev->execute([(int)$reviewId, $provProfileId]);
+        $review = $stRev->fetch(PDO::FETCH_ASSOC);
+
+        if (!$review) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Review not found.'];
+            header('Location: ' . BASE_URL . 'provider/reviews'); exit;
+        }
+
+        $replyText = trim($_POST['reply'] ?? '');
+        if (strlen($replyText) < 2) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Reply cannot be empty.'];
+            header('Location: ' . BASE_URL . 'provider/reviews'); exit;
+        }
+        if (strlen($replyText) > 600) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Reply must be under 600 characters.'];
+            header('Location: ' . BASE_URL . 'provider/reviews'); exit;
+        }
+
+        // Check not already replied
+        $stCheck = $db->prepare("SELECT id FROM tbl_review_replies WHERE review_id = ? LIMIT 1");
+        $stCheck->execute([(int)$reviewId]);
+        if ($stCheck->fetchColumn()) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'You have already replied to this review.'];
+            header('Location: ' . BASE_URL . 'provider/reviews'); exit;
+        }
+
+        $db->prepare("INSERT INTO tbl_review_replies (review_id, provider_id, reply) VALUES (?, ?, ?)")
+           ->execute([(int)$reviewId, $provProfileId, $replyText]);
+
+        // Notify the customer that the provider replied
+        $stProvUser = $db->prepare("SELECT pp.business_name, u.first_name, u.last_name FROM tbl_provider_profiles pp JOIN tbl_users u ON u.id = pp.user_id WHERE pp.id = ? LIMIT 1");
+        $stProvUser->execute([$provProfileId]);
+        $provInfo = $stProvUser->fetch(PDO::FETCH_ASSOC);
+        $provName = $provInfo ? htmlspecialchars(trim($provInfo['first_name'] . ' ' . $provInfo['last_name'])) : 'Your provider';
+        $bizName  = $provInfo['business_name'] ?? $provName;
+
+        NotificationHelper::send(
+            $db,
+            [(int)$review['customer_id']],
+            'review',
+            'Provider replied to your review',
+            "{$bizName} responded to your {$review['rating']}-star review" . ($review['service_name'] ? " for \"{$review['service_name']}\"" : '') . '.',
+            $replyText,
+            BASE_URL . 'bookings'
+        );
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Your reply has been posted and the customer has been notified.'];
+        header('Location: ' . BASE_URL . 'provider/reviews'); exit;
+    }
+
+    /**
+     * POST  provider/reviews/reply/update/{replyId}
+     * Update an existing reply.
+     */
+    public function updateReply(string $replyId): void
+    {
+        $db     = Database::getInstance();
+        $userId = $_SESSION['user_id'] ?? 0;
+
+        $stProv = $db->prepare("SELECT id FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
+        $stProv->execute([$userId]);
+        $provProfileId = (int)$stProv->fetchColumn();
+
+        $stR = $db->prepare("SELECT rr.*, r.customer_id, r.rating, r.comment, s.name AS service_name FROM tbl_review_replies rr JOIN tbl_reviews r ON r.id = rr.review_id LEFT JOIN tbl_services s ON s.id = r.service_id WHERE rr.id = ? AND rr.provider_id = ? LIMIT 1");
+        $stR->execute([(int)$replyId, $provProfileId]);
+        $existing = $stR->fetch(PDO::FETCH_ASSOC);
+
+        if (!$existing) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Reply not found or access denied.'];
+            header('Location: ' . BASE_URL . 'provider/reviews'); exit;
+        }
+
+        $replyText = trim($_POST['reply'] ?? '');
+        if (strlen($replyText) < 2 || strlen($replyText) > 600) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Reply must be 2–600 characters.'];
+            header('Location: ' . BASE_URL . 'provider/reviews'); exit;
+        }
+
+        $db->prepare("UPDATE tbl_review_replies SET reply = ? WHERE id = ?")
+           ->execute([$replyText, (int)$replyId]);
+
+        // Re-notify customer
+        $stProvUser = $db->prepare("SELECT pp.business_name, u.first_name, u.last_name FROM tbl_provider_profiles pp JOIN tbl_users u ON u.id = pp.user_id WHERE pp.id = ? LIMIT 1");
+        $stProvUser->execute([$provProfileId]);
+        $provInfo = $stProvUser->fetch(PDO::FETCH_ASSOC);
+        $bizName  = $provInfo['business_name'] ?? 'Your provider';
+
+        NotificationHelper::send(
+            $db,
+            [(int)$existing['customer_id']],
+            'review',
+            'Provider updated their reply to your review',
+            "{$bizName} updated their response to your review" . ($existing['service_name'] ? " for \"{$existing['service_name']}\"" : '') . '.',
+            $replyText,
+            BASE_URL . 'bookings'
+        );
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Reply updated successfully.'];
+        header('Location: ' . BASE_URL . 'provider/reviews'); exit;
+    }
+
+    /**
+     * POST  provider/reviews/reply/delete/{replyId}
+     * Delete a reply.
+     */
+    public function deleteReply(string $replyId): void
+    {
+        $db     = Database::getInstance();
+        $userId = $_SESSION['user_id'] ?? 0;
+
+        $stProv = $db->prepare("SELECT id FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
+        $stProv->execute([$userId]);
+        $provProfileId = (int)$stProv->fetchColumn();
+
+        $stR = $db->prepare("SELECT id FROM tbl_review_replies WHERE id = ? AND provider_id = ? LIMIT 1");
+        $stR->execute([(int)$replyId, $provProfileId]);
+
+        if (!$stR->fetchColumn()) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Reply not found or access denied.'];
+            header('Location: ' . BASE_URL . 'provider/reviews'); exit;
+        }
+
+        $db->prepare("DELETE FROM tbl_review_replies WHERE id = ?")->execute([(int)$replyId]);
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Reply deleted.'];
+        header('Location: ' . BASE_URL . 'provider/reviews'); exit;
     }
 
     // ── Profile ───────────────────────────────────────────────────────────────

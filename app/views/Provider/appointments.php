@@ -8,16 +8,19 @@ $email        = htmlspecialchars($_SESSION['user_email'] ?? '');
 
 /* ── Provider profile ── */
 $stBiz = $db->prepare("
-    SELECT pp.*, c.name AS category_name
+    SELECT pp.*, c.name AS category_name, u.first_name, u.last_name
     FROM tbl_provider_profiles pp
     LEFT JOIN tbl_categories c ON pp.category_id = c.id
+    LEFT JOIN tbl_users u ON pp.user_id = u.id
     WHERE pp.user_id = ? LIMIT 1
 ");
 $stBiz->execute([$userId]);
 $profile      = $stBiz->fetch() ?: [];
 $profileId    = (int)($profile['id'] ?? 0);
 $bizName      = htmlspecialchars($profile['business_name'] ?? $providerName);
-$firstName    = htmlspecialchars(explode(' ', $providerName)[0]);
+$firstName    = htmlspecialchars($profile['first_name'] ?? explode(' ', $providerName)[0]);
+$provFullName = htmlspecialchars(trim(($profile['first_name'] ?? '') . ' ' . ($profile['last_name'] ?? '')) ?: $providerName);
+$bizCategory  = htmlspecialchars($profile['category_name'] ?? 'Service Provider');
 $profilePhoto = $profile['profile_photo'] ?? null;
 $initials     = strtoupper(substr($bizName, 0, 2));
 
@@ -169,7 +172,7 @@ $stMain = $db->prepare($sqlMain);
 $stMain->execute($params);
 $appointments = $stMain->fetchAll();
 
-/* ── Calendar data ── */
+/* ── Calendar data — fetch 3 months back + 3 months ahead for full navigation ── */
 $stCal = $db->prepare(
     "SELECT b.id, b.booking_date, b.start_time, b.end_time, b.status,
             u.first_name, u.last_name, s.name AS service_name
@@ -177,32 +180,51 @@ $stCal = $db->prepare(
      JOIN tbl_users u    ON u.id = b.customer_id
      JOIN tbl_services s ON s.id = b.service_id
      WHERE b.provider_id = ?
-       AND DATE(b.booking_date) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+       AND DATE(b.booking_date) BETWEEN DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+                                    AND DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
        AND b.deleted_at IS NULL
      ORDER BY b.booking_date ASC, b.start_time ASC"
 );
 $stCal->execute([$profileId]);
 $calEvents = [];
+$colorMap = [
+    'pending'     => '#CA8A04',
+    'confirmed'   => '#16A34A',
+    'in_progress' => '#EA580C',
+    'completed'   => '#2563EB',
+    'rescheduled' => '#7C3AED',
+    'cancelled'   => '#DC2626',
+    'rejected'    => '#EC4899',
+];
 foreach ($stCal->fetchAll() as $row) {
-    $colorMap = [
-        'pending'     => '#CA8A04',
-        'confirmed'   => '#16A34A',
-        'in_progress' => '#EA580C',
-        'completed'   => '#2563EB',
-        'rescheduled' => '#7C3AED',
-        'cancelled'   => '#DC2626',
-        'rejected'    => '#EC4899',
-    ];
     $calEvents[] = [
-        'id'     => $row['id'],
-        'title'  => $row['first_name'].' '.$row['last_name'].' — '.$row['service_name'],
-        'start'  => $row['booking_date'].'T'.$row['start_time'],
-        'end'    => $row['booking_date'].'T'.$row['end_time'],
-        'color'  => $colorMap[$row['status']] ?? '#888',
-        'status' => $row['status'],
-        'url'    => BASE_URL.'provider/appointments/'.(int)$row['id'],
+        'id'          => $row['id'],
+        'title'       => $row['first_name'].' '.$row['last_name'],
+        'service'     => $row['service_name'],
+        'start'       => $row['booking_date'].'T'.($row['start_time'] ?? '00:00:00'),
+        'end'         => $row['booking_date'].'T'.($row['end_time']   ?? '00:00:00'),
+        'color'       => $colorMap[$row['status']] ?? '#888',
+        'status'      => $row['status'],
+        'url'         => BASE_URL.'provider/appointments/'.(int)$row['id'],
+        'time_label'  => !empty($row['start_time']) ? date('h:i A', strtotime($row['start_time'])) : '',
     ];
 }
+
+/* ── Today's sidebar events (all statuses) for the calendar sidebar ── */
+$stTodaySidebar = $db->prepare(
+    "SELECT b.id, b.start_time, b.status,
+            u.first_name, u.last_name,
+            s.name AS service_name
+     FROM tbl_bookings b
+     JOIN tbl_users u    ON u.id = b.customer_id
+     JOIN tbl_services s ON s.id = b.service_id
+     WHERE b.provider_id = ?
+       AND DATE(b.booking_date) = ?
+       AND b.deleted_at IS NULL
+     ORDER BY b.start_time ASC"
+);
+$stTodaySidebar->execute([$profileId, $todayDate]);
+$todaySidebarEvents = $stTodaySidebar->fetchAll();
 
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
@@ -252,16 +274,14 @@ function payLabel(?string $ps): string {
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/provider_appointments.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
-
-    /* ════════════════  TABLE  ════════════════ */
+    /* ── Table mobile stacking ── */
     .pv-table-wrap { overflow-x:visible !important; overflow-y:visible !important; width:100%; }
     .pv-table { width:100%; table-layout:auto; }
     .pv-table tbody tr { display:flex; flex-direction:column; margin-bottom:1rem; padding:1rem; border:1px solid var(--border); border-radius:.375rem; background:var(--bg-secondary); }
     @media (min-width:768px) {
       .pv-table tbody tr { display:table-row; margin-bottom:0; padding:0; border:none; background:transparent; }
     }
-
-    /* ════════════════  PAGINATION  ════════════════ */
+    /* ── Pagination ── */
     .pv-pagination { display:flex; align-items:center; justify-content:center; gap:1.5rem; margin-top:1.5rem; padding:1rem 0; }
     .pv-page-btn {
       display:inline-flex; align-items:center; justify-content:center;
@@ -271,210 +291,6 @@ function payLabel(?string $ps): string {
     }
     .pv-page-btn:hover:not(.is-disabled) { background:var(--gold); border-color:var(--gold); color:white; transform:translateY(-2px); }
     .pv-page-btn.is-disabled { opacity:.5; cursor:not-allowed; }
-
-    /* ════════════════  CALENDAR v2  ════════════════ */
-
-    /* Strip the inline padding so our nav sits flush */
-    #aptCalendar { padding: 0 !important; }
-
-    /* ── Nav bar (cream header strip) ── */
-    .apt-cal-nav {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 1rem 1.5rem;
-      background: linear-gradient(135deg, #F8F4ED 0%, #F0E7D4 100%);
-      border-bottom: 1px solid rgba(201,168,76,.15);
-      gap: 1rem;
-    }
-    .apt-cal-nav-right { display:flex; align-items:center; gap:.5rem; }
-
-    /* Square icon buttons */
-    .apt-cal-nav-btn {
-      width: 36px; height: 36px; border-radius: 10px;
-      background: rgba(255,255,255,.70);
-      border: 1px solid rgba(201,168,76,.28);
-      color: var(--gold-dim);
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; font-size: .78rem;
-      transition: background .18s, border-color .18s, transform .15s, box-shadow .15s;
-    }
-    .apt-cal-nav-btn:hover {
-      background: rgba(201,168,76,.18);
-      border-color: rgba(201,168,76,.45);
-      transform: scale(1.06);
-      box-shadow: 0 2px 8px rgba(201,168,76,.14);
-    }
-
-    /* Month/year label */
-    .apt-cal-month-title {
-      font-family: var(--font-display);
-      font-size: 1.18rem; font-weight: 700; font-style: italic;
-      color: var(--text-primary);
-      flex: 1; text-align: center;
-    }
-
-    /* "Today" pill */
-    .apt-cal-today-btn {
-      padding: .38rem 1.05rem; border-radius: 99px;
-      background: rgba(255,255,255,.70);
-      border: 1px solid rgba(201,168,76,.30);
-      color: var(--gold-dim);
-      font-family: var(--font-mono); font-size: .7rem; font-weight: 600;
-      letter-spacing: .06em; text-transform: uppercase;
-      cursor: pointer;
-      transition: background .18s, color .18s, box-shadow .18s;
-    }
-    .apt-cal-today-btn:hover {
-      background: var(--gold); color: #fff8e8;
-      box-shadow: 0 4px 12px rgba(201,168,76,.28);
-    }
-
-    /* ── Grid container (white area) ── */
-    .apt-cal-grid {
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: .4rem;
-      padding: .9rem 1rem 1.3rem;
-      background: #ffffff;
-    }
-    [data-theme="dark"] .apt-cal-grid { background: transparent; }
-
-    /* Day-of-week headers */
-    .apt-cal-dow {
-      font-family: var(--font-mono); font-size: .62rem; font-weight: 600;
-      letter-spacing: .10em; text-transform: uppercase;
-      color: var(--text-dim); text-align: center;
-      padding: .6rem 0 .65rem;
-      border-bottom: 1.5px solid rgba(201,168,76,.13);
-      margin-bottom: .25rem;
-    }
-
-    /* ── Day cells ── */
-    .apt-cal-cell {
-      min-height: 90px;
-      padding: .55rem .6rem .5rem;
-      border-radius: 12px;
-      display: flex; flex-direction: column;
-      border: 1.5px solid transparent;
-      transition: background .15s, border-color .15s, box-shadow .15s, transform .15s;
-      position: relative;
-    }
-
-    /* Empty filler cells */
-    .apt-cal-cell--empty { pointer-events: none; }
-
-    /* Plain days with no events — subtle hover */
-    .apt-cal-cell:not(.apt-cal-cell--empty):not(.apt-cal-cell--today):not(.apt-cal-cell--has-events):hover {
-      background: rgba(201,168,76,.04);
-      border-color: rgba(201,168,76,.10);
-    }
-
-    /* Today */
-    .apt-cal-cell--today {
-      background: linear-gradient(135deg, rgba(248,244,237,.97) 0%, rgba(240,231,212,.80) 100%);
-      border-color: rgba(201,168,76,.38) !important;
-      box-shadow: 0 2px 12px rgba(139,110,60,.09), 0 0 0 1px rgba(201,168,76,.10);
-    }
-
-    /* Has events */
-    .apt-cal-cell--has-events {
-      background: rgba(255,255,255,.88);
-      border-color: rgba(201,168,76,.20);
-      box-shadow: 0 2px 10px rgba(139,110,60,.08);
-      cursor: pointer;
-    }
-    .apt-cal-cell--has-events:hover {
-      background: #ffffff;
-      border-color: rgba(201,168,76,.40);
-      box-shadow: 0 4px 18px rgba(139,110,60,.13);
-      transform: translateY(-2px);
-    }
-
-    /* Today + has events */
-    .apt-cal-cell--today.apt-cal-cell--has-events {
-      background: linear-gradient(135deg, rgba(248,244,237,.98), rgba(240,231,212,.88));
-      border-color: rgba(201,168,76,.48) !important;
-    }
-
-    /* Day number */
-    .apt-cal-day-num {
-      font-family: var(--font-mono); font-size: .8rem; font-weight: 700;
-      color: var(--text-dim); line-height: 1; display: block;
-      margin-bottom: auto;
-    }
-    .apt-cal-cell--today       .apt-cal-day-num { color: var(--gold-dim); }
-    .apt-cal-cell--has-events  .apt-cal-day-num { color: var(--text-primary); }
-
-    /* Dots row */
-    .apt-cal-dots {
-      display: flex; align-items: center; gap: .3rem;
-      flex-wrap: wrap; padding-top: .5rem;
-    }
-    .apt-cal-dot {
-      width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
-      transition: transform .15s;
-    }
-    .apt-cal-cell--has-events:hover .apt-cal-dot { transform: scale(1.3); }
-
-    /* Count label (shown when > 3 events) */
-    .apt-cal-count {
-      font-family: var(--font-mono); font-size: .58rem; font-weight: 600;
-      color: var(--text-dim); margin-top: .22rem; display: block;
-    }
-
-    /* ── Dark mode overrides ── */
-    [data-theme="dark"] .apt-cal-nav {
-      background: linear-gradient(135deg, rgba(22,17,8,.96) 0%, rgba(14,10,2,.98) 100%);
-      border-bottom-color: rgba(201,168,76,.18);
-    }
-    [data-theme="dark"] .apt-cal-nav-btn {
-      background: rgba(201,168,76,.10); border-color: rgba(201,168,76,.25); color: var(--gold);
-    }
-    [data-theme="dark"] .apt-cal-nav-btn:hover { background: rgba(201,168,76,.22); }
-    [data-theme="dark"] .apt-cal-month-title { color: #EDE3CC; }
-    [data-theme="dark"] .apt-cal-today-btn {
-      background: rgba(201,168,76,.10); border-color: rgba(201,168,76,.28); color: var(--gold);
-    }
-    [data-theme="dark"] .apt-cal-today-btn:hover { background: var(--gold); color: #1C1710; }
-    [data-theme="dark"] .apt-cal-dow { color: rgba(237,227,204,.35); border-bottom-color: rgba(201,168,76,.18); }
-    [data-theme="dark"] .apt-cal-cell--today {
-      background: linear-gradient(135deg, rgba(40,32,12,.72), rgba(28,22,6,.55));
-      border-color: rgba(201,168,76,.40) !important;
-    }
-    [data-theme="dark"] .apt-cal-cell--has-events {
-      background: rgba(22,28,48,.65); border-color: rgba(201,168,76,.20);
-    }
-    [data-theme="dark"] .apt-cal-cell--has-events:hover {
-      background: rgba(26,34,58,.85); border-color: rgba(201,168,76,.38);
-    }
-    [data-theme="dark"] .apt-cal-cell--today.apt-cal-cell--has-events {
-      background: linear-gradient(135deg, rgba(40,32,12,.85), rgba(28,22,6,.70));
-    }
-    [data-theme="dark"] .apt-cal-day-num            { color: rgba(237,227,204,.32); }
-    [data-theme="dark"] .apt-cal-cell--today       .apt-cal-day-num { color: var(--gold); }
-    [data-theme="dark"] .apt-cal-cell--has-events  .apt-cal-day-num { color: rgba(237,227,204,.82); }
-    [data-theme="dark"] .apt-cal-count { color: rgba(237,227,204,.40); }
-
-    /* ── Responsive ── */
-    @media (max-width:1100px) {
-      .apt-cal-cell { min-height:72px; }
-    }
-    @media (max-width:768px) {
-      .apt-cal-grid { gap:.18rem; padding:.5rem .6rem .8rem; }
-      .apt-cal-cell { min-height:56px; padding:.38rem .38rem .32rem; border-radius:8px; }
-      .apt-cal-day-num { font-size:.7rem; }
-      .apt-cal-dot { width:5px; height:5px; }
-      .apt-cal-count { font-size:.52rem; }
-      .apt-cal-month-title { font-size:.95rem; }
-      .apt-cal-nav { padding:.75rem 1rem; }
-    }
-    @media (max-width:480px) {
-      .apt-cal-grid { gap:.1rem; }
-      .apt-cal-cell { min-height:44px; border-radius:6px; padding:.3rem .3rem .25rem; }
-      .apt-cal-dots { padding-top:.3rem; gap:.2rem; }
-    }
-
   </style>
   <script>(function(){ var t=localStorage.getItem('qb-theme')||'light'; if(t==='dark') document.documentElement.setAttribute('data-theme','dark'); })();</script>
 </head>
@@ -493,17 +309,17 @@ function payLabel(?string $ps): string {
     </a>
 
     <div class="pv-nav-links">
-      <a href="<?= BASE_URL ?>provider/dashboard"    class="pv-nav-link">Dashboard</a>
-      <a href="<?= BASE_URL ?>provider/appointments" class="pv-nav-link is-active">
-        Appointments
-        <?php if ($counts['pending']): ?>
-          <sup class="pv-sup"><?= $counts['pending'] ?></sup>
-        <?php endif; ?>
-      </a>
-      <a href="<?= BASE_URL ?>provider/services"   class="pv-nav-link">Services</a>
-      <a href="<?= BASE_URL ?>provider/portfolio"  class="pv-nav-link">Portfolio</a>
-      <a href="<?= BASE_URL ?>provider/schedule"   class="pv-nav-link">Schedule</a>
-    </div>
+  <a href="<?= BASE_URL ?>provider/dashboard"    class="pv-nav-link">Dashboard</a>
+  <a href="<?= BASE_URL ?>provider/appointments" class="pv-nav-link is-active">
+    Appointments
+    <?php if ($counts['pending']): ?>
+      <sup class="pv-sup"><?= $counts['pending'] ?></sup>
+    <?php endif; ?>
+  </a>
+  <a href="<?= BASE_URL ?>provider/portfolio"  class="pv-nav-link">Portfolio</a>
+  <a href="<?= BASE_URL ?>provider/schedule"   class="pv-nav-link">Schedule</a>
+  <a href="<?= BASE_URL ?>provider/reviews"    class="pv-nav-link">Reviews</a>
+</div>
 
     <div class="pv-nav-end">
       <?php $notifUserId = (int)$userId; require __DIR__ . '/../_partials/notification_panel.php'; ?>
@@ -554,9 +370,9 @@ function payLabel(?string $ps): string {
             <?php endif; ?>
           </div>
           <div class="pv-pd-info">
-            <div class="pv-pd-name"><?= $bizName ?></div>
+            <div class="pv-pd-name"><?= $provFullName ?></div>
             <div class="pv-pd-email"><?= $email ?></div>
-            <span class="pv-pd-role">Provider</span>
+            <span class="pv-pd-role"><?= $bizCategory ?></span>
           </div>
         </div>
         <div class="pv-pd-divider"></div>
@@ -601,18 +417,6 @@ function payLabel(?string $ps): string {
       </p>
     </div>
     <div class="pv-hero-chips" aria-hidden="true">
-      <?php if ($counts['pending']): ?>
-      <div class="pv-chip pv-chip--amber">
-        <i class="fa-solid fa-hourglass-half"></i>
-        <?= $counts['pending'] ?> pending
-      </div>
-      <?php endif; ?>
-      <?php if ($counts['confirmed']): ?>
-      <div class="pv-chip pv-chip--green">
-        <i class="fa-solid fa-calendar-check"></i>
-        <?= $counts['confirmed'] ?> confirmed
-      </div>
-      <?php endif; ?>
       <?php if (!empty($todayAppointments)): ?>
       <div class="pv-chip pv-chip--blue">
         <i class="fa-solid fa-clock"></i>
@@ -648,7 +452,7 @@ function payLabel(?string $ps): string {
         <i class="fa-solid fa-filter"></i> Filter
       </button>
 
-      <select name="status" class="apt-select" onchange="this.form.submit()">
+      <select name="status" class="apt-select" onchange="<?= $viewMode === 'calendar' ? 'calendarFilter(this)' : 'this.form.submit()' ?>">
         <?php foreach ($tabLabels as $val => $label): ?>
         <option value="<?= $val ?>" <?= $statusFilter === $val ? 'selected' : '' ?>>
           <?= $label ?>
@@ -656,7 +460,7 @@ function payLabel(?string $ps): string {
         <?php endforeach; ?>
       </select>
 
-      <select name="date" class="apt-select" onchange="this.form.submit()">
+      <select name="date" class="apt-select" onchange="<?= $viewMode === 'calendar' ? 'calendarFilter(this)' : 'this.form.submit()' ?>">
         <?php foreach ($dateLabels as $val => $label): ?>
         <option value="<?= $val ?>" <?= $dateFilter === $val ? 'selected' : '' ?>><?= $label ?></option>
         <?php endforeach; ?>
@@ -679,13 +483,17 @@ function payLabel(?string $ps): string {
   <!-- ══════════════════════════════
        CALENDAR VIEW
   ══════════════════════════════ -->
-  <div class="apt-calendar-panel pv-panel">
+  <section class="apt-section apt-calendar-panel pv-panel" aria-label="Appointment Calendar">
+
+    <!-- Panel header: title + legend -->
     <div class="pv-panel-head">
       <div>
-        <h2><i class="fa-solid fa-calendar-days" style="color:var(--gold);margin-right:.45rem"></i>Appointment Calendar</h2>
-        <div class="pv-panel-sub">Colours indicate appointment status — hover dots for details</div>
+        <h2>
+          <i class="fa-solid fa-calendar-days" style="color:var(--gold)"></i>
+          Appointment Calendar
+        </h2>
+        <div class="pv-panel-sub">Colours indicate appointment status — click any day with dots to view appointments</div>
       </div>
-      <!-- Legend -->
       <div class="apt-cal-legend">
         <span class="apt-legend-dot" style="background:#CA8A04"></span><span>Pending</span>
         <span class="apt-legend-dot" style="background:#16A34A"></span><span>Confirmed</span>
@@ -696,12 +504,89 @@ function payLabel(?string $ps): string {
         <span class="apt-legend-dot" style="background:#EC4899"></span><span>Rejected</span>
       </div>
     </div>
-    <!-- Calendar renders here — nav + grid injected by JS -->
-    <div id="aptCalendar"></div>
+
+    <!-- 70/30 layout: calendar left, today sidebar right -->
+    <div class="apt-cal-layout">
+
+      <!-- LEFT: nav + grid injected by JS -->
+      <div>
+        <div id="aptCalendar"></div>
+      </div>
+
+      <!-- RIGHT: Today's schedule sidebar -->
+      <aside class="apt-cal-sidebar" aria-label="Today's schedule">
+        <div class="apt-cal-sidebar-head">
+          <div class="apt-cal-sidebar-title">Today's Schedule</div>
+          <div class="apt-cal-sidebar-date"><?= date('D, M j, Y') ?></div>
+        </div>
+        <div class="apt-cal-sidebar-body">
+          <?php
+          $colorMap2 = [
+              'pending'     => '#CA8A04',
+              'confirmed'   => '#16A34A',
+              'in_progress' => '#EA580C',
+              'completed'   => '#2563EB',
+              'rescheduled' => '#7C3AED',
+              'cancelled'   => '#DC2626',
+              'rejected'    => '#EC4899',
+          ];
+          $pillBg = [
+              'pending'     => 'rgba(202,138,4,.12)',
+              'confirmed'   => 'rgba(22,163,74,.12)',
+              'in_progress' => 'rgba(234,88,12,.12)',
+              'completed'   => 'rgba(37,99,235,.12)',
+              'rescheduled' => 'rgba(124,58,237,.12)',
+              'cancelled'   => 'rgba(220,38,38,.12)',
+              'rejected'    => 'rgba(236,72,153,.12)',
+          ];
+          if (empty($todaySidebarEvents)): ?>
+            <div class="apt-sdb-empty">
+              <i class="fa-regular fa-calendar-xmark"></i>
+              No appointments today
+            </div>
+          <?php else:
+            foreach ($todaySidebarEvents as $ev):
+              $sColor = $colorMap2[$ev['status']] ?? '#888';
+              $sBg    = $pillBg[$ev['status']] ?? 'rgba(136,136,136,.1)';
+              $sLabel = ucfirst(str_replace('_', ' ', $ev['status']));
+              $sTime  = !empty($ev['start_time']) ? timeLabel($ev['start_time']) : '—';
+          ?>
+            <div class="apt-sdb-row">
+              <div class="apt-sdb-stripe" style="background:<?= $sColor ?>"></div>
+              <div class="apt-sdb-info">
+                <div class="apt-sdb-time"><?= $sTime ?></div>
+                <div class="apt-sdb-name"><?= htmlspecialchars($ev['first_name'].' '.$ev['last_name']) ?></div>
+                <div class="apt-sdb-service"><?= htmlspecialchars($ev['service_name']) ?></div>
+                <div class="apt-sdb-pill" style="color:<?= $sColor ?>;background:<?= $sBg ?>;border:1px solid <?= $sColor ?>44">
+                  <?= $sLabel ?>
+                </div>
+              </div>
+            </div>
+          <?php endforeach; endif; ?>
+        </div>
+      </aside>
+
+    </div><!-- /.apt-cal-layout -->
+  </section>
+
+  <!-- Day detail modal -->
+  <div class="apt-day-modal-overlay" id="aptDayModal" role="dialog" aria-modal="true" aria-labelledby="aptDayModalTitle">
+    <div class="apt-day-modal">
+      <div class="apt-day-modal-head">
+        <div>
+          <div class="apt-day-modal-title" id="aptDayModalTitle"></div>
+          <div class="apt-day-modal-sub" id="aptDayModalSub"></div>
+        </div>
+        <button class="apt-day-modal-close" onclick="closeDayModal()" aria-label="Close">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="apt-day-modal-body" id="aptDayModalBody"></div>
+    </div>
   </div>
 
   <script>
-  window.__calEvents = <?= json_encode($calEvents) ?>;
+  window.__calEvents = <?= json_encode($calEvents, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
   </script>
 
   <?php else: ?>
@@ -876,7 +761,7 @@ function payLabel(?string $ps): string {
             <tr>
               <th>Ref</th>
               <th>Customer</th>
-              <th>Service</th>
+              <th>Business Name</th>
               <th>Date</th>
               <th>Duration</th>
               <th>Amount</th>
@@ -915,14 +800,14 @@ function payLabel(?string $ps): string {
                 </div>
               </td>
               <td>
-                <div class="pv-svc-name" title="<?= htmlspecialchars($apt['service_name']) ?>">
-                  <?= htmlspecialchars($apt['service_name']) ?>
-                </div>
-                <div style="font-size:.68rem;color:var(--text-dim);margin-top:.15rem">
-                  <i class="fa-solid fa-location-dot" style="font-size:.6rem"></i>
-                  <?= htmlspecialchars($apt['location_type']) ?>
-                </div>
-              </td>
+  <div class="pv-svc-name" title="<?= htmlspecialchars($bizName) ?>">
+    <?= htmlspecialchars($bizName) ?>
+  </div>
+  <div style="font-size:.68rem;color:var(--text-dim);margin-top:.15rem">
+    <i class="fa-solid fa-tag" style="font-size:.6rem"></i>
+    <?= htmlspecialchars($profile['category_name'] ?? '—') ?>
+  </div>
+</td>
               <td class="pv-mono pv-muted"><?= date('M d, Y', strtotime($apt['booking_date'])) ?></td>
               <td class="pv-mono pv-muted"><?= $apt['duration_minutes'] ?> min</td>
               <td class="pv-mono pv-gold">₱<?= number_format($apt['total_amount'],2) ?></td>
@@ -993,7 +878,7 @@ function payLabel(?string $ps): string {
     </div><!-- /pv-panel -->
   </section>
 
-  <?php endif; ?>
+  <?php endif; /* end calendar / list switch */ ?>
 
 </main>
 
@@ -1157,8 +1042,10 @@ document.querySelectorAll('.pv-modal-overlay').forEach(function(o) {
   o.addEventListener('click', function(e) { if (e.target === this) this.classList.remove('is-open'); });
 });
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape')
+  if (e.key === 'Escape') {
     document.querySelectorAll('.pv-modal-overlay.is-open').forEach(function(m) { m.classList.remove('is-open'); });
+    closeDayModal();
+  }
 });
 
 /* ── Accept ── */
@@ -1279,83 +1166,129 @@ showToast('<?= addslashes(htmlspecialchars_decode($flash['msg'])) ?>','<?= $flas
 <!-- ════════════════  CALENDAR SCRIPT  ════════════════ -->
 <script>
 (function () {
-  /* ── Status → dot colour ── */
   var DOT_COLOR = {
-    pending:     '#CA8A04',   /* yellow  */
-    confirmed:   '#16A34A',   /* green   */
-    in_progress: '#EA580C',   /* orange  */
-    completed:   '#2563EB',   /* blue    */
-    rescheduled: '#7C3AED',   /* purple  */
-    cancelled:   '#DC2626',   /* red     */
-    rejected:    '#EC4899'    /* pink    */
+    pending:     '#CA8A04',
+    confirmed:   '#16A34A',
+    in_progress: '#EA580C',
+    completed:   '#2563EB',
+    rescheduled: '#7C3AED',
+    cancelled:   '#DC2626',
+    rejected:    '#EC4899'
+  };
+  var DOT_LABEL = {
+    pending:     'Pending',
+    confirmed:   'Confirmed',
+    in_progress: 'In Progress',
+    completed:   'Completed',
+    rescheduled: 'Rescheduled',
+    cancelled:   'Cancelled',
+    rejected:    'Rejected'
+  };
+  var DOT_BG = {
+    pending:     'rgba(202,138,4,.12)',
+    confirmed:   'rgba(22,163,74,.12)',
+    in_progress: 'rgba(234,88,12,.12)',
+    completed:   'rgba(37,99,235,.12)',
+    rescheduled: 'rgba(124,58,237,.12)',
+    cancelled:   'rgba(220,38,38,.12)',
+    rejected:    'rgba(236,72,153,.12)'
   };
 
-  var events = window.__calEvents || [];
-  var today  = new Date();
-  var cy     = today.getFullYear();
-  var cm     = today.getMonth();
+  var events   = window.__calEvents || [];
+  var today    = new Date();
+  var cy       = today.getFullYear();
+  var cm       = today.getMonth();
+  var todayStr = '<?= $todayDate ?>';
+
+  /* ── Active filter state (initialised from PHP) ── */
+  var currentStatus = '<?= $statusFilter ?>';
+  var currentDate   = '<?= $dateFilter ?>';
 
   var MONTHS = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December'];
   var DAYS   = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+
+  /* ── Filter events based on current dropdown selections ── */
+  function getFilteredEvents() {
+    var todayDate = new Date(todayStr + 'T00:00:00');
+
+    return events.filter(function (ev) {
+      /* Status filter */
+      if (currentStatus !== 'all' && ev.status !== currentStatus) return false;
+
+      /* Date filter */
+      if (currentDate !== 'all') {
+        var evDate    = new Date(ev.start.substring(0, 10) + 'T00:00:00');
+        var evDateStr = ev.start.substring(0, 10);
+
+        if (currentDate === 'today'    && evDateStr !== todayStr) return false;
+        if (currentDate === 'upcoming' && evDate <= todayDate)    return false;
+        if (currentDate === 'past'     && evDate >= todayDate)    return false;
+      }
+
+      return true;
+    });
+  }
+
+  /* ── Exposed: called by the dropdown onchange ── */
+  window.calendarFilter = function (select) {
+    if (select.name === 'status') currentStatus = select.value;
+    if (select.name === 'date')   currentDate   = select.value;
+    buildCalendar(cy, cm);
+  };
 
   /* ── Group events by YYYY-MM-DD ── */
   function groupByDate(evs) {
     var map = {};
     evs.forEach(function (ev) {
       var d = ev.start.substring(0, 10);
-      if (!map[d]) map[d] = { total: 0, statuses: {} };
-      map[d].total++;
+      if (!map[d]) map[d] = { events: [], statusMap: {} };
+      map[d].events.push(ev);
       var s = ev.status || 'pending';
-      map[d].statuses[s] = (map[d].statuses[s] || 0) + 1;
+      map[d].statusMap[s] = (map[d].statusMap[s] || 0) + 1;
     });
     return map;
   }
 
-  /* ── Build & inject HTML ── */
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  /* ── Build & inject calendar HTML ── */
   function buildCalendar(year, month) {
     var container = document.getElementById('aptCalendar');
     if (!container) return;
 
     var firstDay    = new Date(year, month, 1).getDay();
     var daysInMonth = new Date(year, month + 1, 0).getDate();
-    var evMap       = groupByDate(events);
-    var html        = '';
+    var filtered    = getFilteredEvents();          /* ← uses active filters */
+    var evMap       = groupByDate(filtered);
+    var todayY = today.getFullYear(), todayM = today.getMonth(), todayD = today.getDate();
+    var html = '';
 
-    /* Nav bar */
-    html  = '<div class="apt-cal-nav">'
-      + '<button class="apt-cal-nav-btn" onclick="calPrev()" title="Previous month">'
-      +   '<i class="fa-solid fa-chevron-left" style="font-size:.72rem;pointer-events:none"></i>'
-      + '</button>'
-      + '<span class="apt-cal-month-title">' + MONTHS[month] + ' ' + year + '</span>'
-      + '<div class="apt-cal-nav-right">'
-      +   '<button class="apt-cal-nav-btn" onclick="calNext()" title="Next month">'
-      +     '<i class="fa-solid fa-chevron-right" style="font-size:.72rem;pointer-events:none"></i>'
-      +   '</button>'
-      +   '<button class="apt-cal-today-btn" onclick="calToday()">Today</button>'
-      + '</div>'
-      + '</div>';
+    /* Nav bar — Today button REMOVED */
+    html += '<div class="apt-cal-nav">'
+          + '<button class="apt-cal-nav-btn" onclick="calPrev()" title="Previous month" aria-label="Previous month">'
+          +   '<i class="fa-solid fa-chevron-left" style="font-size:.72rem;pointer-events:none"></i>'
+          + '</button>'
+          + '<span class="apt-cal-month-title">' + MONTHS[month] + ' ' + year + '</span>'
+          + '<button class="apt-cal-nav-btn" onclick="calNext()" title="Next month" aria-label="Next month">'
+          +   '<i class="fa-solid fa-chevron-right" style="font-size:.72rem;pointer-events:none"></i>'
+          + '</button>'
+          + '</div>';
 
     /* Grid */
     html += '<div class="apt-cal-grid">';
 
-    /* Day-of-week headers */
-    DAYS.forEach(function (d) { html += '<div class="apt-cal-dow">' + d + '</div>'; });
+    DAYS.forEach(function (d) {
+      html += '<div class="apt-cal-dow">' + d + '</div>';
+    });
 
-    /* Empty leading cells */
     for (var i = 0; i < firstDay; i++) {
-      html += '<div class="apt-cal-cell apt-cal-cell--empty"></div>';
+      html += '<div class="apt-cal-cell apt-cal-cell--empty" aria-hidden="true"></div>';
     }
 
-    /* Day cells */
     for (var day = 1; day <= daysInMonth; day++) {
-      var dateStr = year + '-'
-        + String(month + 1).padStart(2, '0') + '-'
-        + String(day).padStart(2, '0');
-
-      var isToday = (year  === today.getFullYear()
-                  && month === today.getMonth()
-                  && day   === today.getDate());
+      var dateStr = year + '-' + pad(month + 1) + '-' + pad(day);
+      var isToday = (year === todayY && month === todayM && day === todayD);
       var data    = evMap[dateStr];
       var hasEvs  = !!data;
 
@@ -1363,40 +1296,109 @@ showToast('<?= addslashes(htmlspecialchars_decode($flash['msg'])) ?>','<?= $flas
       if (isToday) cls += ' apt-cal-cell--today';
       if (hasEvs)  cls += ' apt-cal-cell--has-events';
 
-      html += '<div class="' + cls + '">';
-      html += '<span class="apt-cal-day-num">' + day + '</span>';
+      var numColor = isToday ? 'color:var(--gold-dim);font-weight:800'
+                   : hasEvs  ? 'color:var(--text-primary)'
+                   :            'color:var(--text-dim)';
+
+      var attrs = '';
+      if (hasEvs) {
+        attrs += ' role="button" tabindex="0"'
+               + ' onclick="openDayModal(\'' + dateStr + '\')"'
+               + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \')openDayModal(\'' + dateStr + '\')"'
+               + ' aria-label="' + MONTHS[month] + ' ' + day + ': ' + data.events.length + ' appointment' + (data.events.length !== 1 ? 's' : '') + '"';
+      }
+
+      html += '<div class="' + cls + '"' + attrs + '>';
+      html += '<span class="apt-cal-day-num" style="' + numColor + '">' + day + '</span>';
 
       if (hasEvs) {
-        /* Up to 6 unique status dots */
-        var statuses = Object.keys(data.statuses);
+        var statuses = Object.keys(data.statusMap);
         html += '<div class="apt-cal-dots">';
-        statuses.slice(0, 6).forEach(function (s) {
+        statuses.slice(0, 4).forEach(function (s) {
           var color = DOT_COLOR[s] || '#888';
-          var label = s.replace('_', ' ');
+          var cnt   = data.statusMap[s];
           html += '<span class="apt-cal-dot"'
                 + ' style="background:' + color + '"'
-                + ' title="' + data.statuses[s] + ' ' + label + '"></span>';
+                + ' title="' + cnt + ' ' + (DOT_LABEL[s] || s) + '"></span>';
         });
         html += '</div>';
-
-        /* Count label when > 3 appointments */
-        if (data.total > 3) {
-          html += '<span class="apt-cal-count">' + data.total + ' appointments</span>';
+        if (data.events.length > 3) {
+          html += '<span class="apt-cal-count">' + data.events.length + ' appts</span>';
         }
       }
 
       html += '</div>';
     }
 
-    html += '</div>'; /* /apt-cal-grid */
+    html += '</div>';
     container.innerHTML = html;
   }
 
-  /* ── Navigation (global so inline onclick works) ── */
-  window.calToday = function () { cy = today.getFullYear(); cm = today.getMonth(); buildCalendar(cy, cm); };
-  window.calPrev  = function () { if (--cm < 0)  { cm = 11; cy--; } buildCalendar(cy, cm); };
-  window.calNext  = function () { if (++cm > 11) { cm = 0;  cy++; } buildCalendar(cy, cm); };
+  /* ── Day detail modal — uses filtered events ── */
+  window.openDayModal = function (dateStr) {
+    var parts = dateStr.split('-');
+    var yr = parseInt(parts[0]), mo = parseInt(parts[1]) - 1, dy = parseInt(parts[2]);
+    var d  = new Date(yr, mo, dy);
+    var DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
+    var filtered = getFilteredEvents();
+    var evMap    = groupByDate(filtered);
+    var data     = evMap[dateStr];
+    if (!data) return;
+
+    document.getElementById('aptDayModalTitle').textContent =
+      DAY_NAMES[d.getDay()] + ', ' + MONTHS[mo] + ' ' + dy + ', ' + yr;
+    var total = data.events.length;
+    document.getElementById('aptDayModalSub').textContent =
+      total + ' appointment' + (total !== 1 ? 's' : '');
+
+    var sorted = data.events.slice().sort(function (a, b) { return a.start < b.start ? -1 : 1; });
+    var html   = '';
+
+    sorted.forEach(function (ev) {
+      var c  = DOT_COLOR[ev.status]  || '#888';
+      var bg = DOT_BG[ev.status]     || 'rgba(136,136,136,.1)';
+      var lb = DOT_LABEL[ev.status]  || ev.status;
+      var tl = ev.time_label         || '';
+      var nm = ev.title              || '';
+      var sv = ev.service            || '';
+      var url = ev.url               || '#';
+
+      html += '<div class="apt-day-modal-row">'
+            + '<div class="apt-day-modal-stripe" style="background:' + c + '"></div>'
+            + '<div class="apt-day-modal-info">'
+            +   '<div class="apt-day-modal-time">' + tl + '</div>'
+            +   '<div class="apt-day-modal-name">' + nm + '</div>'
+            +   '<div class="apt-day-modal-svc">'  + sv + '</div>'
+            +   '<div class="apt-day-modal-badge" style="color:' + c + ';background:' + bg + ';border:1px solid ' + c + '44">' + lb + '</div>'
+            + '</div>'
+            + '<a href="' + url + '" class="apt-day-modal-action" title="View appointment">'
+            +   '<i class="fa-solid fa-arrow-right"></i>'
+            + '</a>'
+            + '</div>';
+    });
+
+    document.getElementById('aptDayModalBody').innerHTML = html;
+    document.getElementById('aptDayModal').classList.add('is-open');
+  };
+
+  window.closeDayModal = function () {
+    var m = document.getElementById('aptDayModal');
+    if (m) m.classList.remove('is-open');
+  };
+
+  var dayModalOverlay = document.getElementById('aptDayModal');
+  if (dayModalOverlay) {
+    dayModalOverlay.addEventListener('click', function (e) {
+      if (e.target === this) closeDayModal();
+    });
+  }
+
+  /* ── Navigation ── */
+  window.calPrev = function () { if (--cm < 0)  { cm = 11; cy--; } buildCalendar(cy, cm); };
+  window.calNext = function () { if (++cm > 11) { cm = 0;  cy++; } buildCalendar(cy, cm); };
+
+  /* ── Initial render ── */
   buildCalendar(cy, cm);
 })();
 </script>

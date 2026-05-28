@@ -77,6 +77,7 @@ $routes = [
     'GET:provider/appointments/complete/{any}'     => ['ProviderDashController', 'completeAppointment'],
     'POST:provider/appointments/reschedule/{any}'  => ['ProviderDashController', 'rescheduleAppointment'],
     'GET:provider/appointments/{any}'              => ['ProviderDashController', 'appointmentDetail'],
+    'POST:provider/appointments/{any}'             => ['ProviderDashController', 'updateBooking'],
 
     // Bookings (legacy alias — kept so old links don't break)
     'GET:provider/bookings'                   => ['ProviderDashController', 'bookings'],
@@ -97,6 +98,7 @@ $routes = [
     'POST:provider/schedule/store'            => ['ProviderDashController', 'storeAvailability'],
     'POST:provider/schedule/slots'            => ['ProviderDashController', 'storeSlotSettings'],
     'POST:provider/schedule/block'            => ['ProviderDashController', 'storeBlockedDate'],
+    'POST:provider/schedule/block/edit'       => ['ProviderDashController', 'editBlockedDate'],
     'GET:provider/schedule/unblock/{any}'     => ['ProviderDashController', 'removeBlockedDate'],
     'POST:provider/schedule/pause'            => ['ProviderDashController', 'togglePauseBookings'],
     'POST:provider/availability/update/{any}' => ['ProviderDashController', 'updateAvailability'],   // Legacy
@@ -111,10 +113,17 @@ $routes = [
     'POST:provider/profile/upload-photo'      => ['ProviderDashController', 'uploadProfilePhoto'],
 
     // Portfolio
+    // Reviews
+    'GET:provider/reviews'                          => ['ProviderDashController', 'reviews'],
+    'POST:provider/reviews/reply/update/{any}'      => ['ProviderDashController', 'updateReply'],
+    'POST:provider/reviews/reply/delete/{any}'      => ['ProviderDashController', 'deleteReply'],
+    'POST:provider/reviews/reply/{any}'             => ['ProviderDashController', 'storeReply'],
+
     'GET:provider/portfolio'                  => ['ProviderDashController', 'portfolio'],
-    'POST:provider/portfolio/upload'          => ['ProviderDashController', 'portfolio'],
-    'POST:provider/portfolio/delete/{any}'    => ['ProviderDashController', 'portfolio'],
-    'POST:provider/portfolio/feature/{any}'   => ['ProviderDashController', 'portfolio'],
+    'POST:provider/portfolio/upload'          => ['ProviderDashController', 'portfolioUpload'],
+    'POST:provider/portfolio/update/{any}'    => ['ProviderDashController', 'portfolioUpdate'],
+    'POST:provider/portfolio/delete/{any}'    => ['ProviderDashController', 'portfolioDelete'],
+    'POST:provider/portfolio/feature/{any}'   => ['ProviderDashController', 'portfolioFeature'],
 
     // Settings (placeholder)
     'GET:provider/settings'                   => ['ProviderDashController', 'profile'],
