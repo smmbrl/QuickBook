@@ -54,23 +54,19 @@ try {
     $portfolioItems = $stPort->fetchAll();
 } catch (\Exception $e) { $portfolioItems = []; }
 
-// ── Demo data (when table empty) ─────────────────────────────────────────────
-$demoItems = [
-    ['id'=>1,'is_featured'=>1,'is_before_after'=>1,'title'=>'Glossy Nude Nails','service_name'=>'Gel Nail Extensions','service_id'=>1,'caption'=>'Soft nude gel extensions with glossy finish.','price'=>'₱900','likes'=>120,'views'=>1400,'created_at'=>'2026-05-25','featured_label'=>'⭐ Customer Favorite','image_url'=>'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80','before_url'=>'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80','after_url'=>'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80'],
-    ['id'=>2,'is_featured'=>1,'is_before_after'=>0,'title'=>'Ombre Pink Chrome','service_name'=>'Acrylic Nail Art','service_id'=>2,'caption'=>'Baby pink base with chrome ombre gradient — a bestseller.','price'=>'₱1,200','likes'=>214,'views'=>2400,'created_at'=>'2026-05-20','featured_label'=>'⭐ Most Booked Style','image_url'=>'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80'],
-    ['id'=>3,'is_featured'=>1,'is_before_after'=>0,'title'=>'French Tip Classic','service_name'=>'Nail Care','service_id'=>3,'caption'=>'Timeless French tip with reinforced gel overlay.','price'=>'₱750','likes'=>98,'views'=>980,'created_at'=>'2026-05-18','featured_label'=>'⭐ Trending Design','image_url'=>'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80'],
-    ['id'=>4,'is_featured'=>0,'is_before_after'=>0,'title'=>'Galaxy Night Art','service_name'=>'Nail Art','service_id'=>4,'caption'=>'Deep navy with gold flecks and micro star details.','price'=>'₱1,100','likes'=>67,'views'=>720,'created_at'=>'2026-05-15','image_url'=>'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80'],
-    ['id'=>5,'is_featured'=>0,'is_before_after'=>1,'title'=>'Full Nail Restoration','service_name'=>'Nail Repair','service_id'=>5,'caption'=>'Damage repair with strengthening base + color.','price'=>'₱850','likes'=>143,'views'=>1100,'created_at'=>'2026-05-10','image_url'=>'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80','before_url'=>'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80','after_url'=>'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80'],
-    ['id'=>6,'is_featured'=>0,'is_before_after'=>0,'title'=>'Minimalist Beige Set','service_name'=>'Gel Nail Extensions','service_id'=>1,'caption'=>'Clean lines, neutral tone. Perfect for corporate clients.','price'=>'₱900','likes'=>55,'views'=>610,'created_at'=>'2026-05-07','image_url'=>'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80'],
-];
+// ── Verification status ───────────────────────────────────────────────────────
+$isVerified = !empty($profile['is_verified']) && (int)$profile['is_verified'] === 1;
 
-$useDemo = empty($portfolioItems);
-$items   = $useDemo ? $demoItems : $portfolioItems;
+// No demo data — show real data only, or empty state for unverified/new providers
+$items        = $portfolioItems;
 $featured     = array_filter($items, fn($i) => !empty($i['is_featured']));
 $galleryItems = array_filter($items, fn($i) => empty($i['is_featured']));
-$analytics = $useDemo
-    ? ['uploads'=>124,'views'=>2400,'likes'=>850,'bookings_from_portfolio'=>48]
-    : ['uploads'=>count($portfolioItems),'views'=>array_sum(array_column($portfolioItems,'views')),'likes'=>array_sum(array_column($portfolioItems,'likes')),'bookings_from_portfolio'=>0];
+$analytics    = [
+    'uploads'                => count($portfolioItems),
+    'views'                  => array_sum(array_column($portfolioItems, 'views')),
+    'likes'                  => array_sum(array_column($portfolioItems, 'likes')),
+    'bookings_from_portfolio' => 0,
+];
 
 // ── Flash ─────────────────────────────────────────────────────────────────────
 $flash = $_SESSION['flash'] ?? null; unset($_SESSION['flash']);
@@ -151,6 +147,18 @@ $itemsJson = json_encode(array_values($items));
       border:2px solid currentColor;border-top-color:transparent;border-radius:50%;
       animation:spin .6s linear infinite;vertical-align:middle; }
     @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* ── Account verification banner ── */
+    .pf-verify-banner {
+      display: flex; align-items: center; gap: .75rem;
+      padding: .7rem 2rem;
+      background: linear-gradient(135deg, rgba(201,168,76,.12) 0%, rgba(201,168,76,.05) 100%);
+      border-bottom: 1px solid rgba(201,168,76,.28);
+      font-size: .84rem; color: #7a5b14;
+    }
+    .pf-verify-banner__icon { color: #C9A84C; font-size: .95rem; flex-shrink: 0; }
+    .pf-verify-banner__title { color: #C9A84C; font-weight: 700; }
+    [data-theme="dark"] .pf-verify-banner { color: #c9a84c; background: linear-gradient(135deg, rgba(201,168,76,.10) 0%, rgba(0,0,0,.15) 100%); }
   </style>
 </head>
 <body>
@@ -189,35 +197,61 @@ $itemsJson = json_encode(array_values($items));
         <svg class="icon-sun" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
       </button>
 
-      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false">
+      <!-- Profile dropdown trigger -->
+      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0"
+           aria-haspopup="true" aria-expanded="false">
         <div class="pv-nav-av">
-          <?php if ($photoUrl): ?><img src="<?= htmlspecialchars($photoUrl) ?>" alt="<?= $fullName ?>"><?php else: ?><?= $initials ?><?php endif; ?>
+          <?php if ($photoUrl): ?>
+            <img src="<?= htmlspecialchars($photoUrl) ?>" alt="<?= $fullName ?>">
+          <?php else: ?>
+            <?= $initials ?>
+          <?php endif; ?>
         </div>
-        <div class="pv-nav-user"><div class="pv-nav-user-name"><?= $firstName ?></div></div>
-        <svg class="pv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        <div class="pv-nav-user">
+          <div class="pv-nav-user-name"><?= $firstName ?></div>
+        </div>
+        <svg class="pv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
       </div>
 
+      <!-- Profile dropdown panel -->
       <div class="pv-profile-dropdown" id="profileDropdown" role="menu">
         <div class="pv-pd-header">
-          <div class="pv-pd-avatar"><?php if ($photoUrl): ?><img src="<?= htmlspecialchars($photoUrl) ?>" alt="<?= $fullName ?>"><?php else: ?><?= $initials ?><?php endif; ?></div>
+          <div class="pv-pd-avatar">
+            <?php if ($photoUrl): ?>
+              <img src="<?= htmlspecialchars($photoUrl) ?>" alt="<?= $fullName ?>">
+            <?php else: ?>
+              <?= $initials ?>
+            <?php endif; ?>
+          </div>
           <div class="pv-pd-info">
             <div class="pv-pd-name"><?= $fullName ?></div>
             <div class="pv-pd-email"><?= $email ?></div>
-            <span class="pv-pd-role">Provider</span>
+            <span class="pv-pd-role"><?= $categoryName ?></span>
           </div>
         </div>
         <div class="pv-pd-divider"></div>
         <a href="<?= BASE_URL ?>provider/profile" class="pv-pd-item" role="menuitem">
-          <span class="pv-pd-item-ico"><i class="fa-solid fa-store"></i></span><span>Business Profile</span>
-          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-store"></i></span>
+          <span>Business Profile</span>
+          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </a>
         <a href="<?= BASE_URL ?>provider/settings" class="pv-pd-item" role="menuitem">
-          <span class="pv-pd-item-ico"><i class="fa-solid fa-gear"></i></span><span>Settings</span>
-          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-gear"></i></span>
+          <span>Settings</span>
+          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </a>
         <div class="pv-pd-divider"></div>
         <a href="<?= BASE_URL ?>auth/logout" class="pv-pd-item pv-pd-item--danger" role="menuitem">
-          <span class="pv-pd-item-ico"><i class="fa-solid fa-arrow-right-from-bracket"></i></span><span>Sign Out</span>
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-arrow-right-from-bracket"></i></span>
+          <span>Sign Out</span>
         </a>
       </div>
     </div>
@@ -267,17 +301,42 @@ $itemsJson = json_encode(array_values($items));
   </div>
 </header>
 
+<?php if (!$isVerified): ?>
+<div class="pf-verify-banner" role="alert">
+  <i class="fa-solid fa-clock pf-verify-banner__icon"></i>
+  <span>
+    <strong class="pf-verify-banner__title">Account pending verification.</strong>
+    An admin needs to verify your account before you can upload portfolio works.
+  </span>
+</div>
+<?php endif; ?>
+
 <!-- ═══════════════════════════════════════
      QUICK ACTIONS
 ═══════════════════════════════════════ -->
 <div class="pf-actions-bar">
   <div class="pf-actions-right">
+    <?php if ($isVerified): ?>
     <button class="pf-action-btn pf-action-btn--primary" onclick="openUploadModal()">
       <i class="fa-solid fa-cloud-arrow-up"></i> Upload Work
     </button>
     <button class="pf-action-btn pf-action-btn--feature" onclick="openBulkFeatureModal()">
       <i class="fa-solid fa-star"></i> Manage Featured
     </button>
+    <?php else: ?>
+    <button class="pf-action-btn pf-action-btn--primary" disabled
+            style="opacity:.5;cursor:not-allowed;"
+            title="Account verification required to upload portfolio works"
+            onclick="showToast('fa-shield-halved','Your account must be verified by an admin before uploading.','error'); return false;">
+      <i class="fa-solid fa-cloud-arrow-up"></i> Upload Work
+    </button>
+    <button class="pf-action-btn pf-action-btn--feature" disabled
+            style="opacity:.5;cursor:not-allowed;"
+            title="Account verification required"
+            onclick="showToast('fa-shield-halved','Your account must be verified by an admin before managing featured works.','error'); return false;">
+      <i class="fa-solid fa-star"></i> Manage Featured
+    </button>
+    <?php endif; ?>
   </div>
 </div>
 
@@ -292,7 +351,7 @@ $itemsJson = json_encode(array_values($items));
       <div class="pf-stat-card-bg"></div>
       <div class="pf-stat-icon pf-stat-icon--gold"><i class="fa-solid fa-images"></i></div>
       <div class="pf-stat-body">
-        <div class="pf-stat-val"><?= number_format($analytics['uploads']) ?></div>
+        <div class="pf-stat-val"><?= $analytics['uploads'] > 0 ? number_format($analytics['uploads']) : '0' ?></div>
         <div class="pf-stat-label">Total Uploads</div>
         <div class="pf-stat-trend pf-stat-trend--gold"><i class="fa-solid fa-layer-group"></i> Portfolio works</div>
       </div>
@@ -301,7 +360,7 @@ $itemsJson = json_encode(array_values($items));
       <div class="pf-stat-card-bg pf-stat-card-bg--blue"></div>
       <div class="pf-stat-icon pf-stat-icon--blue"><i class="fa-solid fa-eye"></i></div>
       <div class="pf-stat-body">
-        <div class="pf-stat-val"><?= $analytics['views'] >= 1000 ? number_format($analytics['views']/1000,1).'k' : $analytics['views'] ?></div>
+        <div class="pf-stat-val"><?= $analytics['views'] > 0 ? ($analytics['views'] >= 1000 ? number_format($analytics['views']/1000,1).'k' : $analytics['views']) : '0' ?></div>
         <div class="pf-stat-label">Total Views</div>
         <div class="pf-stat-trend pf-stat-trend--blue"><i class="fa-solid fa-chart-line"></i> Profile impressions</div>
       </div>
@@ -310,7 +369,7 @@ $itemsJson = json_encode(array_values($items));
       <div class="pf-stat-card-bg pf-stat-card-bg--amber"></div>
       <div class="pf-stat-icon pf-stat-icon--amber"><i class="fa-solid fa-heart"></i></div>
       <div class="pf-stat-body">
-        <div class="pf-stat-val"><?= number_format($analytics['likes']) ?></div>
+        <div class="pf-stat-val"><?= $analytics['likes'] > 0 ? number_format($analytics['likes']) : '0' ?></div>
         <div class="pf-stat-label">Likes &amp; Saves</div>
         <div class="pf-stat-trend pf-stat-trend--amber"><i class="fa-solid fa-fire"></i> Engagement score</div>
       </div>
@@ -367,12 +426,24 @@ $itemsJson = json_encode(array_values($items));
 
   <?php if (empty($items)): ?>
   <div class="pf-empty">
-    <div class="pf-empty-icon"><i class="fa-solid fa-images"></i></div>
-    <div class="pf-empty-title">No portfolio items yet</div>
-    <p class="pf-empty-text">Start building your creative portfolio! Upload your best work to attract more customers.</p>
-    <button class="pf-action-btn pf-action-btn--primary" onclick="openUploadModal()">
-      <i class="fa-solid fa-plus"></i> Upload Your First Work
-    </button>
+    <?php if (!$isVerified): ?>
+      <div class="pf-empty-icon" style="color:#C9A84C;"><i class="fa-solid fa-shield-halved"></i></div>
+      <div class="pf-empty-title">Account Pending Verification</div>
+      <p class="pf-empty-text">
+        Your account is currently being reviewed by our admin team.<br>
+        Once verified, you'll be able to upload your portfolio works and start attracting clients.
+      </p>
+      <div style="display:inline-flex;align-items:center;gap:.55rem;padding:.55rem 1.1rem;border-radius:99px;background:rgba(201,168,76,.10);border:1px solid rgba(201,168,76,.3);font-size:.82rem;font-weight:600;color:#C9A84C;margin-top:.25rem;">
+        <i class="fa-solid fa-clock"></i> Verification in progress
+      </div>
+    <?php else: ?>
+      <div class="pf-empty-icon"><i class="fa-solid fa-images"></i></div>
+      <div class="pf-empty-title">No portfolio items yet</div>
+      <p class="pf-empty-text">Start building your creative portfolio! Upload your best work to attract more customers.</p>
+      <button class="pf-action-btn pf-action-btn--primary" onclick="openUploadModal()">
+        <i class="fa-solid fa-plus"></i> Upload Your First Work
+      </button>
+    <?php endif; ?>
   </div>
   <?php else: ?>
 

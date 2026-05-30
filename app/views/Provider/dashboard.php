@@ -168,7 +168,7 @@ $todaySlots = $stSchedule->fetchAll();
 /* ── Helpers ── */
 $hour     = (int)date('H');
 $greeting = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good evening');
-$initials = strtoupper(substr($bizName, 0, 2));
+$initials = strtoupper(substr($provFullName, 0, 2));
 
 function fmtMoney(float $v): string {
     return $v >= 1000 ? '₱'.number_format($v/1000,1).'k' : '₱'.number_format($v,0);

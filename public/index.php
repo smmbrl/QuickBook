@@ -125,8 +125,12 @@ $routes = [
     'POST:provider/portfolio/delete/{any}'    => ['ProviderDashController', 'portfolioDelete'],
     'POST:provider/portfolio/feature/{any}'   => ['ProviderDashController', 'portfolioFeature'],
 
-    // Settings (placeholder)
-    'GET:provider/settings'                   => ['ProviderDashController', 'profile'],
+    // Settings
+    'GET:provider/settings'                   => ['ProviderDashController', 'settings'],
+    'POST:provider/settings/update-password'  => ['ProviderDashController', 'updatePassword'],
+    'POST:provider/settings/deactivate'       => ['ProviderDashController', 'deactivateAccount'],
+    'POST:provider/settings/delete'           => ['ProviderDashController', 'deleteAccount'],
+    'POST:provider/settings/feedback'         => ['ProviderDashController', 'submitFeedback'],
 
     // Notifications (all roles)
     'POST:notifications/mark-read'     => ['NotificationController', 'markRead'],

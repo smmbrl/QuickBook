@@ -1557,7 +1557,10 @@ class ProviderDashController
         );
 
         $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Password updated successfully.'];
-        header('Location: ' . BASE_URL . 'provider/profile'); exit;
+        // Redirect to wherever the request came from (settings or profile)
+        $referer = $_SERVER['HTTP_REFERER'] ?? '';
+        $dest = (str_contains($referer, 'provider/settings')) ? 'provider/settings' : 'provider/profile';
+        header('Location: ' . BASE_URL . $dest); exit;
     }
 
     public function uploadProfilePhoto(): void
@@ -1595,6 +1598,201 @@ class ProviderDashController
 
         echo json_encode(['success' => true, 'dataUrl' => $base64]);
         exit;
+    }
+
+    // ── Settings ──────────────────────────────────────────────────────────────
+
+    public function settings(): void
+    {
+        require __DIR__ . '/../views/Provider/settings.php';
+    }
+
+    /**
+     * POST  provider/settings/deactivate
+     * Temporarily hides the provider's profile from Browse/Search.
+     */
+    public function deactivateAccount(): void
+    {
+        $db     = Database::getInstance();
+        $userId = $_SESSION['user_id'] ?? 0;
+
+        $db->prepare("UPDATE tbl_provider_profiles SET status = 'inactive' WHERE user_id = ?")
+           ->execute([$userId]);
+
+        $provStmt = $db->prepare("SELECT first_name, last_name FROM tbl_users WHERE id = ? LIMIT 1");
+        $provStmt->execute([$userId]);
+        $pu = $provStmt->fetch();
+        $provName = $pu ? trim($pu['first_name'] . ' ' . $pu['last_name']) : 'A provider';
+
+        NotificationHelper::send($db, NotificationHelper::adminIds($db), 'system',
+            '[Admin] Provider Account Deactivated',
+            "Provider {$provName} has deactivated their account and is now hidden from Browse.",
+            '', BASE_URL . 'admin/providers'
+        );
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Your account has been deactivated. You can reactivate anytime from Settings.'];
+        header('Location: ' . BASE_URL . 'provider/settings'); exit;
+    }
+
+    /**
+     * POST  provider/settings/delete
+     * Permanently deletes the provider account and all associated data.
+     */
+    public function deleteAccount(): void
+    {
+        $db     = Database::getInstance();
+        $userId = $_SESSION['user_id'] ?? 0;
+
+        $confirm = trim($_POST['confirm'] ?? '');
+        if ($confirm !== 'DELETE') {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Confirmation text did not match. Account not deleted.'];
+            header('Location: ' . BASE_URL . 'provider/settings#danger'); exit;
+        }
+
+        $provStmt = $db->prepare("SELECT first_name, last_name, email FROM tbl_users WHERE id = ? LIMIT 1");
+        $provStmt->execute([$userId]);
+        $pu = $provStmt->fetch();
+        $provName  = $pu ? trim($pu['first_name'] . ' ' . $pu['last_name']) : 'Unknown';
+        $provEmail = $pu['email'] ?? '';
+
+        // Mark user as deleted (soft delete — keeps referential integrity)
+        $db->prepare("UPDATE tbl_users SET status = 'deleted', email = CONCAT('deleted_', id, '_', email) WHERE id = ?")
+           ->execute([$userId]);
+        $db->prepare("UPDATE tbl_provider_profiles SET status = 'deleted' WHERE user_id = ?")
+           ->execute([$userId]);
+
+        NotificationHelper::send($db, NotificationHelper::adminIds($db), 'system',
+            '[Admin] Provider Account Deleted',
+            "Provider {$provName} ({$provEmail}) has permanently deleted their QuickBook provider account.",
+            '', BASE_URL . 'admin/providers'
+        );
+
+        // Destroy session and redirect to home
+        session_destroy();
+        header('Location: ' . BASE_URL . 'home'); exit;
+    }
+
+    /**
+     * POST  provider/settings/feedback
+     * Saves a feedback/rating submission from the provider.
+     */
+    public function submitFeedback(): void
+    {
+        $db     = Database::getInstance();
+        $userId = $_SESSION['user_id'] ?? 0;
+
+        $rating      = (int)($_POST['rating']        ?? 0);
+        $type        = trim($_POST['type']           ?? 'general');
+        $message     = trim($_POST['message']        ?? '');
+        $contactBack = isset($_POST['contact_back']) ? 1 : 0;
+
+        if ($rating < 1 || $rating > 5 || empty($message)) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Please complete all required feedback fields.'];
+            header('Location: ' . BASE_URL . 'provider/settings'); exit;
+        }
+
+        // Store in tbl_feedback if it exists, otherwise just notify admins
+        try {
+            $db->prepare("
+                INSERT INTO tbl_feedback (user_id, user_role, rating, type, message, contact_back, created_at)
+                VALUES (?, 'provider', ?, ?, ?, ?, NOW())
+            ")->execute([$userId, $rating, $type, $message, $contactBack]);
+        } catch (\Throwable $e) {
+            // Table may not exist yet — log and continue gracefully
+            error_log('submitFeedback: ' . $e->getMessage());
+        }
+
+        $provStmt = $db->prepare("SELECT first_name, last_name FROM tbl_users WHERE id = ? LIMIT 1");
+        $provStmt->execute([$userId]);
+        $pu = $provStmt->fetch();
+        $provName = $pu ? trim($pu['first_name'] . ' ' . $pu['last_name']) : 'A provider';
+        $stars    = str_repeat('★', $rating) . str_repeat('☆', 5 - $rating);
+
+        NotificationHelper::send($db, NotificationHelper::adminIds($db), 'system',
+            "[Admin] Provider Feedback — {$stars} ({$rating}/5)",
+            "Provider {$provName} submitted {$type} feedback: \"{$message}\"" . ($contactBack ? ' (Wants follow-up)' : ''),
+            '', BASE_URL . 'admin/dashboard'
+        );
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Thank you for your feedback! ✨ We appreciate you helping us improve QuickBook.'];
+        header('Location: ' . BASE_URL . 'provider/settings'); exit;
+    }
+
+    /**
+     * POST  provider/settings/save-notifications  (JSON)
+     * Upserts notification preference toggles into tbl_provider_notification_prefs.
+     */
+    public function saveNotifications(): void
+    {
+        header('Content-Type: application/json');
+
+        $userId = $_SESSION['user_id'] ?? 0;
+        if (!$userId) {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized']); exit;
+        }
+
+        $raw  = file_get_contents('php://input');
+        $body = json_decode($raw, true);
+
+        if (!isset($body['preferences']) || !is_array($body['preferences'])) {
+            echo json_encode(['success' => false, 'message' => 'Invalid payload']); exit;
+        }
+
+        $db = Database::getInstance();
+
+        // Resolve provider profile ID
+        $st = $db->prepare("SELECT id FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
+        $st->execute([$userId]);
+        $providerId = (int)$st->fetchColumn();
+
+        if (!$providerId) {
+            echo json_encode(['success' => false, 'message' => 'Provider profile not found']); exit;
+        }
+
+        // Allowed preference keys (whitelist)
+        $allowed = [
+            'notif_new_booking', 'notif_booking_confirmed', 'notif_booking_cancelled',
+            'notif_reminder_24h', 'notif_reminder_1h',
+            'notif_new_review', 'notif_low_rating',
+            'notif_portfolio_like', 'notif_portfolio_comment',
+            'notif_system_updates', 'notif_security_alerts',
+            'channel_inapp', 'channel_email', 'channel_sms',
+            'channel_weekly_digest', 'channel_marketing',
+        ];
+
+        // Ensure table exists
+        $db->exec("
+            CREATE TABLE IF NOT EXISTS tbl_provider_notification_prefs (
+                id          INT AUTO_INCREMENT PRIMARY KEY,
+                provider_id INT NOT NULL,
+                pref_key    VARCHAR(80) NOT NULL,
+                pref_value  TINYINT(1) NOT NULL DEFAULT 1,
+                updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_provider_pref (provider_id, pref_key)
+            )
+        ");
+
+        $upsert = $db->prepare("
+            INSERT INTO tbl_provider_notification_prefs (provider_id, pref_key, pref_value)
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE pref_value = VALUES(pref_value), updated_at = NOW()
+        ");
+
+        $db->beginTransaction();
+        try {
+            foreach ($allowed as $key) {
+                if (array_key_exists($key, $body['preferences'])) {
+                    $upsert->execute([$providerId, $key, (int)(bool)$body['preferences'][$key]]);
+                }
+            }
+            $db->commit();
+        } catch (\Throwable $e) {
+            $db->rollBack();
+            error_log('saveNotifications: ' . $e->getMessage());
+            echo json_encode(['success' => false, 'message' => 'Database error']); exit;
+        }
+
+        echo json_encode(['success' => true, 'message' => 'Preferences saved']); exit;
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
