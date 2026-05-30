@@ -564,26 +564,23 @@ class HomePage {
 <button class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Back to top">&#8593;</button>
 
 <!-- NAVBAR -->
-<nav class="navbar">
+<nav class="navbar" id="mainNavbar">
   <div class="navbar-inner">
-
-    <!-- ============================================================
-         LOGO — image + wordmark side by side
-         Change QB_LOGO.png to QB_LOGO.svg / .webp etc. if needed
-         ============================================================ -->
+ 
     <a href="<?= BASE_URL ?>" class="navbar-logo">
       <img src="<?= BASE_URL ?>assets/img/QB_LOGO.png"
            alt="QuickBook Logo"
            class="navbar-logo-img">
       Quick<span>Book</span>
     </a>
-
+ 
+    <!-- Desktop nav links -->
     <ul class="navbar-links">
       <?= $navLinks ?>
     </ul>
+ 
     <div class="navbar-actions">
-
-      <!-- THEME TOGGLE BUTTON -->
+      <!-- THEME TOGGLE -->
       <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark/light mode" title="Toggle theme">
         <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
              viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -604,10 +601,32 @@ class HomePage {
           <line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"/>
         </svg>
       </button>
-
+ 
+      <!-- Desktop login/signup -->
       <a href="<?= BASE_URL ?>login"    class="btn btn-ghost btn-sm">Log In</a>
       <a href="<?= BASE_URL ?>register" class="btn btn-gold btn-sm">Sign Up</a>
+ 
+      <!-- Mobile hamburger -->
+      <button class="navbar-hamburger" id="hamburgerBtn" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNavDrawer">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
     </div>
+ 
+  </div>
+</nav>
+
+<!-- MOBILE NAV DRAWER (hidden by default, toggled by hamburger) -->
+<nav class="mobile-nav-drawer" id="mobileNavDrawer" aria-label="Mobile navigation">
+  <a href="<?= BASE_URL ?>"           class="active">Home</a>
+  <a href="#categories">Browse Services</a>
+  <a href="#how">How It Works</a>
+  <a href="#cta">For Providers</a>
+  <a href="#faq">FAQ</a>
+  <div class="mobile-nav-actions">
+    <a href="<?= BASE_URL ?>login"    class="btn btn-ghost btn-sm">Log In</a>
+    <a href="<?= BASE_URL ?>register" class="btn btn-gold btn-sm">Sign Up &rarr;</a>
   </div>
 </nav>
 
@@ -969,6 +988,59 @@ class HomePage {
     applyTheme(next);
   });
 
+/* ── HAMBURGER / MOBILE NAV ── */
+(function () {
+  var hamburger = document.getElementById('hamburgerBtn');
+  var drawer    = document.getElementById('mobileNavDrawer');
+  if (!hamburger || !drawer) return;
+ 
+  function openDrawer() {
+    drawer.classList.add('open');
+    hamburger.classList.add('open');
+    hamburger.setAttribute('aria-expanded', 'true');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeDrawer() {
+    drawer.classList.remove('open');
+    hamburger.classList.remove('open');
+    hamburger.setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = '';
+  }
+  function toggleDrawer() {
+    drawer.classList.contains('open') ? closeDrawer() : openDrawer();
+  }
+ 
+  hamburger.addEventListener('click', function (e) {
+    e.stopPropagation();
+    toggleDrawer();
+  });
+ 
+  /* Close when a nav link is tapped */
+  drawer.querySelectorAll('a').forEach(function (link) {
+    link.addEventListener('click', closeDrawer);
+  });
+ 
+  /* Close when clicking outside */
+  document.addEventListener('click', function (e) {
+    if (drawer.classList.contains('open') &&
+        !drawer.contains(e.target) &&
+        !hamburger.contains(e.target)) {
+      closeDrawer();
+    }
+  });
+ 
+  /* Close on Escape */
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && drawer.classList.contains('open')) closeDrawer();
+  });
+ 
+  /* Close on resize to desktop width */
+  window.addEventListener('resize', function () {
+    if (window.innerWidth > 900) closeDrawer();
+  });
+})();
+
+
   /* ── BACK TO TOP ── */
   var btt = document.getElementById('backToTop');
   window.addEventListener('scroll', function () {
@@ -1072,6 +1144,9 @@ function showToast(type, title, msg, duration) {
     setTimeout(function () { toast.remove(); }, 300);
   }, duration);
 }
+
+
+
 
 /* ── FAQ ACCORDION ── */
 function toggleFaq(btn) {
