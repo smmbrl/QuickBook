@@ -341,6 +341,7 @@ function payLabel(?string $ps): string {
         </svg>
       </button>
 
+      <!-- Profile dropdown trigger -->
       <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0"
            aria-haspopup="true" aria-expanded="false">
         <div class="pv-nav-av">
@@ -360,6 +361,7 @@ function payLabel(?string $ps): string {
         </svg>
       </div>
 
+      <!-- Profile dropdown panel -->
       <div class="pv-profile-dropdown" id="profileDropdown" role="menu">
         <div class="pv-pd-header">
           <div class="pv-pd-avatar">

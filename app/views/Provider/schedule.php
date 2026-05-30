@@ -77,12 +77,18 @@ $stUp->execute([$profileId]);
 $upcomingList = $stUp->fetchAll();
 
 /* ── Slot settings (graceful fallback) ── */
-$slotDuration = 60; $slotInterval = 30; $maxDaily = 12;
+$slotDuration = null; $slotInterval = null; $maxDaily = null;
+$hasSlotSettings = false;
 try {
     $st = $db->prepare("SELECT * FROM tbl_provider_slot_settings WHERE provider_id=? LIMIT 1");
     $st->execute([$profileId]);
     $ss = $st->fetch();
-    if ($ss) { $slotDuration=(int)($ss['duration_minutes']??60); $slotInterval=(int)($ss['interval_minutes']??30); $maxDaily=(int)($ss['max_daily_bookings']??12); }
+    if ($ss) {
+        $slotDuration    = (int)($ss['duration_minutes']   ?? 60);
+        $slotInterval    = (int)($ss['interval_minutes']   ?? 30);
+        $maxDaily        = (int)($ss['max_daily_bookings'] ?? 12);
+        $hasSlotSettings = true;
+    }
 } catch (\Throwable $e) {}
 
 /* ── Blocked dates (graceful fallback) ── */
@@ -99,7 +105,7 @@ $availToday = 0;
 if ($isOpenToday && $todayStart && $todayEnd) {
     $sm = (int)substr($todayStart,0,2)*60+(int)substr($todayStart,3,2);
     $em = (int)substr($todayEnd,0,2)*60+(int)substr($todayEnd,3,2);
-    $possible = max(0, floor(($em-$sm) / max(1,$slotDuration)));
+    $possible = max(0, floor(($em-$sm) / max(1, $slotDuration ?? 60)));
     $availToday = max(0, $possible - $todayCount);
 }
 
@@ -172,24 +178,62 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
         <svg class="icon-sun" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
       </button>
 
-      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false">
+      <!-- Profile dropdown trigger -->
+      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0"
+           aria-haspopup="true" aria-expanded="false">
         <div class="pv-nav-av">
-          <?php if($profilePhoto):?><img src="<?=htmlspecialchars($profilePhoto)?>" alt="<?=$providerName?>"><?php else:?><?=$initials?><?php endif;?>
+          <?php if ($profilePhoto): ?>
+            <img src="<?= htmlspecialchars($profilePhoto) ?>" alt="<?= $providerName ?>">
+          <?php else: ?>
+            <?= $initials ?>
+          <?php endif; ?>
         </div>
-        <div class="pv-nav-user"><div class="pv-nav-user-name"><?=$firstName?></div></div>
-        <svg class="pv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        <div class="pv-nav-user">
+          <div class="pv-nav-user-name"><?= $firstName ?></div>
+        </div>
+        <svg class="pv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
       </div>
 
+      <!-- Profile dropdown panel -->
       <div class="pv-profile-dropdown" id="profileDropdown" role="menu">
         <div class="pv-pd-header">
-          <div class="pv-pd-avatar"><?php if($profilePhoto):?><img src="<?=htmlspecialchars($profilePhoto)?>" alt=""><?php else:?><?=$initials?><?php endif;?></div>
-          <div class="pv-pd-info"><div class="pv-pd-name"><?=$provFullName?></div><div class="pv-pd-email"><?=$email?></div><span class="pv-pd-role"><?=$bizCategory?></span></div>
+          <div class="pv-pd-avatar">
+            <?php if ($profilePhoto): ?>
+              <img src="<?= htmlspecialchars($profilePhoto) ?>" alt="<?= $providerName ?>">
+            <?php else: ?>
+              <?= $initials ?>
+            <?php endif; ?>
+          </div>
+          <div class="pv-pd-info">
+            <div class="pv-pd-name"><?= $provFullName ?></div>
+            <div class="pv-pd-email"><?= $email ?></div>
+            <span class="pv-pd-role"><?= $bizCategory ?></span>
+          </div>
         </div>
         <div class="pv-pd-divider"></div>
-        <a href="<?= BASE_URL ?>provider/profile"  class="pv-pd-item" role="menuitem"><span class="pv-pd-item-ico"><i class="fa-solid fa-store"></i></span><span>Business Profile</span><svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></a>
-        <a href="<?= BASE_URL ?>provider/settings" class="pv-pd-item" role="menuitem"><span class="pv-pd-item-ico"><i class="fa-solid fa-gear"></i></span><span>Settings</span><svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></a>
+        <a href="<?= BASE_URL ?>provider/profile" class="pv-pd-item" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-store"></i></span>
+          <span>Business Profile</span>
+          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </a>
+        <a href="<?= BASE_URL ?>provider/settings" class="pv-pd-item" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-gear"></i></span>
+          <span>Settings</span>
+          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </a>
         <div class="pv-pd-divider"></div>
-        <a href="<?= BASE_URL ?>auth/logout" class="pv-pd-item pv-pd-item--danger" role="menuitem"><span class="pv-pd-item-ico"><i class="fa-solid fa-arrow-right-from-bracket"></i></span><span>Sign Out</span></a>
+        <a href="<?= BASE_URL ?>auth/logout" class="pv-pd-item pv-pd-item--danger" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-arrow-right-from-bracket"></i></span>
+          <span>Sign Out</span>
+        </a>
       </div>
     </div>
   </div>
@@ -392,7 +436,7 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
                 <div class="sc-slot-icon sc-slot-icon--gold"><i class="fa-regular fa-hourglass-half"></i></div>
                 <label class="sc-time-lbl" for="slotDuration">Appointment Duration</label>
                 <div class="sc-slot-input-wrap">
-                  <input type="number" id="slotDuration" class="sc-slot-input" value="<?= $slotDuration ?>" min="15" max="480" step="15" oninput="syncSlotDisplay()">
+                  <input type="number" id="slotDuration" class="sc-slot-input" value="<?= $hasSlotSettings ? $slotDuration : '' ?>" placeholder="e.g. 60" min="15" max="480" step="15" oninput="syncSlotDisplay()">
                   <span class="sc-slot-unit">min</span>
                 </div>
                 <p class="sc-slot-hint">How long each appointment takes</p>
@@ -401,7 +445,7 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
                 <div class="sc-slot-icon sc-slot-icon--blue"><i class="fa-solid fa-arrows-left-right-to-line"></i></div>
                 <label class="sc-time-lbl" for="slotInterval">Booking Interval</label>
                 <div class="sc-slot-input-wrap">
-                  <input type="number" id="slotInterval" class="sc-slot-input" value="<?= $slotInterval ?>" min="0" max="120" step="15" oninput="syncSlotDisplay()">
+                  <input type="number" id="slotInterval" class="sc-slot-input" value="<?= $hasSlotSettings ? $slotInterval : '' ?>" placeholder="e.g. 30" min="0" max="120" step="15" oninput="syncSlotDisplay()">
                   <span class="sc-slot-unit">min</span>
                 </div>
                 <p class="sc-slot-hint">Gap between consecutive bookings</p>
@@ -410,7 +454,7 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
                 <div class="sc-slot-icon sc-slot-icon--green"><i class="fa-solid fa-users"></i></div>
                 <label class="sc-time-lbl" for="maxBookings">Max Daily Bookings</label>
                 <div class="sc-slot-input-wrap">
-                  <input type="number" id="maxBookings" class="sc-slot-input" value="<?= $maxDaily ?>" min="1" max="100" oninput="syncSlotDisplay()">
+                  <input type="number" id="maxBookings" class="sc-slot-input" value="<?= $hasSlotSettings ? $maxDaily : '' ?>" placeholder="e.g. 12" min="1" max="100" oninput="syncSlotDisplay()">
                   <span class="sc-slot-unit">/ day</span>
                 </div>
                 <p class="sc-slot-hint">Maximum appointments per day</p>
@@ -444,8 +488,8 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
             <div class="sc-slot-icon sc-slot-icon--gold"><i class="fa-regular fa-hourglass-half"></i></div>
             <span class="sc-slot-label">Appointment Duration</span>
             <div class="sc-slot-display-wrap">
-              <span class="sc-slot-display-val" id="displayDuration"><?= $slotDuration ?></span>
-              <span class="sc-slot-unit">min</span>
+              <span class="sc-slot-display-val" id="displayDuration"><?= $hasSlotSettings ? $slotDuration : '—' ?></span>
+              <?php if ($hasSlotSettings): ?><span class="sc-slot-unit">min</span><?php endif; ?>
             </div>
             <p class="sc-slot-hint">How long each appointment takes</p>
           </div>
@@ -453,8 +497,8 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
             <div class="sc-slot-icon sc-slot-icon--blue"><i class="fa-solid fa-arrows-left-right-to-line"></i></div>
             <span class="sc-slot-label">Booking Interval</span>
             <div class="sc-slot-display-wrap">
-              <span class="sc-slot-display-val" id="displayInterval"><?= $slotInterval ?></span>
-              <span class="sc-slot-unit">min</span>
+              <span class="sc-slot-display-val" id="displayInterval"><?= $hasSlotSettings ? $slotInterval : '—' ?></span>
+              <?php if ($hasSlotSettings): ?><span class="sc-slot-unit">min</span><?php endif; ?>
             </div>
             <p class="sc-slot-hint">Gap between consecutive bookings</p>
           </div>
@@ -462,8 +506,8 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
             <div class="sc-slot-icon sc-slot-icon--green"><i class="fa-solid fa-users"></i></div>
             <span class="sc-slot-label">Max Daily Bookings</span>
             <div class="sc-slot-display-wrap">
-              <span class="sc-slot-display-val" id="displayMaxBookings"><?= $maxDaily ?></span>
-              <span class="sc-slot-unit">/ day</span>
+              <span class="sc-slot-display-val" id="displayMaxBookings"><?= $hasSlotSettings ? $maxDaily : '—' ?></span>
+              <?php if ($hasSlotSettings): ?><span class="sc-slot-unit">/ day</span><?php endif; ?>
             </div>
             <p class="sc-slot-hint">Maximum appointments per day</p>
           </div>
@@ -770,7 +814,7 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
 <script>
 const BASE_URL         = '<?= BASE_URL ?>';
 const calBookings      = <?= json_encode($calBookings) ?>;
-const maxDaily         = <?= (int)$maxDaily ?>;
+const maxDaily         = <?= $hasSlotSettings ? (int)$maxDaily : 'Infinity' ?>;
 const availWeekdays    = <?= json_encode($availWeekdays) ?>;
 const blockedDatesData = <?= json_encode($blockedArr) ?>;
 

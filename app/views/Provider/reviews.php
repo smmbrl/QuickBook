@@ -5,13 +5,12 @@ $db           = Database::getInstance();
 $userId       = (int)($_SESSION['user_id'] ?? 0);
 $providerName = htmlspecialchars($_SESSION['user_name'] ?? 'Provider');
 $email        = htmlspecialchars($_SESSION['user_email'] ?? '');
-$firstName    = htmlspecialchars(explode(' ', $providerName)[0]);
-$initials     = strtoupper(substr($providerName, 0, 2));
 
 /* ── Provider profile ── */
-$stmt = $db->prepare("SELECT pp.*, c.name AS category_name
+$stmt = $db->prepare("SELECT pp.*, c.name AS category_name, u.first_name, u.last_name
     FROM tbl_provider_profiles pp
     LEFT JOIN tbl_categories c ON pp.category_id = c.id
+    LEFT JOIN tbl_users u ON u.id = pp.user_id
     WHERE pp.user_id = ? LIMIT 1");
 $stmt->execute([$userId]);
 $profile      = $stmt->fetch() ?: [];
@@ -19,6 +18,9 @@ $profileId    = (int)($profile['id'] ?? 0);
 $bizName      = htmlspecialchars($profile['business_name'] ?? $providerName);
 $categoryName = htmlspecialchars($profile['category_name'] ?? 'Service Provider');
 $profilePhoto = $profile['profile_photo'] ?? null;
+$firstName    = htmlspecialchars($profile['first_name'] ?? explode(' ', $providerName)[0]);
+$provFullName = htmlspecialchars(trim(($profile['first_name'] ?? '') . ' ' . ($profile['last_name'] ?? '')) ?: $providerName);
+$initials     = strtoupper(substr($provFullName, 0, 2));
 
 /* ── Pending bookings count (nav badge) ── */
 $stPending = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ? AND status = 'pending'");
@@ -148,7 +150,6 @@ function timeAgo(string $dt): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QuickBook — My Reviews</title>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/provider_dashboard.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/provider_reviews.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <script>(function(){ var t=localStorage.getItem('qb-theme')||'light'; if(t==='dark') document.documentElement.setAttribute('data-theme','dark'); })();</script>
@@ -194,49 +195,60 @@ function timeAgo(string $dt): string {
         </svg>
       </button>
 
-      <div class="rv-profile-trigger" id="profileTrigger" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false">
-        <div class="rv-nav-av">
+      <!-- Profile dropdown trigger -->
+      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0"
+           aria-haspopup="true" aria-expanded="false">
+        <div class="pv-nav-av">
           <?php if ($profilePhoto): ?>
             <img src="<?= htmlspecialchars($profilePhoto) ?>" alt="<?= $bizName ?>">
           <?php else: ?>
             <?= $initials ?>
           <?php endif; ?>
         </div>
-        <div class="rv-nav-user-name"><?= $firstName ?></div>
-        <svg class="rv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <div class="pv-nav-user">
+          <div class="pv-nav-user-name"><?= $firstName ?></div>
+        </div>
+        <svg class="pv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round">
           <polyline points="6 9 12 15 18 9"/>
         </svg>
       </div>
 
-      <div class="rv-profile-dropdown" id="profileDropdown" role="menu">
-        <div class="rv-pd-header">
-          <div class="rv-pd-avatar">
+      <!-- Profile dropdown panel -->
+      <div class="pv-profile-dropdown" id="profileDropdown" role="menu">
+        <div class="pv-pd-header">
+          <div class="pv-pd-avatar">
             <?php if ($profilePhoto): ?>
               <img src="<?= htmlspecialchars($profilePhoto) ?>" alt="<?= $bizName ?>">
             <?php else: ?>
               <?= $initials ?>
             <?php endif; ?>
           </div>
-          <div class="rv-pd-info">
-            <div class="rv-pd-name"><?= $bizName ?></div>
-            <div class="rv-pd-email"><?= $email ?></div>
-            <span class="rv-pd-role">Provider</span>
+          <div class="pv-pd-info">
+            <div class="pv-pd-name"><?= $provFullName ?></div>
+            <div class="pv-pd-email"><?= $email ?></div>
+            <span class="pv-pd-role"><?= $categoryName ?></span>
           </div>
         </div>
-        <div class="rv-pd-divider"></div>
-        <a href="<?= BASE_URL ?>provider/profile" class="rv-pd-item" role="menuitem">
-          <span class="rv-pd-item-ico"><i class="fa-solid fa-store"></i></span>
+        <div class="pv-pd-divider"></div>
+        <a href="<?= BASE_URL ?>provider/profile" class="pv-pd-item" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-store"></i></span>
           <span>Business Profile</span>
-          <svg class="rv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </a>
-        <a href="<?= BASE_URL ?>provider/settings" class="rv-pd-item" role="menuitem">
-          <span class="rv-pd-item-ico"><i class="fa-solid fa-gear"></i></span>
+        <a href="<?= BASE_URL ?>provider/settings" class="pv-pd-item" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-gear"></i></span>
           <span>Settings</span>
-          <svg class="rv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </a>
-        <div class="rv-pd-divider"></div>
-        <a href="<?= BASE_URL ?>auth/logout" class="rv-pd-item rv-pd-item--danger" role="menuitem">
-          <span class="rv-pd-item-ico"><i class="fa-solid fa-arrow-right-from-bracket"></i></span>
+        <div class="pv-pd-divider"></div>
+        <a href="<?= BASE_URL ?>auth/logout" class="pv-pd-item pv-pd-item--danger" role="menuitem">
+          <span class="pv-pd-item-ico"><i class="fa-solid fa-arrow-right-from-bracket"></i></span>
           <span>Sign Out</span>
         </a>
       </div>
@@ -351,20 +363,6 @@ function timeAgo(string $dt): string {
     <!-- ── LEFT: Review Feed ── -->
     <div class="rv-feed-col">
 
-      <!-- Filter bar -->
-      <div class="rv-filter-bar" role="toolbar" aria-label="Filter by star rating">
-        <a href="<?= BASE_URL ?>provider/reviews" class="rv-filter-chip <?= $filterStar === 0 ? 'is-active' : '' ?>">
-          All
-        </a>
-        <?php for ($r = 5; $r >= 1; $r--): ?>
-        <a href="<?= BASE_URL ?>provider/reviews?stars=<?= $r ?>" class="rv-filter-chip <?= $filterStar === $r ? 'is-active' : '' ?>">
-          <?= str_repeat('★', $r) ?><?= str_repeat('☆', 5 - $r) ?>
-        </a>
-        <?php endfor; ?>
-        <?php if ($totalReviews > 0): ?>
-        <span class="rv-filter-count"><?= count($reviews) ?> showing</span>
-        <?php endif; ?>
-      </div>
 
       <!-- Review cards -->
       <?php if (empty($reviews)): ?>
@@ -518,6 +516,16 @@ function timeAgo(string $dt): string {
         </div>
 
         <div class="rv-breakdown-bars">
+          <a href="<?= BASE_URL ?>provider/reviews"
+             class="rv-breakdown-row <?= $filterStar === 0 ? 'is-active' : '' ?>"
+             title="Show all reviews">
+            <span class="rv-breakdown-label" style="min-width:3.2rem;font-weight:600;color:var(--gold-dim);">All</span>
+            <div class="rv-breakdown-track">
+              <div class="rv-breakdown-fill" style="width:100%" data-pct="100"></div>
+            </div>
+            <span class="rv-breakdown-pct"><?= $totalReviews > 0 ? '100%' : '0%' ?></span>
+            <span class="rv-breakdown-cnt"><?= $totalReviews ?></span>
+          </a>
           <?php for ($r = 5; $r >= 1; $r--):
             $cnt = $breakdown[$r] ?? 0;
             $pct = $totalReviews > 0 ? round($cnt / $totalReviews * 100) : 0;

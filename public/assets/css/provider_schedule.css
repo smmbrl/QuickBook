@@ -39,6 +39,9 @@
   --font-h:        'Playfair Display', Georgia, serif;
   --font-b:        'DM Sans', system-ui, sans-serif;
   --font-m:        'DM Mono', 'Courier New', monospace;
+  --font-display:  'Playfair Display', Georgia, serif;
+  --font-body:     'DM Sans', system-ui, sans-serif;
+  --font-mono:     'DM Mono', 'Courier New', monospace;
   --r-sm:          6px;
   --r-md:          10px;
   --r-lg:          14px;
@@ -182,7 +185,7 @@ input, select { font-family: inherit; }
 .pv-nav-av {
   width: 34px; height: 34px; border-radius: 99px;
   background: linear-gradient(135deg, var(--gold-dim), var(--gold));
-  color: #fff8e8; font-family: var(--font-h); font-weight: 700; font-size: .72rem;
+  color: #fff8e8; font-family: var(--font-display); font-weight: 700; font-size: .72rem;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   box-shadow: 0 0 0 2px var(--gold-border), 0 2px 10px rgba(201,168,76,.25);
   overflow: hidden;
@@ -222,33 +225,45 @@ input, select { font-family: inherit; }
 .pv-pd-avatar {
   width: 44px; height: 44px; border-radius: 99px; flex-shrink: 0;
   background: linear-gradient(135deg, var(--gold-dim), var(--gold));
-  color: #fff8e8; font-family: var(--font-h); font-weight: 700; font-size: .84rem;
+  color: #fff8e8; font-family: var(--font-display); font-weight: 700; font-size: .88rem;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 0 0 2.5px var(--gold-border), 0 2px 10px rgba(201,168,76,.22); overflow: hidden;
+  box-shadow: 0 0 0 2.5px var(--gold-border), 0 3px 12px rgba(201,168,76,.28);
+  overflow: hidden;
 }
 .pv-pd-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 99px; }
 .pv-pd-info { min-width: 0; flex: 1; }
-.pv-pd-name { font-family: var(--font-h); font-size: .88rem; font-weight: 700; color: var(--text-primary); }
-.pv-pd-email { font-size: .62rem; color: var(--text-muted); margin-top: .08rem; }
-.pv-pd-role {
-  display: inline-block; margin-top: .3rem; font-family: var(--font-m); font-size: .5rem;
-  font-weight: 500; letter-spacing: .08em; text-transform: uppercase;
-  background: var(--gold-lt); color: var(--gold-dim); border: 1px solid var(--gold-border);
-  padding: .12rem .45rem; border-radius: 99px;
+.pv-pd-name {
+  font-family: var(--font-display); font-size: .9rem; font-weight: 700;
+  color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.pv-pd-divider { height: 1px; background: linear-gradient(90deg, transparent, rgba(201,168,76,.25) 30%, rgba(201,168,76,.25) 70%, transparent); }
+.pv-pd-email {
+  font-family: var(--font-mono); font-size: .6rem; color: var(--text-muted); margin-top: .1rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pv-pd-role {
+  display: inline-block; margin-top: .3rem;
+  font-family: var(--font-mono); font-size: .52rem; font-weight: 500;
+  letter-spacing: .08em; text-transform: uppercase;
+  background: var(--gold-lt); color: var(--gold-dim);
+  border: 1px solid var(--gold-border); padding: .14rem .5rem; border-radius: 99px;
+}
+.pv-pd-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,168,76,.25) 30%, rgba(201,168,76,.25) 70%, transparent);
+}
 .pv-pd-item {
-  display: flex; align-items: center; gap: .72rem; padding: .78rem 1.15rem;
-  font-size: .82rem; font-weight: 500; color: var(--text-primary);
-  transition: background .14s, color .14s;
+  display: flex; align-items: center; gap: .75rem; padding: .82rem 1.2rem;
+  font-size: .84rem; font-weight: 500; color: var(--text-primary);
+  transition: background .15s, color .15s; cursor: pointer;
 }
 .pv-pd-item:hover { background: rgba(201,168,76,.07); color: var(--gold-dim); }
 .pv-pd-item--danger { color: var(--text-muted); }
 .pv-pd-item--danger:hover { background: var(--red-soft); color: var(--red); }
 .pv-pd-item-ico {
-  width: 28px; height: 28px; border-radius: var(--r-sm); flex-shrink: 0;
+  width: 30px; height: 30px; border-radius: var(--r-sm); flex-shrink: 0;
   background: linear-gradient(135deg, #FBF6EC, #F0E7CC); border: 1px solid var(--gold-border);
-  display: flex; align-items: center; justify-content: center; font-size: .76rem; color: var(--gold-dim);
+  display: flex; align-items: center; justify-content: center; font-size: .8rem; color: var(--gold-dim);
+  transition: background .15s, border-color .15s;
 }
 [data-theme="dark"] .pv-pd-item:hover { background: rgba(201,168,76,.08); }
 [data-theme="dark"] .pv-pd-item--danger:hover { background: var(--red-soft); }

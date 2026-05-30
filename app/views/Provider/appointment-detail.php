@@ -124,7 +124,9 @@ $currentIdx  = array_search($status, $statusOrder);
         <svg class="icon-sun" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
       </button>
 
-      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false">
+      <!-- Profile dropdown trigger -->
+      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0"
+           aria-haspopup="true" aria-expanded="false">
         <div class="pv-nav-av">
           <?php if ($profilePhoto): ?>
             <img src="<?= htmlspecialchars($profilePhoto) ?>" alt="<?= $bizName ?>">
@@ -135,9 +137,14 @@ $currentIdx  = array_search($status, $statusOrder);
         <div class="pv-nav-user">
           <div class="pv-nav-user-name"><?= $firstName ?></div>
         </div>
-        <svg class="pv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        <svg class="pv-profile-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
       </div>
 
+      <!-- Profile dropdown panel -->
       <div class="pv-profile-dropdown" id="profileDropdown" role="menu">
         <div class="pv-pd-header">
           <div class="pv-pd-avatar">
@@ -157,12 +164,16 @@ $currentIdx  = array_search($status, $statusOrder);
         <a href="<?= BASE_URL ?>provider/profile" class="pv-pd-item" role="menuitem">
           <span class="pv-pd-item-ico"><i class="fa-solid fa-store"></i></span>
           <span>Business Profile</span>
-          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </a>
         <a href="<?= BASE_URL ?>provider/settings" class="pv-pd-item" role="menuitem">
           <span class="pv-pd-item-ico"><i class="fa-solid fa-gear"></i></span>
           <span>Settings</span>
-          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </a>
         <div class="pv-pd-divider"></div>
         <a href="<?= BASE_URL ?>auth/logout" class="pv-pd-item pv-pd-item--danger" role="menuitem">
