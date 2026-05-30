@@ -123,13 +123,12 @@ function fmtMoney(float $v): string {
 
     <div class="pv-nav-links">
       <a href="<?= BASE_URL ?>dashboard" class="pv-nav-link">Dashboard</a>
+       <a href="<?= BASE_URL ?>browse" class="pv-nav-link">Browse</a>
       <a href="<?= BASE_URL ?>bookings" class="pv-nav-link">
         Bookings
         <?php if ($upcomingCount): ?><sup class="pv-sup"><?= $upcomingCount ?></sup><?php endif; ?>
       </a>
-      <a href="<?= BASE_URL ?>browse" class="pv-nav-link">Browse Services</a>
       <a href="<?= BASE_URL ?>loyalty" class="pv-nav-link">Loyalty</a>
-      <a href="<?= BASE_URL ?>profile" class="pv-nav-link is-active">Profile</a>
     </div>
 
     <div class="pv-nav-end">

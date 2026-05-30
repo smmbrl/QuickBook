@@ -128,33 +128,75 @@ $firstNameOnly = explode(' ', $name)[0];
 
 /* ── Service categories ── */
 $categories = [
-    ['label' => 'Nail Tech',  'icon' => 'fa-hand-sparkles', 'slug' => 'nail'],
-    ['label' => 'Hair Salon', 'icon' => 'fa-scissors',      'slug' => 'hair'],
-    ['label' => 'Massage',    'icon' => 'fa-spa',           'slug' => 'massage'],
-    ['label' => 'Dental',     'icon' => 'fa-tooth',         'slug' => 'dental'],
-    ['label' => 'Makeup',     'icon' => 'fa-wand-sparkles', 'slug' => 'makeup'],
-    ['label' => 'Cleaning',   'icon' => 'fa-broom',         'slug' => 'cleaning'],
-    ['label' => 'Pet Care',   'icon' => 'fa-paw',           'slug' => 'pet'],
-    ['label' => 'Repair',     'icon' => 'fa-wrench',        'slug' => 'repair'],
+    ['label' => 'Barbers',          'icon' => 'fa-scissors',   'slug' => 'barber'],
+    ['label' => 'Hair Salon',       'icon' => 'fa-scissors',        'slug' => 'hair'],
+    ['label' => 'Nail Care',        'icon' => 'fa-hand-sparkles',   'slug' => 'nail'],
+    ['label' => 'Massage Therapy',  'icon' => 'fa-spa',             'slug' => 'massage'],
+    ['label' => 'Skincare Facial',  'icon' => 'fa-face-smile-beam', 'slug' => 'skincare'],
+    ['label' => 'Fitness Training', 'icon' => 'fa-dumbbell',        'slug' => 'fitness'],
+    ['label' => 'Cleaning Services','icon' => 'fa-broom',           'slug' => 'cleaning'],
+    ['label' => 'Pet Grooming',     'icon' => 'fa-paw',             'slug' => 'pet'],
+    ['label' => 'Dental Services',  'icon' => 'fa-tooth',           'slug' => 'dental'],
+    ['label' => 'Makeup Artist',    'icon' => 'fa-wand-sparkles',   'slug' => 'makeup'],
 ];
 
 /* ── Build provider map data for JS ── */
+// Fetch category slugs for map providers
+$dashCatSlugs = [];
+if (!empty($featuredProviders)) {
+    $catIds = array_unique(array_filter(array_column($featuredProviders, 'id')));
+    // We join the category in the featured providers query, but service_types is a concatenation.
+    // Fetch category slugs via a separate lookup keyed by provider id
+    $dashProvIds   = array_column($featuredProviders, 'id');
+    $dashPlaceholders = implode(',', array_fill(0, count($dashProvIds), '?'));
+    $dashCatStmt = $db->prepare("
+        SELECT pp.id AS provider_id, c.slug AS cat_slug
+        FROM tbl_provider_profiles pp
+        LEFT JOIN tbl_categories c ON pp.category_id = c.id
+        WHERE pp.id IN ($dashPlaceholders)
+    ");
+    $dashCatStmt->execute($dashProvIds);
+    foreach ($dashCatStmt->fetchAll() as $row) {
+        $dashCatSlugs[$row['provider_id']] = $row['cat_slug'] ?? '';
+    }
+}
+
 $mapProviders = [];
 foreach ($featuredProviders as $p) {
     $mapProviders[] = [
-        'id'       => (int)$p['id'],
-        'name'     => $p['business_name'],
-        'barangay' => $p['barangay'] ?? '',
-        'lat'      => !empty($p['latitude'])  ? (float)$p['latitude']  : null,
-        'lng'      => !empty($p['longitude']) ? (float)$p['longitude'] : null,
-        'rating'   => round((float)$p['avg_rating'], 1),
-        'category' => !empty($p['service_types']) ? ucwords(strtolower(trim(explode(',', $p['service_types'])[0]))) : '',
-        'urlView'  => BASE_URL . 'provider/' . (int)$p['id'],
-        'urlBook'  => BASE_URL . 'book/'     . (int)$p['id'],
-        'minPrice' => !empty($p['min_price']) ? '₱' . number_format((float)$p['min_price'], 0) : '',
+        'id'           => (int)$p['id'],
+        'name'         => $p['business_name'],
+        'barangay'     => $p['barangay'] ?? '',
+        'lat'          => !empty($p['latitude'])  ? (float)$p['latitude']  : null,
+        'lng'          => !empty($p['longitude']) ? (float)$p['longitude'] : null,
+        'rating'       => round((float)$p['avg_rating'], 1),
+        'category'     => !empty($p['service_types']) ? ucwords(strtolower(trim(explode(',', $p['service_types'])[0]))) : '',
+        'categorySlug' => $dashCatSlugs[(int)$p['id']] ?? '',
+        'urlView'      => BASE_URL . 'provider/' . (int)$p['id'],
+        'urlBook'      => BASE_URL . 'book/'     . (int)$p['id'],
+        'minPrice'     => !empty($p['min_price']) ? '₱' . number_format((float)$p['min_price'], 0) : '',
     ];
 }
 $mapProvidersJson = json_encode($mapProviders, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
+
+// Icon SVG map for dashboard map
+$dashCatIconMap = [
+    'barbershop'      => '<path d="M10 5 L10 19" stroke="#C9A84C" stroke-width="1.8" stroke-linecap="round"/><path d="M20 5 L20 19" stroke="#C9A84C" stroke-width="1.8" stroke-linecap="round"/><path d="M7.5 12 L22.5 12" stroke="#C9A84C" stroke-width="1.5" stroke-linecap="round"/><circle cx="10" cy="22.5" r="3" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5"/><circle cx="20" cy="22.5" r="3" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5"/>',
+    'hair-salon'      => '<path d="M9 26 C9 18 13 15 15 8" stroke="#C9A84C" stroke-width="1.8" stroke-linecap="round"/><path d="M21 26 C21 18 17 15 15 8" stroke="#C9A84C" stroke-width="1.8" stroke-linecap="round"/><path d="M11 10 C11 7.5 12.7 6 15 6 C17.3 6 19 7.5 19 10" stroke="#C9A84C" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M10 19 L20 19" stroke="#C9A84C" stroke-width="1.5" stroke-linecap="round"/>',
+    'nail-care'       => '<path d="M8 17 L8 12 C8 8.7 11.1 6 15 6 C18.9 6 22 8.7 22 12 L22 17" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" fill="none"/><rect x="6" y="17" width="18" height="7" rx="3" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5"/><circle cx="12" cy="20.5" r="1.2" fill="#C9A84C" opacity=".6"/><circle cx="18" cy="20.5" r="1.2" fill="#C9A84C" opacity=".6"/>',
+    'massage-therapy' => '<circle cx="15" cy="8" r="3.5" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5"/><path d="M6 24 C6 18.5 9.5 15 15 15 C20.5 15 24 18.5 24 24" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" fill="none"/>',
+    'skincare-facial' => '<circle cx="15" cy="15" r="9" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5"/><path d="M11.5 17 C12.5 18.5 13.8 19.2 15 19.2 C16.2 19.2 17.5 18.5 18.5 17" stroke="#C9A84C" stroke-width="1.4" stroke-linecap="round" fill="none"/><circle cx="11.5" cy="12.5" r="1" fill="#C9A84C"/><circle cx="18.5" cy="12.5" r="1" fill="#C9A84C"/>',
+    'fitness-training'=> '<rect x="11" y="8" width="8" height="14" rx="1.5" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5"/><rect x="7" y="10.5" width="4" height="9" rx="1.5" fill="#1A1000" stroke="#C9A84C" stroke-width="1.4"/><rect x="19" y="10.5" width="4" height="9" rx="1.5" fill="#1A1000" stroke="#C9A84C" stroke-width="1.4"/><path d="M3 15 L7 15" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round"/><path d="M23 15 L27 15" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round"/>',
+    'home-cleaning'   => '<path d="M5 26 L5 13 L15 5 L25 13 L25 26" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/><rect x="11" y="18" width="8" height="8" rx="1.2" fill="#1A1000" stroke="#C9A84C" stroke-width="1.4"/>',
+    'pet-grooming'    => '<ellipse cx="12" cy="17" rx="6" ry="7.5" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5"/><path d="M18 14 C20 14 25 12 25 8.5 C25 5.5 21.5 6 20.5 9" stroke="#C9A84C" stroke-width="1.5" stroke-linecap="round" fill="none"/>',
+    'dental'          => '<path d="M10 6 C7 6 5 8.5 5 11 C5 14 7 15 8 19 C9 22 9.5 25 11.5 25 C13 25 13.5 22 15 22 C16.5 22 17 25 18.5 25 C20.5 25 21 22 22 19 C23 15 25 14 25 11 C25 8.5 23 6 20 6 C18 6 17 7.5 15 7.5 C13 7.5 12 6 10 6 Z" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5" stroke-linejoin="round"/>',
+    'makeup'          => '<path d="M15 22 L15 12" stroke="#C9A84C" stroke-width="1.8" stroke-linecap="round"/><path d="M10 12 C10 8.7 12 7 15 7 C18 7 20 8.7 20 12 L10 12 Z" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5" stroke-linejoin="round"/><rect x="8" y="19" width="14" height="6" rx="3" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5"/>',
+];
+$dashIconSvgMap = [];
+foreach ($dashCatIconMap as $slug => $paths) {
+    $dashIconSvgMap[$slug] = '<svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">' . $paths . '</svg>';
+}
+$dashIconSvgJson = json_encode($dashIconSvgMap, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
 
 function fmtMoney(float $v): string {
     return $v >= 1000 ? '₱'.number_format($v/1000,1).'k' : '₱'.number_format($v,0);
@@ -661,18 +703,28 @@ $spentDisplay = fmtMoney($totalSpent);
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
 <script>
-/* ── Leaflet Map Init ── */
+/* ══════════════════════════════════════
+   DASHBOARD MAP — Preview-only
+   Shows category icons, no popup cards.
+   Full interactions are on Browse page.
+══════════════════════════════════════ */
 (function () {
   var mapEl = document.getElementById('providerMap');
   if (!mapEl) return;
 
-  var BACOLOD = [10.6840, 122.9560];
+  var BACOLOD    = [10.6840, 122.9560];
+  var providers  = <?= $mapProvidersJson ?>;
+  var iconSvgMap = <?= $dashIconSvgJson ?>;
+
+  if (!providers.length) return;
 
   var map = L.map('providerMap', {
     center: BACOLOD,
     zoom: 13,
-    zoomControl: true,
+    zoomControl: false,
     scrollWheelZoom: false,
+    dragging: false,
+    doubleClickZoom: false,
     attributionControl: true
   });
 
@@ -681,57 +733,59 @@ $spentDisplay = fmtMoney($totalSpent);
     maxZoom: 18
   }).addTo(map);
 
-  var providers = <?= $mapProvidersJson ?>;
+  if (document.documentElement.getAttribute('data-theme') === 'dark') {
+    var tilePaneEl = document.querySelector('#providerMap .leaflet-tile-pane');
+    if (tilePaneEl) tilePaneEl.style.filter =
+      'brightness(0.7) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7)';
+  }
 
-  if (!providers.length) return;
+  function makeDashIcon(slug) {
+    var svgContent = iconSvgMap[slug] || '';
+    var html = '<div style="' +
+      'width:34px;height:34px;' +
+      'background:#fff;' +
+      'border:2px solid #C9A84C;' +
+      'border-radius:50% 50% 50% 0;' +
+      'transform:rotate(-45deg);' +
+      'display:flex;align-items:center;justify-content:center;' +
+      'filter:drop-shadow(0 2px 6px rgba(139,110,32,.38));' +
+      '">' +
+      '<div style="transform:rotate(45deg);width:20px;height:20px;display:flex;align-items:center;justify-content:center;">' +
+        svgContent +
+      '</div>' +
+      '</div>';
+    return L.divIcon({
+      className: '',
+      html: html,
+      iconSize:   [34, 34],
+      iconAnchor: [17, 34],
+      popupAnchor:[0, -36]
+    });
+  }
 
   var bounds = [];
 
   providers.forEach(function (p, idx) {
     var lat = p.lat, lng = p.lng;
-
-    /* Fallback scatter around Bacolod if no coords saved yet */
     if (!lat || !lng) {
-      var angle  = (idx / providers.length) * 2 * Math.PI;
+      var angle  = (idx / Math.max(providers.length, 1)) * 2 * Math.PI;
       var radius = 0.012 + (idx % 3) * 0.006;
       lat = BACOLOD[0] + radius * Math.cos(angle);
       lng = BACOLOD[1] + radius * Math.sin(angle);
     }
-
     bounds.push([lat, lng]);
+    var marker = L.marker([lat, lng], { icon: makeDashIcon(p.categorySlug) }).addTo(map);
 
-    /* Custom gold pin icon */
-    var icon = L.divIcon({
-      className: '',
-      html: '<div class="pv-map-pin"><i class="fa-solid fa-location-dot"></i></div>',
-      iconSize:   [28, 34],
-      iconAnchor: [14, 34],
-      popupAnchor:[0, -36]
-    });
+    // Preview-only: tooltip on hover, no full info card on click
+    var locLine = p.barangay ? p.barangay + ', Bacolod City' : 'Bacolod City';
+    marker.bindTooltip(
+      '<div style="font-family:\'Playfair Display\',serif;font-size:.82rem;font-weight:700;font-style:italic;color:#1C1710;">' + p.name + '</div>' +
+      '<div style="font-family:\'DM Mono\',monospace;font-size:.58rem;letter-spacing:.07em;text-transform:uppercase;color:#A88A38;margin-top:.1rem;">' + (p.category || '') + '</div>' +
+      '<div style="font-size:.65rem;color:rgba(28,23,16,.55);margin-top:.15rem;">📍 ' + locLine + '</div>',
+      { direction: 'top', className: 'qb-dash-tooltip', offset: [0, -38] }
+    );
 
-    var locLine   = p.barangay ? p.barangay + ', Bacolod City' : 'Bacolod City';
-    var ratingStr = p.rating > 0 ? '&#9733; ' + p.rating : 'New';
-    var priceStr  = p.minPrice ? '<div class="pv-map-popup-price">From ' + p.minPrice + '</div>' : '';
-    var catStr    = p.category ? '<div class="pv-map-popup-cat">' + p.category + '</div>' : '';
-    var dirUrl    = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(locLine);
-
-    var popupHtml =
-      '<div class="pv-map-popup">' +
-        '<div class="pv-map-popup-name">' + p.name + '</div>' +
-        catStr +
-        '<div class="pv-map-popup-meta">' + ratingStr + ' &nbsp;&middot;&nbsp; &#128205; ' + locLine + '</div>' +
-        priceStr +
-        '<div class="pv-map-popup-actions">' +
-          '<a href="' + p.urlView + '" class="pv-map-popup-btn pv-map-popup-btn--outline">View Profile</a>' +
-          '<a href="' + p.urlBook + '" class="pv-map-popup-btn pv-map-popup-btn--primary">Book Now</a>' +
-        '</div>' +
-        '<a href="' + dirUrl + '" target="_blank" rel="noopener" class="pv-map-popup-directions">&#128506; Get Directions</a>' +
-      '</div>';
-
-    var marker = L.marker([lat, lng], { icon: icon }).addTo(map);
-    marker.bindPopup(popupHtml, { maxWidth: 240, closeButton: false });
-
-    /* Highlight matching provider card on marker click */
+    // Highlight provider card below map, no navigation
     marker.on('click', function () {
       document.querySelectorAll('.pv-provider-card').forEach(function (c) {
         c.classList.remove('is-highlighted');
@@ -744,7 +798,31 @@ $spentDisplay = fmtMoney($totalSpent);
     });
   });
 
-  /* Fit map to show all markers */
+  /* "Open full map" overlay hint */
+  var browseUrl = (typeof BASE_URL !== 'undefined' ? '' : '') + '<?= BASE_URL ?>browse?view=map';
+  var overlay = L.Control.extend({
+    onAdd: function() {
+      var el = L.DomUtil.create('a', '');
+      el.href = browseUrl;
+      el.innerHTML = '<span style="' +
+        'display:flex;align-items:center;gap:.35rem;' +
+        'font-family:\'DM Mono\',monospace;font-size:.62rem;font-weight:600;' +
+        'letter-spacing:.06em;text-transform:uppercase;' +
+        'background:linear-gradient(135deg,#A88A38,#C9A84C);' +
+        'color:#fff8e8;padding:.4rem .75rem;' +
+        'border-radius:99px;' +
+        'box-shadow:0 2px 8px rgba(201,168,76,.4);' +
+        'text-decoration:none;' +
+        '">' +
+        '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#fff8e8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 1C4.34 1 3 2.34 3 4c0 2.44 3 7 3 7s3-4.56 3-7c0-1.66-1.34-3-3-3z"/><circle cx="6" cy="4" r="1"/></svg>' +
+        'Open Full Map' +
+        '</span>';
+      L.DomEvent.disableClickPropagation(el);
+      return el;
+    }
+  });
+  map.addControl(new overlay({ position: 'bottomright' }));
+
   if (bounds.length === 1) {
     map.setView(bounds[0], 15);
   } else if (bounds.length > 1) {
