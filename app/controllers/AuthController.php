@@ -22,6 +22,11 @@ class AuthController
             header('Location: ' . BASE_URL . 'login'); exit;
         }
 
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $_SESSION['flash_error'] = 'Invalid email or password. Please try again.';
+            header('Location: ' . BASE_URL . 'login'); exit;
+        }
+
         $user = $this->userModel->findByEmail($email);
 
         if (!$user || !password_verify($password, $user['password_hash'])) {
@@ -82,6 +87,7 @@ class AuthController
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Valid email required.';
         if (strlen($password) < 8)     $errors[] = 'Password must be at least 8 characters.';
         if (!$terms)                   $errors[] = 'You must accept the Terms of Service.';
+        if (strlen($phone) < 7)        $errors[] = 'Valid phone number required.';
         if ($this->userModel->emailExists($email)) $errors[] = 'Email already registered.';
 
         if (!empty($errors)) {
