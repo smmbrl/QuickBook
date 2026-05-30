@@ -74,12 +74,19 @@ class AuthController
         $firstName   = trim($_POST['first_name'] ?? '');
         $lastName    = trim($_POST['last_name']  ?? '');
         $email       = strtolower(trim($_POST['email'] ?? ''));
-        $phone       = $_POST['phone']         ?? '';
+        $phone       = trim($_POST['phone']      ?? '');
         $password    = $_POST['password']      ?? '';
         $role        = in_array($_POST['role'] ?? '', ['customer','provider']) ? $_POST['role'] : 'customer';
         $terms       = isset($_POST['terms']);
         $gender      = in_array($_POST['gender'] ?? '', ['male','female','non_binary','prefer_not_to_say']) ? $_POST['gender'] : null;
         $dateOfBirth = trim($_POST['date_of_birth'] ?? '') ?: null;
+
+        // Address fields — the register form syncs these into the canonical names before POST
+        $homeAddress     = trim($_POST['home_address']    ?? '');
+        $addressLat      = trim($_POST['address_lat']     ?? '');
+        $addressLng      = trim($_POST['address_lng']     ?? '');
+        $addressPlaceId  = trim($_POST['address_place']   ?? '');
+        $addressVerified = ($_POST['address_verified']    ?? '0') === '1';
 
         $errors = [];
         if (empty($firstName))         $errors[] = 'First name is required.';
@@ -96,14 +103,19 @@ class AuthController
         }
 
         $userId = $this->userModel->create([
-            'first_name'    => $firstName,
-            'last_name'     => $lastName,
-            'email'         => $email,
-            'phone'         => $phone,
-            'gender'        => $gender,
-            'date_of_birth' => $dateOfBirth,
-            'password'      => $password,
-            'role'          => $role,
+            'first_name'        => $firstName,
+            'last_name'         => $lastName,
+            'email'             => $email,
+            'phone'             => $phone,
+            'gender'            => $gender,
+            'date_of_birth'     => $dateOfBirth,
+            'password'          => $password,
+            'role'              => $role,
+            'home_address'      => $homeAddress,
+            'address_lat'       => $addressLat !== '' ? (float)$addressLat : null,
+            'address_lng'       => $addressLng !== '' ? (float)$addressLng : null,
+            'address_place_id'  => $addressPlaceId,
+            'address_verified'  => $addressVerified ? 1 : 0,
         ]);
 
         if (!$userId) {
@@ -116,8 +128,41 @@ class AuthController
         $db = Database::getInstance();
 
         if ($role === 'provider') {
-            $db->prepare("INSERT INTO tbl_provider_profiles (user_id, business_name) VALUES (?,?)")
-               ->execute([$userId, $firstName . ' ' . $lastName]);
+            // Collect all provider-specific registration fields
+            $businessName       = trim($_POST['business_name'] ?? '') ?: ($firstName . ' ' . $lastName);
+            $businessAddress    = trim($_POST['business_address'] ?? '') ?: null;
+            $bizLat             = trim($_POST['business_address_lat']      ?? '');
+            $bizLng             = trim($_POST['business_address_lng']      ?? '');
+            $bizPlaceId         = trim($_POST['business_address_place']    ?? '');
+            $bizVerified        = ($_POST['business_address_verified']     ?? '0') === '1' ? 1 : 0;
+            $serviceType        = trim($_POST['service_type'] ?? '') ?: null;
+            // categories is comma-separated; use first entry as category_id
+            $categoriesRaw      = trim($_POST['categories'] ?? '');
+            $categoryId         = null;
+            if ($categoriesRaw !== '') {
+                $cats       = array_filter(array_map('intval', explode(',', $categoriesRaw)));
+                $categoryId = !empty($cats) ? $cats[0] : null;
+            }
+
+            $stmt = $db->prepare(
+                "INSERT INTO tbl_provider_profiles
+                    (user_id, business_name, category_id, business_address,
+                     business_address_lat, business_address_lng,
+                     business_address_place_id, business_address_verified,
+                     service_type, city)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Bacolod City')"
+            );
+            $stmt->execute([
+                $userId,
+                $businessName,
+                $categoryId,
+                $businessAddress,
+                $bizLat !== '' ? (float)$bizLat : null,
+                $bizLng !== '' ? (float)$bizLng : null,
+                $bizPlaceId !== '' ? $bizPlaceId : null,
+                $bizVerified,
+                $serviceType,
+            ]);
         }
 
         // ── Welcome notification to the new user ──────────────────────────

@@ -14,19 +14,23 @@ class User
     {
         $hash = password_hash($data['password'], PASSWORD_BCRYPT, ['cost' => 12]);
         $stmt = $this->db->prepare(
-            "INSERT INTO tbl_users (first_name, last_name, email, phone, gender, date_of_birth, address, password_hash, role)
-             VALUES (:first_name, :last_name, :email, :phone, :gender, :date_of_birth, :address, :password_hash, :role)"
+            "INSERT INTO tbl_users (first_name, last_name, email, phone, gender, date_of_birth, home_address, address_lat, address_lng, address_place_id, address_verified, password_hash, role)
+             VALUES (:first_name, :last_name, :email, :phone, :gender, :date_of_birth, :home_address, :address_lat, :address_lng, :address_place_id, :address_verified, :password_hash, :role)"
         );
         $ok = $stmt->execute([
-            ':first_name'    => $data['first_name'],
-            ':last_name'     => $data['last_name'],
-            ':email'         => $data['email'],
-            ':phone'         => $data['phone'] ?? null,
-            ':gender'        => $data['gender'] ?? null,
-            ':date_of_birth' => !empty($data['date_of_birth']) ? $data['date_of_birth'] : null,
-            ':address'       => $data['address'] ?? null,
-            ':password_hash' => $hash,
-            ':role'          => $data['role'] ?? 'customer',
+            ':first_name'       => $data['first_name'],
+            ':last_name'        => $data['last_name'],
+            ':email'            => $data['email'],
+            ':phone'            => $data['phone'] ?? null,
+            ':gender'           => $data['gender'] ?? null,
+            ':date_of_birth'    => !empty($data['date_of_birth']) ? $data['date_of_birth'] : null,
+            ':home_address'     => $data['home_address'] ?? null,
+            ':address_lat'      => $data['address_lat'] ?? null,
+            ':address_lng'      => $data['address_lng'] ?? null,
+            ':address_place_id' => $data['address_place_id'] ?? null,
+            ':address_verified' => $data['address_verified'] ?? 0,
+            ':password_hash'    => $hash,
+            ':role'             => $data['role'] ?? 'customer',
         ]);
         return $ok ? (int) $this->db->lastInsertId() : false;
     }

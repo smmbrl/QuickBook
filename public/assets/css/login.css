@@ -18,10 +18,18 @@
   --cream-bg:     #F9F7F2;
 }
 
+/* ── BASE RESET ──────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 /* ── PAGE LAYOUT ─────────────────────────────────────────── */
 .login-page {
   display:    flex;
   min-height: 100vh;
+  min-height: 100dvh; /* dynamic viewport on mobile */
 }
 
 /* ── LEFT PANEL ──────────────────────────────────────────── */
@@ -82,9 +90,9 @@
   position:        relative;
   z-index:         1;
   animation:       slideRight .5s ease both;
-  display:         flex;     /* NEW — align image + text */
-  align-items:     center;   /* NEW */
-  gap:             .5rem;    /* NEW — space between logo and wordmark */
+  display:         flex;
+  align-items:     center;
+  gap:             .5rem;
 }
 .login-left-logo span {
   color:       #C9A84C;
@@ -98,7 +106,6 @@
   height:      42px;
   object-fit:  contain;
   flex-shrink: 0;
-  /* brightens the image so it pops on the dark left panel */
   filter:      brightness(1.1) drop-shadow(0 2px 6px rgba(201,168,76,.35));
 }
 
@@ -372,6 +379,8 @@
   border:        1.5px solid rgba(26,20,16,.12);
   color:         #1A1410;
   border-radius: var(--radius-sm);
+  /* Prevent zoom on iOS (font-size must be ≥ 16px on mobile) */
+  font-size:     1rem;
 }
 .login-right .form-control::placeholder {
   color: rgba(26,20,16,.28);
@@ -421,6 +430,9 @@
   background:      none;
   border:          none;
   padding:         0;
+  /* Larger touch target on mobile */
+  min-width:       44px;
+  min-height:      44px;
 }
 .pw-toggle:hover {
   color:     #C9A84C;
@@ -440,6 +452,8 @@ input[type="password"]::-webkit-strong-password-auto-fill-button { display: none
   justify-content: space-between;
   margin-bottom:   1.5rem;
   font-size:       .82rem;
+  flex-wrap:       wrap;
+  gap:             .6rem;
 }
 
 .remember-label {
@@ -450,6 +464,8 @@ input[type="password"]::-webkit-strong-password-auto-fill-button { display: none
   cursor:      pointer;
   font-family: 'DM Sans', sans-serif;
   user-select: none;
+  /* Larger touch target */
+  padding:     .25rem 0;
 }
 .remember-label input[type="checkbox"] {
   width:        15px;
@@ -466,6 +482,9 @@ input[type="password"]::-webkit-strong-password-auto-fill-button { display: none
   letter-spacing: .05em;
   text-transform: uppercase;
   transition:     color .2s, letter-spacing .2s;
+  /* Minimum touch target */
+  padding:        .35rem 0;
+  display:        inline-block;
 }
 .forgot-link:hover { color: #B8973B; letter-spacing: .08em; }
 
@@ -488,11 +507,26 @@ input[type="password"]::-webkit-strong-password-auto-fill-button { display: none
   border:          none;
   cursor:          pointer;
   transition:      all .22s cubic-bezier(.4,0,.2,1);
+  /* Accessible touch target */
+  min-height:      48px;
+  display:         flex;
+  align-items:     center;
 }
 .btn-submit:hover {
   background: #B8973B;
   transform:  translateY(-2px);
   box-shadow: 0 12px 36px rgba(201,168,76,.48);
+}
+/* Remove hover translate on touch to avoid sticky hover state */
+@media (hover: none) {
+  .btn-submit:hover {
+    transform:  none;
+    box-shadow: 0 8px 28px rgba(201,168,76,.35);
+  }
+  .btn-submit:active {
+    background: #B8973B;
+    transform:  scale(.98);
+  }
 }
 
 /* ── DIVIDER ─────────────────────────────────────────────── */
@@ -533,6 +567,8 @@ input[type="password"]::-webkit-strong-password-auto-fill-button { display: none
   margin-bottom:   .65rem;
   transition:      all .22s;
   letter-spacing:  .01em;
+  /* Accessible touch target */
+  min-height:      48px;
 }
 .social-btn:hover {
   background:   #F9F7F2;
@@ -540,6 +576,16 @@ input[type="password"]::-webkit-strong-password-auto-fill-button { display: none
   color:        #1A1410;
   transform:    translateY(-1px);
   box-shadow:   0 4px 16px rgba(201,168,76,.15);
+}
+@media (hover: none) {
+  .social-btn:hover {
+    transform:  none;
+    box-shadow: none;
+  }
+  .social-btn:active {
+    background: #F9F7F2;
+    border-color: #C9A84C;
+  }
 }
 .social-icon { width: 18px; height: 18px; flex-shrink: 0; }
 
@@ -583,15 +629,268 @@ input[type="password"]::-webkit-strong-password-auto-fill-button { display: none
 .toast-message { flex: 1; line-height: 1.4; }
 .alert { display: none !important; }
 
-/* ── RESPONSIVE ──────────────────────────────────────────── */
-@media (max-width: 860px) {
-  .login-page     { flex-direction: column; }
-  .login-left     { width: 100%; padding: 2.5rem 2rem; gap: 1.2rem; }
-  .login-right    { padding: 2rem 1.2rem; }
-  .login-form-box { padding: 2.2rem 1.8rem; max-width: 100%; }
-  .auth-logo-img  { width: 36px; height: 36px; }
+/* ============================================================
+   RESPONSIVE BREAKPOINTS
+   ============================================================ */
+
+/* ── TABLET LANDSCAPE: 860px–1100px ─────────────────────── */
+@media (max-width: 1100px) {
+  .login-left {
+    width:   38%;
+    padding: 3rem 2.8rem;
+    gap:     1.5rem;
+  }
+  .login-right {
+    padding: 2.5rem 1.8rem;
+  }
+  .login-form-box {
+    padding: 2.4rem 2.4rem;
+  }
 }
+
+/* ── TABLET PORTRAIT: 600px–860px ───────────────────────── */
+@media (max-width: 860px) {
+  /* Stack panels vertically */
+  .login-page {
+    flex-direction: column;
+  }
+
+  /* Left panel: compact banner across full width */
+  .login-left {
+    width:   100%;
+    padding: 2.4rem 2rem 2rem;
+    gap:     1.1rem;
+    /* Shorter on tablet — enough for logo + heading + desc + badge row */
+    min-height: unset;
+  }
+
+  /* Hide feature list and testimonial on stacked layout,
+     revealed again at > 860px or small screens via mobile-banner */
+  .feature-list,
+  .testimonial-card {
+    display: none;
+  }
+
+  /* Show compact trust badge strip instead */
+  .login-left-desc {
+    display: none;
+  }
+
+  .login-left h2 {
+    font-size: clamp(1.9rem, 6vw, 2.6rem);
+    animation: none; /* Prevent layout shift on stack reflow */
+  }
+
+  .login-left-logo {
+    animation: none;
+  }
+
+  /* Mobile trust strip (injected via pseudo-sibling, using CSS only) */
+  .login-left::before {
+    top:    -80px;
+    right:  -60px;
+    width:  280px;
+    height: 280px;
+  }
+
+  /* Right panel: full width, comfortable padding */
+  .login-right {
+    padding:    2rem 1.4rem 3rem;
+    align-items: flex-start;
+    padding-top: 2rem;
+  }
+
+  .login-form-box {
+    padding:       2.2rem 1.8rem;
+    max-width:     100%;
+    border-radius: var(--radius-lg);
+    animation:     none; /* Remove heavy animation on mobile */
+    box-shadow:    0 6px 24px rgba(26,20,16,.09);
+  }
+
+  .auth-logo-img {
+    width:  34px;
+    height: 34px;
+  }
+}
+
+/* ── MOBILE LARGE: 480px–600px ──────────────────────────── */
+@media (max-width: 600px) {
+  .login-left {
+    padding: 2rem 1.4rem 1.8rem;
+  }
+
+  .login-left h2 {
+    font-size: clamp(1.7rem, 7vw, 2.2rem);
+  }
+
+  .login-right {
+    padding: 1.8rem 1rem 2.5rem;
+  }
+
+  .login-form-box {
+    padding:       2rem 1.3rem;
+    border-radius: var(--radius-md, 12px);
+  }
+
+  .form-heading {
+    font-size: 1.5rem;
+  }
+
+  .form-subheading {
+    font-size:     .83rem;
+    margin-bottom: 1.4rem;
+  }
+}
+
+/* ── MOBILE SMALL: ≤ 480px ───────────────────────────────── */
 @media (max-width: 480px) {
-  .login-form-box { padding: 2rem 1.4rem; border-radius: var(--radius-lg); }
-  .auth-logo-img  { width: 30px; height: 30px; }
+  .login-left {
+    padding: 1.6rem 1.2rem 1.4rem;
+    gap:     .9rem;
+  }
+
+  .login-left-logo {
+    font-size: 1.3rem;
+  }
+
+  .auth-logo-img {
+    width:  28px;
+    height: 28px;
+  }
+
+  .login-left h2 {
+    font-size: clamp(1.55rem, 8vw, 2rem);
+  }
+
+  .login-right {
+    padding: 1.4rem .9rem 2.2rem;
+  }
+
+  .login-form-box {
+    padding: 1.6rem 1.1rem;
+  }
+
+  .login-form-box::before {
+    left:  1.2rem;
+    right: 1.2rem;
+  }
+
+  .form-heading {
+    font-size: 1.35rem;
+  }
+
+  /* Two-column form extras stack on very small screens */
+  .form-extras {
+    flex-direction: column;
+    align-items:    flex-start;
+    gap:            .5rem;
+  }
+
+  /* Social buttons: slightly smaller text, still full-width */
+  .social-btn {
+    font-size: .8rem;
+    gap:       .55rem;
+  }
+}
+
+/* ── VERY SMALL: ≤ 360px (Galaxy S series, Moto G) ─────── */
+@media (max-width: 360px) {
+  .login-left {
+    padding: 1.3rem 1rem 1.2rem;
+  }
+
+  .login-form-box {
+    padding: 1.4rem .9rem;
+  }
+
+  .form-heading {
+    font-size: 1.25rem;
+  }
+
+  .login-right {
+    padding: 1.2rem .75rem 2rem;
+  }
+}
+
+/* ── LANDSCAPE MOBILE (short viewport, wide) ────────────── */
+@media (max-height: 500px) and (orientation: landscape) {
+  .login-page {
+    flex-direction: row;
+    min-height:     100dvh;
+  }
+
+  .login-left {
+    width:          36%;
+    padding:        1.4rem 1.8rem;
+    gap:            .9rem;
+    overflow-y:     auto;
+    justify-content: flex-start;
+  }
+
+  .login-left h2 {
+    font-size: 1.6rem;
+  }
+
+  .login-right {
+    padding:     1rem 1.2rem;
+    align-items: center;
+    overflow-y:  auto;
+  }
+
+  .login-form-box {
+    padding: 1.5rem 1.6rem;
+    /* Shrink max-width so form fits in landscape without scrolling */
+    max-width: 420px;
+    animation: none;
+  }
+
+  .form-heading {
+    font-size:     1.3rem;
+    margin-bottom: .2rem;
+  }
+
+  .form-subheading {
+    margin-bottom: 1rem;
+  }
+
+  .login-right .form-group {
+    margin-bottom: .75rem;
+  }
+
+  .form-extras {
+    margin-bottom: 1rem;
+  }
+
+  .btn-submit {
+    padding: .7rem;
+  }
+
+  .login-form-box .divider {
+    margin: .8rem 0;
+  }
+
+  .social-btn {
+    padding:    .6rem 1rem;
+    min-height: 42px;
+  }
+}
+
+/* ── REDUCED MOTION ──────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .login-left-logo,
+  .login-left h2,
+  .login-left-desc,
+  .feature-item,
+  .testimonial-card,
+  .login-form-box {
+    animation: none !important;
+  }
+
+  .btn-submit,
+  .social-btn,
+  .feature-check,
+  .forgot-link {
+    transition: none !important;
+  }
 }
