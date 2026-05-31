@@ -551,7 +551,7 @@ function fmtMoney(float $v): string {
               &middot; Last: <?= date('M j', strtotime($fav['last_booked'])) ?>
             </div>
           </div>
-          <a href="<?= BASE_URL ?>provider/<?= $fav['profile_id'] ?>" class="pr-fav-link">&rarr;</a>
+          <a href="<?= BASE_URL ?>providers/<?= $fav['profile_id'] ?>" class="pr-fav-link">&rarr;</a>
         </li>
         <?php endforeach; ?>
       </ul>

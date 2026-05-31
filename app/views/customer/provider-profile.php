@@ -1,5 +1,6 @@
 <?php
-// app/views/customer/provider-profile.php
+// app/views/customer/provider-profile.php — REDESIGNED: Business-Focused Profile
+// QuickBook Design System — Cream & Gold Edition
 
 require_once __DIR__ . '/../../../config/database.php';
 $db         = Database::getInstance();
@@ -79,6 +80,15 @@ $cmpStmt = $db->prepare("
 $cmpStmt->execute([$providerId]);
 $completedCount = (int)$cmpStmt->fetchColumn();
 
+// ── Favorites check & count ────────────────────────────────────
+$isFavStmt = $db->prepare("SELECT id FROM tbl_provider_favorites WHERE customer_id = ? AND provider_id = ?");
+$isFavStmt->execute([$customerId, $providerId]);
+$isFavorited = (bool)$isFavStmt->fetchColumn();
+
+$favCntStmt = $db->prepare("SELECT COUNT(*) FROM tbl_provider_favorites WHERE provider_id = ?");
+$favCntStmt->execute([$providerId]);
+$favoriteCount = (int)$favCntStmt->fetchColumn();
+
 // ── Nav data ───────────────────────────────────────────────────
 $stPoints = $db->prepare("SELECT COALESCE(SUM(points),0) FROM tbl_loyalty_points WHERE user_id = ?");
 $stPoints->execute([$customerId]);
@@ -116,7 +126,6 @@ $catEmojiMap = [
 ];
 $catEmoji = $catEmojiMap[$provider['category_slug'] ?? ''] ?? '🛠️';
 
-// Category accent color map
 $catAccentMap = [
     'barbershop'       => '#2563EB',
     'hair-salon'       => '#7C3AED',
@@ -154,14 +163,12 @@ function isOpenNow(?string $hoursJson): ?bool {
     return $now >= strtotime($day['open']) && $now <= strtotime($day['close']);
 }
 
-// Today availability
 $todayName  = date('l');
 $todayAvail = null;
 foreach ($availability as $av) {
     if ($av['day_of_week'] === $todayName) { $todayAvail = $av; break; }
 }
 
-// Open/closed status
 $openStatus = isOpenNow($provider['business_hours'] ?? null);
 if ($openStatus === null && $todayAvail) {
     $nowTs      = strtotime(date('H:i'));
@@ -169,7 +176,6 @@ if ($openStatus === null && $todayAvail) {
                && $nowTs <= strtotime($todayAvail['end_time']);
 }
 
-// Next available day
 $daysOfWeek = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 $todayIdx   = (int)(date('N')) - 1;
 $availDays  = array_column($availability, 'day_of_week');
@@ -183,7 +189,6 @@ for ($i = 1; $i <= 7; $i++) {
     }
 }
 
-// Location helpers
 $locTypes   = $provider['location_types_offered'] ?? 'In-shop';
 $offersHome = (int)$provider['offers_home_service'] === 1;
 $offersShop = strpos($locTypes, 'In-shop') !== false || strpos($locTypes, 'Flexible') !== false;
@@ -191,7 +196,6 @@ $showToggle = $offersHome && $offersShop;
 $isVerified = !empty($provider['is_verified']);
 $minPrice   = $services ? min(array_column($services, 'price')) : null;
 
-// Contact info
 $phone     = $provider['phone'] ?? $provider['contact_number'] ?? '';
 $email     = $provider['email'] ?? '';
 $website   = $provider['website'] ?? '';
@@ -216,7 +220,6 @@ $locIcons = [
     'Remote'   => '<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="3" width="9" height="6" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M4 9.5L6 11L8 9.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 ];
 
-// Address & map
 $addrParts   = array_filter([$provider['address'] ?? '', $provider['barangay'] ?? '', $provider['city'] ?? '']);
 $fullAddress = implode(', ', $addrParts);
 $mapQuery    = urlencode($fullAddress ?: ($provider['city'] ?? 'Bacolod City'));
@@ -231,9 +234,8 @@ $hasCoords   = $lat && $lng;
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QuickBook — <?= htmlspecialchars($provider['business_name']) ?></title>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_provider.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_provider_profile.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <!-- Leaflet for mini map -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
   <style>
@@ -247,7 +249,28 @@ $hasCoords   = $lat && $lng;
     }
 
     /* ══════════════════════════════════════
-       HERO — UPGRADED
+       BACK BUTTON — NAV TOP-LEFT
+    ══════════════════════════════════════ */
+    .pp-nav-back-btn {
+      display: inline-flex; align-items: center; gap: .45rem;
+      padding: .42rem 1.05rem; border-radius: var(--r-md);
+      background: var(--gold-lt); border: 1.5px solid var(--gold-border-md);
+      color: var(--gold-dim); font-family: var(--font-mono); font-size: .65rem;
+      font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+      text-decoration: none; transition: all .2s var(--ease-out); flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .pp-nav-back-btn:hover {
+      background: var(--gold-soft-md); border-color: var(--gold-border-lg);
+      transform: translateX(-2px);
+    }
+    [data-theme="dark"] .pp-nav-back-btn {
+      background: rgba(201,168,76,.12); border-color: rgba(201,168,76,.28); color: var(--gold);
+    }
+    .pp-nav-back-btn svg { flex-shrink: 0; }
+
+    /* ══════════════════════════════════════
+       HERO — BUSINESS-FIRST
     ══════════════════════════════════════ */
     .pp-hero-category-badge {
       display: inline-flex; align-items: center; gap: .45rem;
@@ -304,7 +327,7 @@ $hasCoords   = $lat && $lng;
       display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .7rem;
     }
 
-    /* hero avatar - larger, category-accented ring */
+    /* Hero business avatar */
     .pv-provider-av {
       width: 96px; height: 96px; border-radius: var(--r-lg); flex-shrink: 0;
       background: linear-gradient(135deg, var(--cat-accent-soft), var(--gold-lt));
@@ -324,6 +347,7 @@ $hasCoords   = $lat && $lng;
     }
     @keyframes ring-spin { to { transform: rotate(360deg); } }
 
+    /* Hero CTA row */
     .pv-hero-cta-row {
       display: flex; align-items: center; gap: .75rem; margin-top: 1rem; flex-wrap: wrap;
     }
@@ -342,25 +366,31 @@ $hasCoords   = $lat && $lng;
       box-shadow: 0 8px 28px rgba(201,168,76,.55);
       filter: brightness(1.06);
     }
-    .pp-hero-contact-btn {
+
+    /* Hero action buttons */
+    .pp-hero-action-btn {
       display: inline-flex; align-items: center; gap: .45rem;
-      padding: .7rem 1.4rem; border-radius: var(--r-md);
+      padding: .62rem 1.1rem; border-radius: var(--r-md);
       background: rgba(255,255,255,.55); color: var(--text-primary);
-      font-family: var(--font-body); font-size: .84rem; font-weight: 500;
+      font-family: var(--font-body); font-size: .82rem; font-weight: 500;
       border: 1.5px solid rgba(255,255,255,.70); backdrop-filter: blur(12px);
-      text-decoration: none; white-space: nowrap;
+      text-decoration: none; white-space: nowrap; cursor: pointer;
       transition: background .2s, border-color .2s, transform .15s var(--ease-out);
     }
-    [data-theme="dark"] .pp-hero-contact-btn {
+    [data-theme="dark"] .pp-hero-action-btn {
       background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.15);
       color: var(--text-muted);
     }
-    .pp-hero-contact-btn:hover {
+    .pp-hero-action-btn:hover {
       background: rgba(255,255,255,.80); border-color: var(--gold-border);
       transform: translateY(-1px);
     }
+    .pp-hero-action-btn.fav-active {
+      background: rgba(220,38,38,.10); border-color: rgba(220,38,38,.30); color: var(--red);
+    }
+    .pp-hero-action-btn.fav-active:hover { background: rgba(220,38,38,.18); }
 
-    /* hero bio */
+    /* Hero bio */
     .pp-hero-bio {
       font-size: .84rem; color: var(--text-muted); max-width: 600px;
       line-height: 1.65; margin-top: .7rem;
@@ -374,7 +404,7 @@ $hasCoords   = $lat && $lng;
     .pv-qs-val--accent { color: var(--cat-accent); }
 
     /* ══════════════════════════════════════
-       SECTION HEADER (inside main column)
+       SECTION HEADER
     ══════════════════════════════════════ */
     .pp-section-header {
       display: flex; align-items: center; justify-content: space-between;
@@ -504,9 +534,7 @@ $hasCoords   = $lat && $lng;
       font-family: var(--font-mono); font-size: .62rem; letter-spacing: .1em;
       text-transform: uppercase; color: var(--text-dim);
     }
-    .pp-svc-category-line {
-      flex: 1; height: 1px; background: var(--border);
-    }
+    .pp-svc-category-line { flex: 1; height: 1px; background: var(--border); }
     .pp-svc-grid { display: flex; flex-direction: column; gap: 10px; }
     .pp-svc-item {
       border-radius: var(--r-md); padding: 1.1rem 1.15rem;
@@ -523,9 +551,7 @@ $hasCoords   = $lat && $lng;
       box-shadow: 0 4px 20px rgba(0,0,0,.07);
       background: var(--card-bg);
     }
-    .pp-svc-item-top {
-      display: flex; align-items: flex-start; gap: .9rem; margin-bottom: .8rem;
-    }
+    .pp-svc-item-top { display: flex; align-items: flex-start; gap: .9rem; margin-bottom: .8rem; }
     .pp-svc-item-icon {
       width: 42px; height: 42px; border-radius: var(--r-sm); flex-shrink: 0;
       background: var(--cat-accent-soft); border: 1px solid var(--cat-accent-border);
@@ -610,9 +636,7 @@ $hasCoords   = $lat && $lng;
       width: 18px; text-align: right; flex-shrink: 0;
     }
     .pp-review-list { display: flex; flex-direction: column; gap: 0; }
-    .pp-review-item {
-      padding: 1.1rem 0; border-bottom: 1px solid var(--border);
-    }
+    .pp-review-item { padding: 1.1rem 0; border-bottom: 1px solid var(--border); }
     .pp-review-item:last-child { border-bottom: none; }
     .pp-review-head { display: flex; align-items: center; gap: .7rem; margin-bottom: .5rem; }
     .pp-review-av {
@@ -625,17 +649,13 @@ $hasCoords   = $lat && $lng;
     .pp-review-name { font-size: .86rem; font-weight: 600; color: var(--text-primary); }
     .pp-review-date { font-family: var(--font-mono); font-size: .6rem; color: var(--text-faint); margin-top: .05rem; }
     .pp-review-stars { display: flex; align-items: center; gap: 2px; margin-left: auto; }
-    .pp-review-text {
-      font-size: .83rem; color: var(--text-muted); line-height: 1.62;
-      margin-bottom: .4rem; font-style: italic;
-    }
+    .pp-review-text { font-size: .83rem; color: var(--text-muted); line-height: 1.62; margin-bottom: .4rem; font-style: italic; }
     .pp-review-service {
       display: inline-flex; align-items: center; gap: .3rem;
       font-family: var(--font-mono); font-size: .6rem; color: var(--cat-accent);
       background: var(--cat-accent-soft); border: 1px solid var(--cat-accent-border);
       padding: .12rem .55rem; border-radius: 99px;
     }
-    /* Provider reply */
     .pp-review-reply {
       margin-top: .65rem; padding: .75rem 1rem;
       background: var(--surface); border: 1px solid var(--border);
@@ -648,9 +668,7 @@ $hasCoords   = $lat && $lng;
       color: var(--cat-accent); text-transform: uppercase; letter-spacing: .06em;
       margin-bottom: .35rem;
     }
-    .pp-review-reply-text {
-      font-size: .8rem; color: var(--text-muted); line-height: 1.55;
-    }
+    .pp-review-reply-text { font-size: .8rem; color: var(--text-muted); line-height: 1.55; }
     .pp-reviews-empty {
       padding: 2.5rem 1.5rem; text-align: center;
       display: flex; flex-direction: column; align-items: center; gap: .6rem;
@@ -738,6 +756,21 @@ $hasCoords   = $lat && $lng;
       box-shadow: 0 8px 28px rgba(201,168,76,.50);
     }
 
+    /* ── Sidebar action buttons ── */
+    .pp-sidebar-actions {
+      display: flex; gap: .55rem; margin-top: .9rem; flex-wrap: wrap;
+    }
+    .pp-sb-action-btn {
+      flex: 1; min-width: 0; display: inline-flex; align-items: center; justify-content: center;
+      gap: .35rem; padding: .55rem .75rem; border-radius: var(--r-sm);
+      border: 1.5px solid var(--gold-border); background: rgba(201,168,76,.07);
+      color: rgba(237,227,204,.75); font-family: var(--font-mono); font-size: .6rem;
+      font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+      cursor: pointer; text-decoration: none; transition: all .2s; white-space: nowrap;
+    }
+    .pp-sb-action-btn:hover { background: rgba(201,168,76,.16); border-color: var(--gold-border-md); color: #EDE3CC; }
+    .pp-sb-action-btn.fav-active { background: rgba(220,38,38,.15); border-color: rgba(220,38,38,.35); color: #ef4444; }
+
     /* ══════════════════════════════════════
        SIDEBAR — AVAILABILITY CARD
     ══════════════════════════════════════ */
@@ -776,12 +809,8 @@ $hasCoords   = $lat && $lng;
     ══════════════════════════════════════ */
     .pp-map-card { overflow: hidden; padding: 0 !important; }
     .pp-map-card .pv-card-head { padding: 1.1rem 1.3rem .9rem; border-bottom: 1px solid var(--border); }
-    .pp-map-wrap {
-      position: relative; width: 100%; height: 220px; overflow: hidden;
-    }
-    #leafletMap {
-      width: 100%; height: 100%;
-    }
+    .pp-map-wrap { position: relative; width: 100%; height: 220px; overflow: hidden; }
+    #leafletMap { width: 100%; height: 100%; }
     .pp-map-fallback iframe {
       width: 100%; height: 220px; border: none; display: block;
       filter: saturate(.85) contrast(.95);
@@ -792,23 +821,31 @@ $hasCoords   = $lat && $lng;
     .pp-map-addr { padding: .9rem 1.2rem 1.05rem; }
     .pp-map-addr-row {
       display: flex; align-items: flex-start; gap: .5rem;
-      font-size: .8rem; color: var(--text-muted); margin-bottom: .38rem;
-      line-height: 1.5;
+      font-size: .8rem; color: var(--text-muted); margin-bottom: .38rem; line-height: 1.5;
     }
     .pp-map-home-row { color: var(--green); }
+    .pp-map-addr-actions { display: flex; gap: .5rem; margin-top: .65rem; flex-wrap: wrap; }
     .pp-map-directions-btn {
       display: inline-flex; align-items: center; gap: .45rem;
-      margin-top: .55rem; padding: .52rem 1rem; border-radius: var(--r-sm);
+      padding: .52rem 1rem; border-radius: var(--r-sm);
       background: var(--gold-lt); border: 1.5px solid var(--gold-border);
       color: var(--gold-dim); font-size: .78rem; font-weight: 600;
-      text-decoration: none; transition: all .2s;
+      text-decoration: none; transition: all .2s; flex: 1; justify-content: center;
     }
     .pp-map-directions-btn:hover { background: var(--gold-soft-md); border-color: var(--gold-border-md); }
+
+    /* Distance badge */
+    .pp-distance-badge {
+      display: inline-flex; align-items: center; gap: .35rem;
+      font-family: var(--font-mono); font-size: .6rem; font-weight: 700;
+      background: var(--cat-accent-soft); border: 1px solid var(--cat-accent-border);
+      color: var(--cat-accent); padding: .18rem .55rem; border-radius: 99px;
+      letter-spacing: .04em;
+    }
 
     /* ══════════════════════════════════════
        SIDEBAR — CONTACT CARD
     ══════════════════════════════════════ */
-    .pp-contact-card { }
     .pp-contact-list { display: flex; flex-direction: column; }
     .pp-contact-item {
       display: flex; align-items: center; gap: .85rem;
@@ -832,7 +869,7 @@ $hasCoords   = $lat && $lng;
     .pp-contact-val a:hover { opacity: .75; }
 
     /* ══════════════════════════════════════
-       BREADCRUMB + MISC
+       BREADCRUMB & MISC
     ══════════════════════════════════════ */
     .pv-breadcrumb {
       display: flex; align-items: center; gap: .45rem; flex-wrap: wrap;
@@ -842,17 +879,6 @@ $hasCoords   = $lat && $lng;
     .pv-breadcrumb a { color: var(--text-dim); transition: color .15s; }
     .pv-breadcrumb a:hover { color: var(--gold-dim); }
     .pv-breadcrumb span:last-child { color: var(--text-muted); }
-
-    /* ══════════════════════════════════════
-       NAV LOGOUT ICON
-    ══════════════════════════════════════ */
-    .pv-nav-logout-icon {
-      width: 34px; height: 34px; border-radius: 50%;
-      display: inline-flex; align-items: center; justify-content: center;
-      color: var(--text-dim); border: 1px solid transparent; font-size: 1.1rem;
-      transition: color .2s, background .2s, border-color .2s, transform .15s; flex-shrink: 0;
-    }
-    .pv-nav-logout-icon:hover { color: var(--red); background: var(--red-soft); border-color: var(--red-border); transform: translateY(-1px); }
 
     /* ══════════════════════════════════════
        LIGHTBOX
@@ -878,8 +904,9 @@ $hasCoords   = $lat && $lng;
     .pp-lightbox-close {
       position: absolute; top: -2.5rem; right: 0;
       color: rgba(255,255,255,.7); font-size: 1.5rem; cursor: pointer;
-      width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
-      border-radius: 50%; border: 1px solid rgba(255,255,255,.2); transition: all .15s;
+      width: 36px; height: 36px; display: flex; align-items: center;
+      justify-content: center; border-radius: 50%; border: 1px solid rgba(255,255,255,.2);
+      transition: all .15s;
     }
     .pp-lightbox-close:hover { color: #fff; background: rgba(255,255,255,.1); }
     .pp-lightbox-nav { display: flex; gap: .75rem; align-items: center; }
@@ -894,6 +921,30 @@ $hasCoords   = $lat && $lng;
       font-family: var(--font-mono); font-size: .7rem; color: rgba(255,255,255,.45);
       min-width: 60px; text-align: center;
     }
+
+    /* ══════════════════════════════════════
+       SHARE TOAST
+    ══════════════════════════════════════ */
+    .pp-share-toast {
+      position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%) translateY(100px);
+      background: var(--text-primary); color: var(--card-bg);
+      font-family: var(--font-mono); font-size: .7rem; font-weight: 700; letter-spacing: .06em;
+      padding: .65rem 1.4rem; border-radius: 99px;
+      box-shadow: 0 8px 28px rgba(0,0,0,.25);
+      transition: transform .3s var(--ease-out), opacity .3s; opacity: 0; z-index: 9998;
+    }
+    .pp-share-toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+    /* ══════════════════════════════════════
+       NAV LOGOUT ICON
+    ══════════════════════════════════════ */
+    .pv-nav-logout-icon {
+      width: 34px; height: 34px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: var(--text-dim); border: 1px solid transparent; font-size: 1.1rem;
+      transition: color .2s, background .2s, border-color .2s, transform .15s; flex-shrink: 0;
+    }
+    .pv-nav-logout-icon:hover { color: var(--red); background: var(--red-soft); border-color: var(--red-border); transform: translateY(-1px); }
 
     /* ══════════════════════════════════════
        RESPONSIVE
@@ -919,10 +970,11 @@ $hasCoords   = $lat && $lng;
 <div class="bg-orb bg-orb-1" aria-hidden="true"></div>
 <div class="bg-orb bg-orb-2" aria-hidden="true"></div>
 
-<!-- ════════════ NAVIGATION ════════════ -->
-<nav class="pv-nav" role="navigation" aria-label="Customer navigation">
+<!-- ════════════ NAVIGATION — Business Profile Variant ════════════ -->
+<nav class="pv-nav" role="navigation" aria-label="Provider profile navigation">
   <div class="pv-nav-inner">
 
+    <!-- Logo -->
     <a href="<?= BASE_URL ?>home" class="pv-logo">
       <img src="<?= BASE_URL ?>assets/img/QB_LOGO.png" alt="QuickBook Logo"
            style="width:42px;height:42px;object-fit:contain;display:block;flex-shrink:0;">
@@ -930,16 +982,20 @@ $hasCoords   = $lat && $lng;
       <span class="pv-logo-badge">Customer</span>
     </a>
 
-    <div class="pv-nav-links">
-      <a href="<?= BASE_URL ?>dashboard"  class="pv-nav-link">Dashboard</a>
-      <a href="<?= BASE_URL ?>bookings"   class="pv-nav-link">
-        Bookings<?php if ($upcomingCount): ?><sup class="pv-sup"><?= $upcomingCount ?></sup><?php endif; ?>
+    <!-- BACK TO BOOKINGS — prominent, replaces nav links -->
+    <div style="flex:1;display:flex;justify-content:center;">
+      <a href="<?= BASE_URL ?>bookings" class="pp-nav-back-btn" aria-label="Back to Bookings">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M9 2L4 7L9 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Back to Bookings
+        <?php if ($upcomingCount): ?>
+          <span class="pv-sup"><?= $upcomingCount ?></span>
+        <?php endif; ?>
       </a>
-      <a href="<?= BASE_URL ?>browse"     class="pv-nav-link is-active">Browse</a>
-      <a href="<?= BASE_URL ?>loyalty"    class="pv-nav-link">Loyalty</a>
-      <a href="<?= BASE_URL ?>profile"    class="pv-nav-link">Profile</a>
     </div>
 
+    <!-- Nav end -->
     <div class="pv-nav-end">
       <?php $notifUserId = (int)$customerId; require __DIR__ . "/../_partials/notification_panel.php"; ?>
 
@@ -962,21 +1018,56 @@ $hasCoords   = $lat && $lng;
         </svg>
       </button>
 
-      <div class="pv-nav-av" aria-hidden="true">
-        <?php if ($navAvatar): ?>
-          <img src="<?= $navAvatar ?>" alt="<?= $userName ?>"
-               style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
-        <?php else: ?>
-          <?= $initials ?>
-        <?php endif; ?>
+      <!-- User profile trigger -->
+      <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0" aria-expanded="false" aria-haspopup="true">
+        <div class="pv-nav-av" aria-hidden="true">
+          <?php if ($navAvatar): ?>
+            <img src="<?= $navAvatar ?>" alt="<?= $userName ?>"
+                 style="width:34px;height:34px;object-fit:cover;border-radius:99px;display:block;">
+          <?php else: ?>
+            <?= $initials ?>
+          <?php endif; ?>
+        </div>
+        <div class="pv-nav-user">
+          <div class="pv-nav-user-name"><?= $userName ?></div>
+          <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
+        </div>
+        <svg class="pv-profile-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <!-- Dropdown -->
+        <div class="pv-profile-dropdown" id="profileDropdown" role="menu">
+          <div class="pv-pd-header">
+            <div class="pv-pd-avatar">
+              <?php if ($navAvatar): ?>
+                <img src="<?= $navAvatar ?>" alt="">
+              <?php else: ?>
+                <?= $initials ?>
+              <?php endif; ?>
+            </div>
+            <div class="pv-pd-info">
+              <div class="pv-pd-name"><?= $userName ?></div>
+              <div class="pv-pd-tier"><?= $loyaltyTier ?> Member</div>
+            </div>
+          </div>
+          <div class="pv-pd-divider"></div>
+          <a href="<?= BASE_URL ?>profile" class="pv-pd-item" role="menuitem">
+            <div class="pv-pd-item-ico"><i class="fa-solid fa-user" style="font-size:.75rem;"></i></div>
+            My Profile
+            <svg class="pv-pd-item-arrow" width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2.5L6 5L3 7.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+          <a href="<?= BASE_URL ?>bookings" class="pv-pd-item" role="menuitem">
+            <div class="pv-pd-item-ico"><i class="fa-solid fa-calendar-check" style="font-size:.75rem;"></i></div>
+            My Bookings
+            <svg class="pv-pd-item-arrow" width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2.5L6 5L3 7.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+          <div class="pv-pd-divider"></div>
+          <a href="<?= BASE_URL ?>auth/logout" class="pv-pd-item pv-pd-item--danger" role="menuitem">
+            <div class="pv-pd-item-ico"><i class="fa-solid fa-arrow-right-from-bracket" style="font-size:.75rem;"></i></div>
+            Sign Out
+          </a>
+        </div>
       </div>
-      <div class="pv-nav-user">
-        <div class="pv-nav-user-name"><?= $userName ?></div>
-        <div class="pv-nav-user-role"><?= $loyaltyTier ?> Member</div>
-      </div>
-      <a href="<?= BASE_URL ?>auth/logout" class="pv-nav-logout-icon" title="Sign out" aria-label="Sign out">
-        <i class="fa-solid fa-arrow-right-from-bracket"></i>
-      </a>
     </div>
   </div>
 </nav>
@@ -990,14 +1081,14 @@ $hasCoords   = $lat && $lng;
 </div>
 <?php endif; ?>
 
-<!-- ════════════ HERO ════════════ -->
+<!-- ════════════ HERO — BUSINESS IDENTITY ════════════ -->
 <header class="pv-hero" role="banner">
   <div class="pv-hero-overlay" aria-hidden="true"></div>
 
   <div class="pv-hero-inner">
     <div class="pv-provider-hero-wrap">
 
-      <!-- Avatar with category ring -->
+      <!-- Business Avatar -->
       <?php
         $provPhoto    = $provider['profile_photo'] ?? '';
         $provInitials = strtoupper(substr($provider['first_name'] ?? 'P', 0, 1) . substr($provider['last_name'] ?? 'R', 0, 1));
@@ -1011,10 +1102,10 @@ $hasCoords   = $lat && $lng;
         <?php endif; ?>
       </div>
 
-      <!-- Info -->
+      <!-- Business Info -->
       <div class="pv-provider-info">
 
-        <!-- Category eyebrow — replaces generic "Service Provider" -->
+        <!-- Category eyebrow -->
         <div style="margin-bottom:.5rem;">
           <span class="pp-hero-category-badge">
             <span class="cat-dot"></span>
@@ -1040,7 +1131,7 @@ $hasCoords   = $lat && $lng;
           <?php endif; ?>
         </div>
 
-        <!-- Verified + Open/Closed badges -->
+        <!-- Verified + Open + Favorite count badges -->
         <div class="pv-hero-badge-row">
           <?php if ($isVerified): ?>
           <span class="pp-verified-badge">
@@ -1055,6 +1146,13 @@ $hasCoords   = $lat && $lng;
           <span class="pp-open-badge open"><span class="pp-open-dot"></span> Open Now</span>
           <?php elseif ($openStatus === false): ?>
           <span class="pp-open-badge closed"><span class="pp-open-dot"></span> Closed Now</span>
+          <?php endif; ?>
+
+          <?php if ($favoriteCount > 0): ?>
+          <span class="pp-verified-badge" style="background:rgba(220,38,38,.07);border-color:rgba(220,38,38,.22);color:var(--red);">
+            <i class="fa-solid fa-heart" style="font-size:.55rem;"></i>
+            <?= $favoriteCount ?> <?= $favoriteCount === 1 ? 'favorite' : 'favorites' ?>
+          </span>
           <?php endif; ?>
         </div>
 
@@ -1073,25 +1171,25 @@ $hasCoords   = $lat && $lng;
           </span>
           <?php endif; ?>
 
+          <?php if ($minPrice): ?>
+          <span class="pv-meta-chip pv-meta-chip--gold">
+            ₱<?= number_format((float)$minPrice, 0) ?>+ starting price
+          </span>
+          <?php endif; ?>
+
           <?php if ($offersHome): ?>
           <span class="pv-meta-chip pv-meta-chip--green">🏠 Home Service</span>
           <?php endif; ?>
-
-          <?php if (!empty($galleryPhotos)): ?>
-          <span class="pv-meta-chip">
-            🖼️ <?= count($galleryPhotos) ?> portfolio work<?= count($galleryPhotos) !== 1 ? 's' : '' ?>
-          </span>
-          <?php endif; ?>
         </div>
 
-        <!-- Business Bio / Description -->
+        <!-- Business Bio -->
         <?php if ($provider['bio']): ?>
         <p class="pp-hero-bio">
           <?= nl2br(htmlspecialchars($provider['bio'])) ?>
         </p>
         <?php endif; ?>
 
-        <!-- Hero CTAs -->
+        <!-- Hero CTAs + Actions -->
         <div class="pv-hero-cta-row">
           <?php if (!empty($services)): ?>
           <a href="<?= BASE_URL ?>services/<?= (int)$services[0]['id'] ?>"
@@ -1103,14 +1201,36 @@ $hasCoords   = $lat && $lng;
             Book Appointment
           </a>
           <?php endif; ?>
-          <?php if ($phone || $email): ?>
-          <button type="button" class="pp-hero-contact-btn" onclick="document.getElementById('sidebarContact')?.scrollIntoView({behavior:'smooth'})">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <path d="M3 2.5h8a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1v-7a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3"/>
-              <path d="M2 4l5 4 5-4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-            </svg>
-            Contact
+
+          <!-- Favorite button -->
+          <button type="button"
+                  class="pp-hero-action-btn <?= $isFavorited ? 'fav-active' : '' ?>"
+                  id="heroFavBtn"
+                  onclick="toggleFavorite()"
+                  aria-label="<?= $isFavorited ? 'Remove from favorites' : 'Add to favorites' ?>"
+                  title="<?= $isFavorited ? 'Remove from favorites' : 'Add to favorites' ?>">
+            <i class="fa-<?= $isFavorited ? 'solid' : 'regular' ?> fa-heart" id="heroFavIcon"></i>
+            <span id="heroFavText"><?= $isFavorited ? 'Saved' : 'Save' ?></span>
           </button>
+
+          <!-- Share button -->
+          <button type="button"
+                  class="pp-hero-action-btn"
+                  onclick="shareBusiness()"
+                  aria-label="Share this business" title="Share">
+            <i class="fa-solid fa-share-nodes"></i>
+            Share
+          </button>
+
+          <?php if ($fullAddress): ?>
+          <!-- Get directions -->
+          <a href="https://www.google.com/maps/search/?api=1&query=<?= $mapQuery ?>"
+             target="_blank" rel="noopener noreferrer"
+             class="pp-hero-action-btn"
+             aria-label="Get directions">
+            <i class="fa-solid fa-map-location-dot"></i>
+            Directions
+          </a>
           <?php endif; ?>
         </div>
 
@@ -1138,6 +1258,13 @@ $hasCoords   = $lat && $lng;
         <span class="pv-qs-val">₱<?= $minPrice ? number_format((float)$minPrice, 0) : '—' ?></span>
         <span class="pv-qs-label">From</span>
       </div>
+      <?php if ($favoriteCount > 0): ?>
+      <div class="pv-qs-div"></div>
+      <div class="pv-qs-item">
+        <span class="pv-qs-val" style="color:var(--red);"><?= $favoriteCount ?></span>
+        <span class="pv-qs-label">Saves</span>
+      </div>
+      <?php endif; ?>
       <?php if (!empty($galleryPhotos)): ?>
       <div class="pv-qs-div"></div>
       <div class="pv-qs-item">
@@ -1159,6 +1286,8 @@ $hasCoords   = $lat && $lng;
 
       <!-- Breadcrumb -->
       <nav class="pv-breadcrumb" aria-label="Breadcrumb">
+        <a href="<?= BASE_URL ?>bookings">Bookings</a>
+        <span aria-hidden="true">›</span>
         <a href="<?= BASE_URL ?>browse">Browse</a>
         <span aria-hidden="true">›</span>
         <?php if ($provider['category_name']): ?>
@@ -1254,7 +1383,7 @@ $hasCoords   = $lat && $lng;
           </div>
           <?php if (count($galleryPhotos) > 9): ?>
           <div style="text-align:center;padding:.75rem 0 .25rem;">
-            <button class="pp-gallery-all-btn" onclick="alert('Full gallery view — implement as needed')">
+            <button class="pp-gallery-all-btn" onclick="openLightbox(0)">
               <i class="fa-solid fa-images" style="font-size:.8rem;"></i>
               View all <?= count($galleryPhotos) ?> portfolio works
             </button>
@@ -1272,7 +1401,6 @@ $hasCoords   = $lat && $lng;
           </div>
           <?php else: ?>
 
-          <!-- Category header for services -->
           <div class="pp-svc-category-header">
             <span><?= $catEmoji ?> <?= htmlspecialchars($provider['category_name'] ?? 'Services') ?></span>
             <span class="pp-svc-category-line"></span>
@@ -1326,7 +1454,7 @@ $hasCoords   = $lat && $lng;
                    class="pp-svc-book-btn js-book-link"
                    data-service-id="<?= (int)$s['id'] ?>"
                    aria-label="Book <?= htmlspecialchars($s['name']) ?>">
-                  Book Now
+                  Book Appointment
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
                     <path d="M2.5 6h7M7 3.5L9.5 6 7 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                   </svg>
@@ -1349,7 +1477,6 @@ $hasCoords   = $lat && $lng;
             $avgRating = (float)$provider['avg_rating'];
             $totalRevs = count($allReviews);
           ?>
-          <!-- Rating summary -->
           <div class="pp-rating-summary">
             <div class="pp-rating-big-block">
               <div class="pp-rating-big-num"><?= number_format($avgRating, 1) ?></div>
@@ -1372,7 +1499,6 @@ $hasCoords   = $lat && $lng;
             </div>
           </div>
 
-          <!-- Review list with provider replies -->
           <div class="pp-review-list">
             <?php foreach ($allReviews as $rev):
               $revInitials = strtoupper(substr($rev['first_name'],0,1).substr($rev['last_name'],0,1));
@@ -1467,7 +1593,7 @@ $hasCoords   = $lat && $lng;
     </div><!-- /pv-main -->
 
     <!-- ══ RIGHT SIDEBAR ══ -->
-    <aside class="pv-sidebar" aria-label="Provider details">
+    <aside class="pv-sidebar" aria-label="Provider booking details">
 
       <!-- 1. QUICK BOOK CARD -->
       <?php if (!empty($services)): ?>
@@ -1506,7 +1632,13 @@ $hasCoords   = $lat && $lng;
             <?php if ($minPrice): ?>
             <div class="pp-qb-fact">
               <span class="pp-qb-fact-ico">₱</span>
-              <span>From <strong>₱<?= number_format((float)$minPrice,0) ?></strong> · <?= count($services) ?> services</span>
+              <span>From <strong>₱<?= number_format((float)$minPrice,0) ?></strong> · <?= count($services) ?> service<?= count($services) !== 1 ? 's' : '' ?></span>
+            </div>
+            <?php endif; ?>
+            <?php if ($completedCount > 0): ?>
+            <div class="pp-qb-fact">
+              <span class="pp-qb-fact-ico">✅</span>
+              <span><strong><?= $completedCount ?></strong> completed bookings</span>
             </div>
             <?php endif; ?>
           </div>
@@ -1518,6 +1650,27 @@ $hasCoords   = $lat && $lng;
             </svg>
             Book Appointment
           </a>
+          <!-- Sidebar action row -->
+          <div class="pp-sidebar-actions">
+            <button type="button"
+                    class="pp-sb-action-btn <?= $isFavorited ? 'fav-active' : '' ?>"
+                    id="sbFavBtn"
+                    onclick="toggleFavorite()"
+                    title="<?= $isFavorited ? 'Remove from favorites' : 'Add to favorites' ?>">
+              <i class="fa-<?= $isFavorited ? 'solid' : 'regular' ?> fa-heart" id="sbFavIcon"></i>
+              <span id="sbFavText"><?= $isFavorited ? 'Saved' : 'Save' ?></span>
+            </button>
+            <button type="button" class="pp-sb-action-btn" onclick="shareBusiness()" title="Share">
+              <i class="fa-solid fa-share-nodes"></i> Share
+            </button>
+            <?php if ($fullAddress): ?>
+            <a href="https://www.google.com/maps/search/?api=1&query=<?= $mapQuery ?>"
+               target="_blank" rel="noopener noreferrer"
+               class="pp-sb-action-btn" title="Get Directions">
+              <i class="fa-solid fa-diamond-turn-right"></i> Directions
+            </a>
+            <?php endif; ?>
+          </div>
         </div>
       </div>
       <?php endif; ?>
@@ -1531,7 +1684,7 @@ $hasCoords   = $lat && $lng;
                 <rect x="1" y="2" width="12" height="11" rx="2" stroke="currentColor" stroke-width="1.3"/>
                 <path d="M4 1v2M10 1v2M1 6h12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
               </svg>
-              Availability
+              Business Hours &amp; Availability
             </span>
           </h2>
         </div>
@@ -1590,7 +1743,7 @@ $hasCoords   = $lat && $lng;
                 <path d="M6.5 1C4.57 1 3 2.57 3 4.5C3 7.3 6.5 13 6.5 13S10 7.3 10 4.5C10 2.57 8.43 1 6.5 1Z" stroke="currentColor" stroke-width="1.3"/>
                 <circle cx="6.5" cy="4.5" r="1.5" stroke="currentColor" stroke-width="1.2"/>
               </svg>
-              Location
+              Shop Address
             </span>
           </h2>
         </div>
@@ -1622,21 +1775,23 @@ $hasCoords   = $lat && $lng;
           </div>
           <?php endif; ?>
           <?php if ($fullAddress): ?>
-          <a href="https://www.google.com/maps/search/?api=1&query=<?= $mapQuery ?>"
-             target="_blank" rel="noopener noreferrer" class="pp-map-directions-btn">
-            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <path d="M7 1L13 7L7 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M1 7h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            Get Directions
-          </a>
+          <div class="pp-map-addr-actions">
+            <a href="https://www.google.com/maps/search/?api=1&query=<?= $mapQuery ?>"
+               target="_blank" rel="noopener noreferrer" class="pp-map-directions-btn">
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <path d="M7 1L13 7L7 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M1 7h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              Get Directions
+            </a>
+          </div>
           <?php endif; ?>
         </div>
       </div>
 
       <!-- 4. CONTACT INFORMATION CARD -->
       <?php if ($phone || $email || $website || $instagram || $facebook): ?>
-      <div class="pv-card pp-contact-card" id="sidebarContact">
+      <div class="pv-card" id="sidebarContact">
         <div class="pv-card-head">
           <h2>
             <span style="display:flex;align-items:center;gap:.55rem;">
@@ -1703,6 +1858,9 @@ $hasCoords   = $lat && $lng;
   </div><!-- /pv-layout -->
 </main>
 
+<!-- Share toast -->
+<div class="pp-share-toast" id="shareToast">Link copied to clipboard!</div>
+
 <!-- ════════════ LIGHTBOX ════════════ -->
 <?php if (!empty($galleryPhotos)): ?>
 <div class="pp-lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Photo viewer">
@@ -1755,7 +1913,6 @@ document.addEventListener('DOMContentLoaded', function() {
     subdomains: 'abcd', maxZoom: 19
   }).addTo(map);
 
-  // Custom marker using category accent
   var markerHtml = '<div style="width:36px;height:36px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:<?= $catAccent ?>;border:3px solid white;box-shadow:0 3px 12px rgba(0,0,0,.35);"></div>';
   var customIcon = L.divIcon({ html: markerHtml, className: '', iconSize: [36, 36], iconAnchor: [18, 36], popupAnchor: [0, -36] });
 
@@ -1763,6 +1920,25 @@ document.addEventListener('DOMContentLoaded', function() {
     .addTo(map)
     .bindPopup('<strong><?= htmlspecialchars(addslashes($provider['business_name'])) ?></strong><br><small><?= htmlspecialchars(addslashes($fullAddress)) ?></small>')
     .openPopup();
+
+  // Try to show customer distance using Geolocation API
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(function(pos) {
+      var lat1 = pos.coords.latitude, lon1 = pos.coords.longitude;
+      var lat2 = <?= (float)$lat ?>, lon2 = <?= (float)$lng ?>;
+      var R = 6371;
+      var dLat = (lat2-lat1)*Math.PI/180;
+      var dLon = (lon2-lon1)*Math.PI/180;
+      var a = Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+      var c = 2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+      var d = (R*c).toFixed(1);
+      var badge = document.createElement('span');
+      badge.className = 'pp-distance-badge';
+      badge.innerHTML = '<i class="fa-solid fa-location-crosshairs" style="font-size:.55rem;"></i> ' + d + ' km from you';
+      var addrDiv = document.querySelector('.pp-map-addr-row');
+      if (addrDiv) addrDiv.parentNode.insertBefore(badge, addrDiv);
+    }, null, {timeout:5000});
+  }
 });
 </script>
 <?php endif; ?>
@@ -1802,6 +1978,77 @@ document.getElementById('homeAddress')?.addEventListener('input', updateBookLink
 </script>
 <?php endif; ?>
 
+<!-- ════════════ FAVORITE TOGGLE JS ════════════ -->
+<script>
+let isFavorited = <?= $isFavorited ? 'true' : 'false' ?>;
+let favCount    = <?= $favoriteCount ?>;
+
+function toggleFavorite() {
+  fetch('<?= BASE_URL ?>api/favorites/toggle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+    body: JSON.stringify({ provider_id: <?= $providerId ?> })
+  })
+  .then(r => r.ok ? r.json() : Promise.reject())
+  .then(data => {
+    isFavorited = data.favorited ?? !isFavorited;
+    favCount += isFavorited ? 1 : -1;
+    updateFavUI();
+  })
+  .catch(() => {
+    // Optimistic fallback
+    isFavorited = !isFavorited;
+    favCount += isFavorited ? 1 : -1;
+    updateFavUI();
+  });
+}
+
+function updateFavUI() {
+  const iconClass = isFavorited ? 'fa-solid fa-heart' : 'fa-regular fa-heart';
+  const text      = isFavorited ? 'Saved' : 'Save';
+
+  ['heroFavIcon','sbFavIcon'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = iconClass;
+  });
+  ['heroFavText','sbFavText'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  });
+  ['heroFavBtn','sbFavBtn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.classList.toggle('fav-active', isFavorited);
+      el.setAttribute('aria-label', isFavorited ? 'Remove from favorites' : 'Add to favorites');
+    }
+  });
+}
+</script>
+
+<!-- ════════════ SHARE JS ════════════ -->
+<script>
+function shareBusiness() {
+  const url  = window.location.href;
+  const name = '<?= htmlspecialchars(addslashes($provider['business_name'])) ?>';
+  const text = 'Check out ' + name + ' on QuickBook!';
+
+  if (navigator.share) {
+    navigator.share({ title: name, text: text, url: url }).catch(() => {});
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(() => showToast('Link copied to clipboard!'));
+  } else {
+    showToast('Link: ' + url);
+  }
+}
+
+function showToast(msg) {
+  const t = document.getElementById('shareToast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+</script>
+
 <!-- ════════════ TAB SWITCHING ════════════ -->
 <script>
 function switchTab(name, btn) {
@@ -1812,6 +2059,30 @@ function switchTab(name, btn) {
   const panelId = 'panel' + name.charAt(0).toUpperCase() + name.slice(1);
   document.getElementById(panelId)?.classList.remove('pp-panel--hidden');
 }
+</script>
+
+<!-- ════════════ PROFILE DROPDOWN ════════════ -->
+<script>
+(function() {
+  const trigger = document.getElementById('profileTrigger');
+  const dropdown = document.getElementById('profileDropdown');
+  if (!trigger || !dropdown) return;
+
+  trigger.addEventListener('click', function(e) {
+    e.stopPropagation();
+    const isOpen = dropdown.classList.toggle('is-open');
+    trigger.classList.toggle('is-open', isOpen);
+    trigger.setAttribute('aria-expanded', isOpen);
+  });
+
+  document.addEventListener('click', function() {
+    dropdown.classList.remove('is-open');
+    trigger.classList.remove('is-open');
+    trigger.setAttribute('aria-expanded', 'false');
+  });
+
+  dropdown.addEventListener('click', e => e.stopPropagation());
+})();
 </script>
 
 <!-- ════════════ THEME TOGGLE ════════════ -->

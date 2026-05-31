@@ -398,7 +398,7 @@ class CustomerController
                    pp.id               AS profile_id,
                    pp.business_name,
                    pp.bio,
-                   pp.address,
+                   pp.business_address,
                    pp.offers_home_service,
                    pp.is_approved,
                    pp.profile_photo,

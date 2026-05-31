@@ -8,19 +8,19 @@ require_once __DIR__ . '/../../../config/database.php';
 $db = Database::getInstance();
 
 /* ── Stats ── */
-$stTotal = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE customer_id = ?");
+$stTotal = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE customer_id = ? AND deleted_at IS NULL");
 $stTotal->execute([$userId]);
 $totalBookings = (int)$stTotal->fetchColumn();
 
-$stUpcoming = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE customer_id = ? AND status IN ('pending','confirmed') AND booking_date >= CURDATE()");
+$stUpcoming = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE customer_id = ? AND status IN ('pending','confirmed') AND booking_date >= CURDATE() AND deleted_at IS NULL");
 $stUpcoming->execute([$userId]);
 $upcomingCount = (int)$stUpcoming->fetchColumn();
 
-$stCompleted = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE customer_id = ? AND status = 'completed'");
+$stCompleted = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE customer_id = ? AND status = 'completed' AND deleted_at IS NULL");
 $stCompleted->execute([$userId]);
 $completedCount = (int)$stCompleted->fetchColumn();
 
-$stPending = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE customer_id = ? AND status = 'pending'");
+$stPending = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE customer_id = ? AND status = 'pending' AND deleted_at IS NULL");
 $stPending->execute([$userId]);
 $pendingCount = (int)$stPending->fetchColumn();
 
@@ -28,7 +28,7 @@ $stPoints = $db->prepare("SELECT COALESCE(SUM(points),0) FROM tbl_loyalty_points
 $stPoints->execute([$userId]);
 $loyaltyPoints = (int)$stPoints->fetchColumn();
 
-$stSpent = $db->prepare("SELECT COALESCE(SUM(s.price),0) FROM tbl_bookings b JOIN tbl_services s ON b.service_id = s.id WHERE b.customer_id = ? AND b.status = 'completed'");
+$stSpent = $db->prepare("SELECT COALESCE(SUM(b.total_amount),0) FROM tbl_bookings b WHERE b.customer_id = ? AND b.status = 'completed' AND b.deleted_at IS NULL");
 $stSpent->execute([$userId]);
 $totalSpent = (float)$stSpent->fetchColumn();
 
@@ -49,6 +49,7 @@ $stNextBooking = $db->prepare("
     JOIN tbl_provider_profiles pp ON b.provider_id = pp.id
     JOIN tbl_services s ON b.service_id = s.id
     WHERE b.customer_id = ? AND b.status IN ('pending','confirmed') AND b.booking_date >= CURDATE()
+      AND b.deleted_at IS NULL
     ORDER BY b.booking_date ASC, b.booking_time ASC LIMIT 1
 ");
 $stNextBooking->execute([$userId]);
@@ -61,6 +62,7 @@ $stUpcomingList = $db->prepare("
     JOIN tbl_provider_profiles pp ON b.provider_id = pp.id
     JOIN tbl_services s ON b.service_id = s.id
     WHERE b.customer_id = ? AND b.status IN ('pending','confirmed') AND b.booking_date >= CURDATE()
+      AND b.deleted_at IS NULL
     ORDER BY b.booking_date ASC LIMIT 3
 ");
 $stUpcomingList->execute([$userId]);
@@ -74,12 +76,14 @@ $stProviders = $db->prepare("
            COUNT(DISTINCT r.id) AS review_count,
            COUNT(DISTINCT b.id) AS booking_count,
            GROUP_CONCAT(DISTINCT s.service_type ORDER BY s.service_type SEPARATOR ', ') AS service_types,
+           GROUP_CONCAT(DISTINCT s.location_type ORDER BY s.location_type SEPARATOR ',') AS location_types,
            MIN(s.price) AS min_price
     FROM tbl_provider_profiles pp
+    JOIN tbl_users u ON pp.user_id = u.id
     LEFT JOIN tbl_services s ON s.provider_id = pp.id AND s.is_active = 1
     LEFT JOIN tbl_reviews r ON r.provider_id = pp.id
     LEFT JOIN tbl_bookings b ON b.provider_id = pp.id AND b.status = 'completed'
-    WHERE pp.is_approved = 1 AND pp.is_active = 1 AND pp.city = 'Bacolod City'
+    WHERE pp.is_approved = 1 AND pp.is_active = 1 AND u.is_active = 1 AND pp.city = 'Bacolod City'
     GROUP BY pp.id
     ORDER BY avg_rating DESC, booking_count DESC
     LIMIT 6
@@ -96,11 +100,28 @@ $stRecent = $db->prepare("
     JOIN tbl_provider_profiles pp ON b.provider_id = pp.id
     JOIN tbl_services s ON b.service_id = s.id
     JOIN tbl_users u ON pp.user_id = u.id
-    WHERE b.customer_id = ?
+    WHERE b.customer_id = ? AND b.deleted_at IS NULL
     ORDER BY b.created_at DESC LIMIT 5
 ");
 $stRecent->execute([$userId]);
 $recentBookings = $stRecent->fetchAll();
+
+/* ── Analytics: bookings by status ── */
+$stAnalytics = $db->prepare("
+  SELECT status, COUNT(*) AS cnt
+  FROM tbl_bookings
+  WHERE customer_id = ? AND deleted_at IS NULL
+  GROUP BY status
+");
+$stAnalytics->execute([$userId]);
+$analyticsByStatus = [];
+foreach ($stAnalytics->fetchAll() as $row) {
+  $analyticsByStatus[$row['status']] = (int)$row['cnt'];
+}
+$chartCompleted  = $analyticsByStatus['completed']  ?? 0;
+$chartPending    = $analyticsByStatus['pending']     ?? 0;
+$chartConfirmed  = $analyticsByStatus['confirmed']   ?? 0;
+$chartCancelled  = $analyticsByStatus['cancelled']   ?? 0;
 
 /* ── Pending review ── */
 $stLastCompleted = $db->prepare("
@@ -126,28 +147,12 @@ $greeting      = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 
 $initials      = strtoupper(substr($name, 0, 2));
 $firstNameOnly = explode(' ', $name)[0];
 
-/* ── Service categories ── */
-$categories = [
-    ['label' => 'Barbers',          'icon' => 'fa-scissors',   'slug' => 'barber'],
-    ['label' => 'Hair Salon',       'icon' => 'fa-scissors',        'slug' => 'hair'],
-    ['label' => 'Nail Care',        'icon' => 'fa-hand-sparkles',   'slug' => 'nail'],
-    ['label' => 'Massage Therapy',  'icon' => 'fa-spa',             'slug' => 'massage'],
-    ['label' => 'Skincare Facial',  'icon' => 'fa-face-smile-beam', 'slug' => 'skincare'],
-    ['label' => 'Fitness Training', 'icon' => 'fa-dumbbell',        'slug' => 'fitness'],
-    ['label' => 'Cleaning Services','icon' => 'fa-broom',           'slug' => 'cleaning'],
-    ['label' => 'Pet Grooming',     'icon' => 'fa-paw',             'slug' => 'pet'],
-    ['label' => 'Dental Services',  'icon' => 'fa-tooth',           'slug' => 'dental'],
-    ['label' => 'Makeup Artist',    'icon' => 'fa-wand-sparkles',   'slug' => 'makeup'],
-];
-
 /* ── Build provider map data for JS ── */
-// Fetch category slugs for map providers
+
+// Fetch category slugs for each featured provider
 $dashCatSlugs = [];
 if (!empty($featuredProviders)) {
-    $catIds = array_unique(array_filter(array_column($featuredProviders, 'id')));
-    // We join the category in the featured providers query, but service_types is a concatenation.
-    // Fetch category slugs via a separate lookup keyed by provider id
-    $dashProvIds   = array_column($featuredProviders, 'id');
+    $dashProvIds      = array_column($featuredProviders, 'id');
     $dashPlaceholders = implode(',', array_fill(0, count($dashProvIds), '?'));
     $dashCatStmt = $db->prepare("
         SELECT pp.id AS provider_id, c.slug AS cat_slug
@@ -157,21 +162,39 @@ if (!empty($featuredProviders)) {
     ");
     $dashCatStmt->execute($dashProvIds);
     foreach ($dashCatStmt->fetchAll() as $row) {
-        $dashCatSlugs[$row['provider_id']] = $row['cat_slug'] ?? '';
+        $dashCatSlugs[(int)$row['provider_id']] = $row['cat_slug'] ?? '';
     }
 }
 
 $mapProviders = [];
 foreach ($featuredProviders as $p) {
+    /* Service mode: in_shop=Gold, home_service=Blue, both=Orange
+       tbl_services.location_type enum: 'On-site','Remote','In-shop','Flexible' */
+    $locTypes = array_filter(array_map('trim', explode(',', strtolower($p['location_types'] ?? ''))));
+    $hasShop  = in_array('in-shop', $locTypes);
+    $hasHome  = in_array('on-site', $locTypes) || in_array('remote', $locTypes);
+    $hasFlex  = in_array('flexible', $locTypes);
+    if ($hasFlex || ($hasShop && $hasHome)) { $serviceMode = 'flexible'; }
+    elseif ($hasHome)                        { $serviceMode = 'home_service'; }
+    else                                     { $serviceMode = 'in_shop'; }
+
+    /* Address line */
+    $barangay = trim($p['barangay'] ?? '');
+    $city     = trim($p['city']     ?? 'Bacolod City');
+    $address  = $barangay ? $barangay . ', ' . $city : $city;
+
     $mapProviders[] = [
         'id'           => (int)$p['id'],
         'name'         => $p['business_name'],
-        'barangay'     => $p['barangay'] ?? '',
+        'photo'        => !empty($p['profile_photo']) ? $p['profile_photo'] : '',
+        'barangay'     => $barangay,
+        'address'      => $address,
         'lat'          => !empty($p['latitude'])  ? (float)$p['latitude']  : null,
         'lng'          => !empty($p['longitude']) ? (float)$p['longitude'] : null,
         'rating'       => round((float)$p['avg_rating'], 1),
         'category'     => !empty($p['service_types']) ? ucwords(strtolower(trim(explode(',', $p['service_types'])[0]))) : '',
         'categorySlug' => $dashCatSlugs[(int)$p['id']] ?? '',
+        'serviceMode'  => $serviceMode,
         'urlView'      => BASE_URL . 'provider/' . (int)$p['id'],
         'urlBook'      => BASE_URL . 'book/'     . (int)$p['id'],
         'minPrice'     => !empty($p['min_price']) ? '₱' . number_format((float)$p['min_price'], 0) : '',
@@ -179,23 +202,33 @@ foreach ($featuredProviders as $p) {
 }
 $mapProvidersJson = json_encode($mapProviders, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
 
-// Icon SVG map for dashboard map
-$dashCatIconMap = [
-    'barbershop'      => '<path d="M10 5 L10 19" stroke="#C9A84C" stroke-width="1.8" stroke-linecap="round"/><path d="M20 5 L20 19" stroke="#C9A84C" stroke-width="1.8" stroke-linecap="round"/><path d="M7.5 12 L22.5 12" stroke="#C9A84C" stroke-width="1.5" stroke-linecap="round"/><circle cx="10" cy="22.5" r="3" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5"/><circle cx="20" cy="22.5" r="3" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5"/>',
-    'hair-salon'      => '<path d="M9 26 C9 18 13 15 15 8" stroke="#C9A84C" stroke-width="1.8" stroke-linecap="round"/><path d="M21 26 C21 18 17 15 15 8" stroke="#C9A84C" stroke-width="1.8" stroke-linecap="round"/><path d="M11 10 C11 7.5 12.7 6 15 6 C17.3 6 19 7.5 19 10" stroke="#C9A84C" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M10 19 L20 19" stroke="#C9A84C" stroke-width="1.5" stroke-linecap="round"/>',
-    'nail-care'       => '<path d="M8 17 L8 12 C8 8.7 11.1 6 15 6 C18.9 6 22 8.7 22 12 L22 17" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" fill="none"/><rect x="6" y="17" width="18" height="7" rx="3" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5"/><circle cx="12" cy="20.5" r="1.2" fill="#C9A84C" opacity=".6"/><circle cx="18" cy="20.5" r="1.2" fill="#C9A84C" opacity=".6"/>',
-    'massage-therapy' => '<circle cx="15" cy="8" r="3.5" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5"/><path d="M6 24 C6 18.5 9.5 15 15 15 C20.5 15 24 18.5 24 24" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" fill="none"/>',
-    'skincare-facial' => '<circle cx="15" cy="15" r="9" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5"/><path d="M11.5 17 C12.5 18.5 13.8 19.2 15 19.2 C16.2 19.2 17.5 18.5 18.5 17" stroke="#C9A84C" stroke-width="1.4" stroke-linecap="round" fill="none"/><circle cx="11.5" cy="12.5" r="1" fill="#C9A84C"/><circle cx="18.5" cy="12.5" r="1" fill="#C9A84C"/>',
-    'fitness-training'=> '<rect x="11" y="8" width="8" height="14" rx="1.5" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5"/><rect x="7" y="10.5" width="4" height="9" rx="1.5" fill="#1A1000" stroke="#C9A84C" stroke-width="1.4"/><rect x="19" y="10.5" width="4" height="9" rx="1.5" fill="#1A1000" stroke="#C9A84C" stroke-width="1.4"/><path d="M3 15 L7 15" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round"/><path d="M23 15 L27 15" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round"/>',
-    'home-cleaning'   => '<path d="M5 26 L5 13 L15 5 L25 13 L25 26" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/><rect x="11" y="18" width="8" height="8" rx="1.2" fill="#1A1000" stroke="#C9A84C" stroke-width="1.4"/>',
-    'pet-grooming'    => '<ellipse cx="12" cy="17" rx="6" ry="7.5" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5"/><path d="M18 14 C20 14 25 12 25 8.5 C25 5.5 21.5 6 20.5 9" stroke="#C9A84C" stroke-width="1.5" stroke-linecap="round" fill="none"/>',
-    'dental'          => '<path d="M10 6 C7 6 5 8.5 5 11 C5 14 7 15 8 19 C9 22 9.5 25 11.5 25 C13 25 13.5 22 15 22 C16.5 22 17 25 18.5 25 C20.5 25 21 22 22 19 C23 15 25 14 25 11 C25 8.5 23 6 20 6 C18 6 17 7.5 15 7.5 C13 7.5 12 6 10 6 Z" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5" stroke-linejoin="round"/>',
-    'makeup'          => '<path d="M15 22 L15 12" stroke="#C9A84C" stroke-width="1.8" stroke-linecap="round"/><path d="M10 12 C10 8.7 12 7 15 7 C18 7 20 8.7 20 12 L10 12 Z" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5" stroke-linejoin="round"/><rect x="8" y="19" width="14" height="6" rx="3" fill="#1A1000" stroke="#C9A84C" stroke-width="1.5"/>',
+// ── Category SVG icon paths for map markers (same icons as Browse Categories) ──
+$dashCatIconPaths = [
+    'barbershop' => 'M10 5 L10 19 M20 5 L20 19 M7.5 12 L22.5 12',
+    'hair-salon' => 'M9 26 C9 18 13 15 15 8 M21 26 C21 18 17 15 15 8 M11 10 C11 7.5 12.7 6 15 6 C17.3 6 19 7.5 19 10 M10 19 L20 19',
+    'nail-care' => 'M8 17 L8 12 C8 8.7 11.1 6 15 6 C18.9 6 22 8.7 22 12 L22 17',
+    'massage-therapy' => 'circle|M6 24 C6 18.5 9.5 15 15 15 C20.5 15 24 18.5 24 24',
+    'skincare-facial' => 'circle-face|M11.5 17 C12.5 18.5 13.8 19.2 15 19.2 C16.2 19.2 17.5 18.5 18.5 17',
+    'fitness-training' => 'dumbbell',
+    'home-cleaning' => 'M5 26 L5 13 L15 5 L25 13 L25 26',
+    'pet-grooming' => 'pet',
+    'dental' => 'dental',
+    'makeup' => 'M15 22 L15 12 M10 12 C10 8.7 12 7 15 7 C18 7 20 8.7 20 12 L10 12 Z',
 ];
-$dashIconSvgMap = [];
-foreach ($dashCatIconMap as $slug => $paths) {
-    $dashIconSvgMap[$slug] = '<svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">' . $paths . '</svg>';
-}
+
+// Build full inline SVG strings for each category (used in JS divIcon html)
+$dashIconSvgMap = [
+    'barbershop' => '<svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 5 L10 19" stroke="#C9A84C" stroke-width="1.8" stroke-linecap="round"/><path d="M20 5 L20 19" stroke="#C9A84C" stroke-width="1.8" stroke-linecap="round"/><path d="M7.5 12 L22.5 12" stroke="#C9A84C" stroke-width="1.5" stroke-linecap="round"/><circle cx="10" cy="22.5" r="3" fill="none" stroke="#C9A84C" stroke-width="1.5"/><circle cx="20" cy="22.5" r="3" fill="none" stroke="#C9A84C" stroke-width="1.5"/></svg>',
+    'hair-salon' => '<svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 26 C9 18 13 15 15 8" stroke="#C9A84C" stroke-width="1.8" stroke-linecap="round"/><path d="M21 26 C21 18 17 15 15 8" stroke="#C9A84C" stroke-width="1.8" stroke-linecap="round"/><path d="M11 10 C11 7.5 12.7 6 15 6 C17.3 6 19 7.5 19 10" stroke="#C9A84C" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M10 19 L20 19" stroke="#C9A84C" stroke-width="1.5" stroke-linecap="round"/></svg>',
+    'nail-care' => '<svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 17 L8 12 C8 8.7 11.1 6 15 6 C18.9 6 22 8.7 22 12 L22 17" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" fill="none"/><rect x="6" y="17" width="18" height="7" rx="3" fill="none" stroke="#C9A84C" stroke-width="1.5"/><circle cx="12" cy="20.5" r="1.2" fill="#C9A84C"/><circle cx="18" cy="20.5" r="1.2" fill="#C9A84C"/></svg>',
+    'massage-therapy' => '<svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="15" cy="8" r="3.5" stroke="#C9A84C" stroke-width="1.5"/><path d="M6 24 C6 18.5 9.5 15 15 15 C20.5 15 24 18.5 24 24" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" fill="none"/><path d="M8 16.5 C5.5 17.5 4 20 4 22.5" stroke="#C9A84C" stroke-width="1.3" stroke-linecap="round" fill="none"/><path d="M22 16.5 C24.5 17.5 26 20 26 22.5" stroke="#C9A84C" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>',
+    'skincare-facial' => '<svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="15" cy="15" r="9" stroke="#C9A84C" stroke-width="1.5"/><path d="M11.5 17 C12.5 18.5 13.8 19.2 15 19.2 C16.2 19.2 17.5 18.5 18.5 17" stroke="#C9A84C" stroke-width="1.4" stroke-linecap="round" fill="none"/><circle cx="11.5" cy="12.5" r="1" fill="#C9A84C"/><circle cx="18.5" cy="12.5" r="1" fill="#C9A84C"/></svg>',
+    'fitness-training' => '<svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="11" y="8" width="8" height="14" rx="1.5" stroke="#C9A84C" stroke-width="1.5"/><rect x="7" y="10.5" width="4" height="9" rx="1.5" stroke="#C9A84C" stroke-width="1.4"/><rect x="19" y="10.5" width="4" height="9" rx="1.5" stroke="#C9A84C" stroke-width="1.4"/><path d="M3 15 L7 15" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round"/><path d="M23 15 L27 15" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    'home-cleaning' => '<svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 26 L5 13 L15 5 L25 13 L25 26" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/><rect x="11" y="18" width="8" height="8" rx="1.2" stroke="#C9A84C" stroke-width="1.4"/><path d="M10 13 L15 9.5 L20 13" stroke="#C9A84C" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+    'pet-grooming' => '<svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="12" cy="17" rx="6" ry="7.5" stroke="#C9A84C" stroke-width="1.5"/><path d="M18 14 C20 14 25 12 25 8.5 C25 5.5 21.5 6 20.5 9" stroke="#C9A84C" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M18 16 C20.5 17 24.5 16 24.5 13" stroke="#C9A84C" stroke-width="1.4" stroke-linecap="round" fill="none"/><circle cx="10" cy="14.5" r="1" fill="#C9A84C"/><circle cx="13.5" cy="13" r="1" fill="#C9A84C"/></svg>',
+    'dental' => '<svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 6 C7 6 5 8.5 5 11 C5 14 7 15 8 19 C9 22 9.5 25 11.5 25 C13 25 13.5 22 15 22 C16.5 22 17 25 18.5 25 C20.5 25 21 22 22 19 C23 15 25 14 25 11 C25 8.5 23 6 20 6 C18 6 17 7.5 15 7.5 C13 7.5 12 6 10 6 Z" stroke="#C9A84C" stroke-width="1.5" stroke-linejoin="round"/><path d="M10.5 6.5 C10.5 10 12 12 15 12 C18 12 19.5 10 19.5 6.5" stroke="#C9A84C" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>',
+    'makeup' => '<svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15 22 L15 12" stroke="#C9A84C" stroke-width="1.8" stroke-linecap="round"/><path d="M10 12 C10 8.7 12 7 15 7 C18 7 20 8.7 20 12 L10 12 Z" stroke="#C9A84C" stroke-width="1.5" stroke-linejoin="round"/><rect x="8" y="19" width="14" height="6" rx="3" stroke="#C9A84C" stroke-width="1.5"/><path d="M11 22 L19 22" stroke="#C9A84C" stroke-width="1" stroke-linecap="round"/></svg>',
+];
 $dashIconSvgJson = json_encode($dashIconSvgMap, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
 
 function fmtMoney(float $v): string {
@@ -341,10 +374,10 @@ $spentDisplay = fmtMoney($totalSpent);
     <div class="pv-hero-left">
       <p class="pv-hero-eyebrow">
         <span class="pv-dot-pulse" aria-hidden="true"></span>
-        <?= $greeting ?>
+        <span id="pv-greeting"><?= $greeting ?></span>
       </p>
-      <h1 class="pv-hero-name"><?= $firstNameOnly ?></h1>
-      <div class="pv-hero-location">
+      <h1 class="pv-hero-name" style="margin-bottom:.6rem;"><?= $firstNameOnly ?></h1>
+      <div class="pv-hero-location" style="margin-top:.6rem;">
         <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
         <span>Bacolod City, Negros Occidental</span>
       </div>
@@ -353,10 +386,17 @@ $spentDisplay = fmtMoney($totalSpent);
           <span class="pv-status-dot" aria-hidden="true"></span>
           Active Member
         </span>
-        <span class="pv-tier-badge">⭐ <?= $loyaltyTier ?></span>
-        <span class="pv-date-badge"><?= date('M j, Y') ?></span>
+
       </div>
     </div>
+    <script>
+      (function() {
+        var h = new Date().getHours();
+        var g = h < 12 ? 'Good morning' : (h < 18 ? 'Good afternoon' : 'Good evening');
+        var el = document.getElementById('pv-greeting');
+        if (el) el.textContent = g;
+      })();
+    </script>
 
     <!-- Right: next appointment card -->
     <?php if ($nextBooking): ?>
@@ -377,15 +417,6 @@ $spentDisplay = fmtMoney($totalSpent);
         <span class="pv-appt-price">₱<?= number_format((float)$nextBooking['price'], 0) ?></span>
         <span class="pv-appt-cta">View Details →</span>
       </div>
-    </a>
-    <?php else: ?>
-    <a href="<?= BASE_URL ?>browse" class="pv-appt-card pv-appt-card--empty" aria-label="Browse services">
-      <div class="pv-appt-card-tag">
-        <i class="fa-solid fa-calendar-plus" aria-hidden="true"></i>
-        No Upcoming Booking
-      </div>
-      <div class="pv-appt-empty-body">Ready to book your next service?</div>
-      <div class="pv-appt-cta-big">Browse Services →</div>
     </a>
     <?php endif; ?>
 
@@ -422,22 +453,6 @@ $spentDisplay = fmtMoney($totalSpent);
 
 <!-- ══ MAIN PAGE ══ -->
 <main class="pv-page" role="main">
-
-  <!-- ── Browse Categories ── -->
-  <section class="pv-section" aria-label="Browse by category">
-    <div class="pv-section-head">
-      <h2 class="pv-section-title">Browse Categories</h2>
-      <a href="<?= BASE_URL ?>browse" class="pv-link">See all →</a>
-    </div>
-    <div class="pv-categories-row">
-      <?php foreach ($categories as $cat): ?>
-      <a href="<?= BASE_URL ?>browse?category=<?= $cat['slug'] ?>" class="pv-cat-pill">
-        <span class="pv-cat-icon" aria-hidden="true"><i class="fa-solid <?= $cat['icon'] ?>"></i></span>
-        <span class="pv-cat-label"><?= $cat['label'] ?></span>
-      </a>
-      <?php endforeach; ?>
-    </div>
-  </section>
 
   <!-- ── Main layout: providers + sidebar ── -->
   <div class="pv-layout">
@@ -487,43 +502,82 @@ $spentDisplay = fmtMoney($totalSpent);
                 ? ucwords(strtolower(trim(explode(',', $p['service_types'])[0])))
                 : '';
           ?>
+          <?php
+            // Trust badge logic
+            $isVerified   = !empty($p['is_verified']);
+            $isTopRated   = $avgRating >= 4.5;
+            $reviewCount  = (int)$p['review_count'];
+            $bookingCount = (int)$p['booking_count'];
+            // "Available Today" — check if provider has any active services (booking_count proxy)
+            $availableToday = $bookingCount > 0 || $reviewCount > 0;
+          ?>
           <div class="pv-provider-card" data-provider-id="<?= (int)$p['id'] ?>">
-            <div class="pv-provider-photo">
+
+            <!-- Photo / Cover -->
+            <div class="pv-pc-photo">
               <?php if (!empty($p['profile_photo'])): ?>
                 <img src="<?= htmlspecialchars($p['profile_photo']) ?>" alt="<?= htmlspecialchars($p['business_name']) ?>">
               <?php else: ?>
-                <div class="pv-provider-photo-placeholder"><?= $catEmoji ?></div>
+                <div class="pv-pc-placeholder"><?= $catEmoji ?></div>
               <?php endif; ?>
-              <?php if ($avgRating >= 4.5): ?>
-                <div class="pv-provider-top-badge">⭐ Top Rated</div>
+              <!-- Gradient overlay always present -->
+              <div class="pv-pc-overlay" aria-hidden="true"></div>
+
+              <!-- Top-left badges -->
+              <div class="pv-pc-badges">
+                <?php if ($isTopRated): ?>
+                  <span class="pv-pc-badge pv-pc-badge--top">⭐ Top Rated</span>
+                <?php endif; ?>
+                <?php if ($isVerified): ?>
+                  <span class="pv-pc-badge pv-pc-badge--verified"><i class="fa-solid fa-shield-check"></i> Verified</span>
+                <?php endif; ?>
+              </div>
+
+              <!-- Available Today — bottom-right of photo -->
+              <?php if ($availableToday): ?>
+              <div class="pv-pc-avail">
+                <span class="pv-pc-avail-dot" aria-hidden="true"></span>
+                Available Today
+              </div>
               <?php endif; ?>
             </div>
-            <div class="pv-provider-body">
-              <div class="pv-provider-name"><?= htmlspecialchars($p['business_name']) ?></div>
+
+            <!-- Body -->
+            <div class="pv-pc-body">
+              <!-- Category -->
               <?php if ($firstCategory): ?>
-              <div class="pv-provider-category"><?= htmlspecialchars($firstCategory) ?></div>
+              <div class="pv-pc-category"><?= htmlspecialchars($firstCategory) ?></div>
               <?php endif; ?>
-              <div class="pv-provider-meta-row">
-                <span class="pv-provider-stars" aria-label="Rated <?= $avgRating ?> out of 5">
-                  <?= starRating($avgRating) ?>
-                  <span class="pv-stars-val"><?= $avgRating > 0 ? number_format($avgRating, 1) : 'New' ?></span>
-                  <?php if ((int)$p['review_count'] > 0): ?>
-                  <span class="pv-stars-count">(<?= (int)$p['review_count'] ?>)</span>
-                  <?php endif; ?>
-                </span>
+
+              <!-- Name -->
+              <div class="pv-pc-name"><?= htmlspecialchars($p['business_name']) ?></div>
+
+              <!-- Rating row -->
+              <div class="pv-pc-rating-row" aria-label="Rated <?= $avgRating ?> out of 5">
+                <span class="pv-pc-stars"><?= starRating($avgRating) ?></span>
+                <span class="pv-pc-rating-val"><?= $avgRating > 0 ? number_format($avgRating, 1) : 'New' ?></span>
+                <?php if ($reviewCount > 0): ?>
+                  <span class="pv-pc-rating-count"><?= $reviewCount ?> review<?= $reviewCount > 1 ? 's' : '' ?></span>
+                <?php endif; ?>
               </div>
-              <div class="pv-provider-loc">
+
+              <!-- Location -->
+              <div class="pv-pc-loc">
                 <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
                 <?= !empty($p['barangay']) ? htmlspecialchars($p['barangay']) . ', Bacolod City' : 'Bacolod City' ?>
               </div>
-              <?php if (!empty($p['min_price'])): ?>
-              <div class="pv-provider-from">From <strong><?= fmtMoney((float)$p['min_price']) ?></strong></div>
-              <?php endif; ?>
             </div>
-            <div class="pv-provider-actions">
-              <a href="<?= BASE_URL ?>provider/<?= (int)$p['id'] ?>" class="pv-provider-btn pv-provider-btn--outline">View Profile</a>
-              <a href="<?= BASE_URL ?>book/<?= (int)$p['id'] ?>"    class="pv-provider-btn pv-provider-btn--primary">Book Now</a>
+
+            <!-- Actions -->
+            <div class="pv-pc-actions">
+              <a href="<?= BASE_URL ?>provider/<?= (int)$p['id'] ?>" class="pv-pc-btn pv-pc-btn--ghost">
+                <i class="fa-regular fa-user" aria-hidden="true"></i> View Profile
+              </a>
+              <a href="<?= BASE_URL ?>book/<?= (int)$p['id'] ?>" class="pv-pc-btn pv-pc-btn--primary">
+                <i class="fa-solid fa-calendar-check" aria-hidden="true"></i> Book Appointment
+              </a>
             </div>
+
           </div>
           <?php endforeach; ?>
         </div>
@@ -543,7 +597,7 @@ $spentDisplay = fmtMoney($totalSpent);
             <table class="pv-rb-table">
               <thead>
                 <tr>
-                  <th>Service</th>
+                  <th>Business</th>
                   <th>Provider</th>
                   <th>Price</th>
                   <th>Duration</th>
@@ -557,7 +611,7 @@ $spentDisplay = fmtMoney($totalSpent);
                   $dLabel = $dm ? (($dm >= 60 && $dm % 60 === 0) ? ($dm/60).' hr' : $dm.' min') : '—';
                 ?>
                 <tr>
-                  <td><div class="pv-rb-name"><?= htmlspecialchars($b['service_name']) ?></div></td>
+                  <td><div class="pv-rb-name"><?= htmlspecialchars($b['business_name']) ?></div></td>
                   <td><?= htmlspecialchars($b['provider_name'] ?? '—') ?></td>
                   <td class="pv-rb-price">₱<?= number_format((float)$b['price'], 2) ?></td>
                   <td><?= $dLabel ?></td>
@@ -679,6 +733,44 @@ $spentDisplay = fmtMoney($totalSpent);
         </div>
       </div>
 
+      <!-- Booking Analytics -->
+      <div class="pv-card">
+        <div class="pv-card-head">
+          <h2>Booking Analytics</h2>
+        </div>
+        <div class="pv-analytics-body">
+          <div class="pv-analytics-chart-wrap">
+            <canvas id="bookingDonut" width="160" height="160"></canvas>
+            <div class="pv-analytics-center">
+              <div class="pv-analytics-total"><?= $totalBookings ?></div>
+              <div class="pv-analytics-sublabel">Total Bookings</div>
+            </div>
+          </div>
+          <div class="pv-analytics-legend">
+            <div class="pv-analytics-leg-item">
+              <span class="pv-analytics-dot" style="background:#4CAF50;"></span>
+              <span class="pv-analytics-leg-label">Completed</span>
+              <span class="pv-analytics-leg-val"><?= $chartCompleted ?></span>
+            </div>
+            <div class="pv-analytics-leg-item">
+              <span class="pv-analytics-dot" style="background:#C9A84C;"></span>
+              <span class="pv-analytics-leg-label">Confirmed</span>
+              <span class="pv-analytics-leg-val"><?= $chartConfirmed ?></span>
+            </div>
+            <div class="pv-analytics-leg-item">
+              <span class="pv-analytics-dot" style="background:#3B82F6;"></span>
+              <span class="pv-analytics-leg-label">Pending</span>
+              <span class="pv-analytics-leg-val"><?= $chartPending ?></span>
+            </div>
+            <div class="pv-analytics-leg-item">
+              <span class="pv-analytics-dot" style="background:#EF4444;"></span>
+              <span class="pv-analytics-leg-label">Cancelled</span>
+              <span class="pv-analytics-leg-val"><?= $chartCancelled ?></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </aside>
 
   </div><!-- /pv-layout -->
@@ -691,7 +783,7 @@ $spentDisplay = fmtMoney($totalSpent);
       <strong>How was your <?= htmlspecialchars(strtolower($pendingReview['service_name'])) ?> at <?= htmlspecialchars($pendingReview['business_name']) ?>?</strong>
       <p>Share your experience and earn 50 bonus loyalty points.</p>
     </div>
-    <a href="<?= BASE_URL ?>review/create/<?= (int)$pendingReview['id'] ?>" class="pv-review-btn">Leave a Review</a>
+   <a href="<?= BASE_URL ?>bookings/<?= (int)$pendingReview['id'] ?>/review">Leave a Review</a>
   </div>
   <?php endif; ?>
 
@@ -699,14 +791,46 @@ $spentDisplay = fmtMoney($totalSpent);
 
 <!-- ══ SCRIPTS ══ -->
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+(function() {
+  var ctx = document.getElementById('bookingDonut');
+  if (!ctx) return;
+  var completed  = <?= (int)$chartCompleted ?>;
+  var confirmed  = <?= (int)$chartConfirmed ?>;
+  var pending    = <?= (int)$chartPending ?>;
+  var cancelled  = <?= (int)$chartCancelled ?>;
+  var total = completed + confirmed + pending + cancelled;
+  if (total === 0) { completed = 1; } // show empty state ring
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      datasets: [{
+        data: [completed, confirmed, pending, cancelled],
+        backgroundColor: ['#4CAF50','#C9A84C','#3B82F6','#EF4444'],
+        borderWidth: 3,
+        borderColor: 'transparent',
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      cutout: '75%',
+      plugins: { legend: { display: false }, tooltip: { enabled: total > 0 } },
+      animation: { animateRotate: true, duration: 900 }
+    }
+  });
+})();
+</script>
+
 <!-- Leaflet JS — load before map init script -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
 <script>
 /* ══════════════════════════════════════
-   DASHBOARD MAP — Preview-only
-   Shows category icons, no popup cards.
-   Full interactions are on Browse page.
+   DASHBOARD MAP — Matches Browse page style exactly
+   Diamond markers (white bg + gold border) with category SVG icons
+   Service-mode colour badge in popup only
+   OSM tiles + dark-mode filter identical to Browse
 ══════════════════════════════════════ */
 (function () {
   var mapEl = document.getElementById('providerMap');
@@ -718,118 +842,326 @@ $spentDisplay = fmtMoney($totalSpent);
 
   if (!providers.length) return;
 
+  /* Service mode meta — drives both marker colour and popup badge */
+  var MODE_META = {
+    in_shop:      { color: '#C9A84C', stroke: '#A8892E', label: 'In-Shop' },
+    home_service: { color: '#3B82F6', stroke: '#2563EB', label: 'Home Service' },
+    flexible:     { color: '#F97316', stroke: '#EA6000', label: 'Flexible' }
+  };
+
+  /* ── Init map ── */
   var map = L.map('providerMap', {
-    center: BACOLOD,
-    zoom: 13,
-    zoomControl: false,
-    scrollWheelZoom: false,
-    dragging: false,
-    doubleClickZoom: false,
+    center:           BACOLOD,
+    zoom:             13,
+    zoomControl:      true,
+    scrollWheelZoom:  false,
+    dragging:         true,
+    doubleClickZoom:  false,
+    touchZoom:        false,
+    keyboard:         false,
     attributionControl: true
   });
 
+  /* ── OSM tiles — identical to Browse page ── */
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     maxZoom: 18
   }).addTo(map);
 
-  if (document.documentElement.getAttribute('data-theme') === 'dark') {
-    var tilePaneEl = document.querySelector('#providerMap .leaflet-tile-pane');
-    if (tilePaneEl) tilePaneEl.style.filter =
-      'brightness(0.7) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7)';
-  }
+  /* ── Dark-mode filter — handled by applyTheme() in theme toggle script ── */
 
-  function makeDashIcon(slug) {
-    var svgContent = iconSvgMap[slug] || '';
-    var html = '<div style="' +
-      'width:34px;height:34px;' +
-      'background:#fff;' +
-      'border:2px solid #C9A84C;' +
-      'border-radius:50% 50% 50% 0;' +
-      'transform:rotate(-45deg);' +
-      'display:flex;align-items:center;justify-content:center;' +
-      'filter:drop-shadow(0 2px 6px rgba(139,110,32,.38));' +
+  /* ── Compact SVG pin marker — service-mode colour-coded ── */
+  function makeCatIcon(slug, isActive, serviceMode) {
+    var mode   = serviceMode || 'in_shop';
+    var meta   = MODE_META[mode] || MODE_META['in_shop'];
+    var fill   = meta.color;
+    var stroke = meta.stroke;
+
+    /* Pin sizes: normal = 22x30, active = 28x38 */
+    var W      = isActive ? 28 : 22;
+    var H      = isActive ? 38 : 30;
+    var headR  = isActive ? 11 : 9;   /* outer radius of pin head circle */
+    var cx     = W / 2;
+    var headCy = headR + 1;
+
+    /* Tail: two bezier curves meeting at the tip */
+    var tailPath =
+      'M ' + (cx - headR * 0.52) + ' ' + (headCy + headR * 0.72) +
+      ' Q ' + cx + ' ' + (H - 1) + ' ' +
+      (cx + headR * 0.52) + ' ' + (headCy + headR * 0.72) + ' Z';
+
+    var shadow = isActive
+      ? 'drop-shadow(0 3px 7px rgba(0,0,0,.42))'
+      : 'drop-shadow(0 2px 4px rgba(0,0,0,.30))';
+
+    var html =
+      '<div class="qb-map-marker' + (isActive ? ' is-active' : '') + '" style="' +
+        'width:' + W + 'px;height:' + H + 'px;' +
+        'filter:' + shadow + ';' +
+        'transition:all .18s cubic-bezier(.22,1,.36,1);' +
+        'cursor:pointer;' +
       '">' +
-      '<div style="transform:rotate(45deg);width:20px;height:20px;display:flex;align-items:center;justify-content:center;">' +
-        svgContent +
-      '</div>' +
+        '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" ' +
+            'fill="none" xmlns="http://www.w3.org/2000/svg">' +
+          '<path d="' + tailPath + '" fill="' + fill + '"/>' +
+          '<circle cx="' + cx + '" cy="' + headCy + '" r="' + headR + '" ' +
+              'fill="' + fill + '"/>' +
+          '<circle cx="' + cx + '" cy="' + headCy + '" r="' + Math.round(headR * 0.36) + '" ' +
+              'fill="rgba(255,255,255,0.55)"/>' +
+        '</svg>' +
       '</div>';
+
     return L.divIcon({
-      className: '',
-      html: html,
-      iconSize:   [34, 34],
-      iconAnchor: [17, 34],
-      popupAnchor:[0, -36]
+      className:   '',
+      html:        html,
+      iconSize:    [W, H],
+      iconAnchor:  [W / 2, H],
+      popupAnchor: [0, -(H + 4)],
+      shadowUrl:   '',
+      shadowSize:  [0, 0]
     });
   }
 
+  /* ── Legend control (service mode key) ── */
+  var LegendCtrl = L.Control.extend({
+    onAdd: function () {
+      var el = L.DomUtil.create('div', 'qb-map-legend');
+      el.innerHTML =
+        '<div class="qb-map-legend-title">Service Type</div>' +
+        Object.keys(MODE_META).map(function (k) {
+          var m = MODE_META[k];
+          /* Mini pin SVG: 10x14 teardrop */
+          var pinSvg =
+            '<svg width="10" height="14" viewBox="0 0 10 14" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">' +
+              '<path d="M 2.4 8.2 Q 5 13 7.6 8.2 Z" fill="' + m.color + '"/>' +
+              '<circle cx="5" cy="4.5" r="3.8" fill="' + m.color + '"/>' +
+              '<circle cx="5" cy="4.5" r="1.4" fill="rgba(255,255,255,0.55)"/>' +
+            '</svg>';
+          return '<div class="qb-map-legend-row">' +
+            pinSvg +
+            '<span class="qb-map-legend-label">' + m.label + '</span>' +
+            '</div>';
+        }).join('');
+      L.DomEvent.disableClickPropagation(el);
+      return el;
+    }
+  });
+  map.addControl(new LegendCtrl({ position: 'bottomleft' }));
+
+  /* ── "Open Full Map" pill button ── */
+  var OpenMapCtrl = L.Control.extend({
+    onAdd: function () {
+      var el = L.DomUtil.create('a', 'qb-open-map-btn');
+      el.href = '<?= BASE_URL ?>browse?view=map';
+      el.innerHTML =
+        '<svg width="13" height="13" viewBox="0 0 13 13" fill="none" ' +
+            'stroke="#fff8e8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+          '<path d="M6.5 1C4.57 1 3 2.57 3 4.5c0 2.63 3.5 7.5 3.5 7.5S10 7.13 10 4.5C10 2.57 8.43 1 6.5 1z"/>' +
+          '<circle cx="6.5" cy="4.5" r="1.2"/>' +
+        '</svg>' +
+        'Open Full Map';
+      L.DomEvent.disableClickPropagation(el);
+      return el;
+    }
+  });
+  map.addControl(new OpenMapCtrl({ position: 'bottomright' }));
+
+  var allMarkers = {};
+
+  /* ── Place markers ── */
   var bounds = [];
 
   providers.forEach(function (p, idx) {
     var lat = p.lat, lng = p.lng;
+
     if (!lat || !lng) {
       var angle  = (idx / Math.max(providers.length, 1)) * 2 * Math.PI;
       var radius = 0.012 + (idx % 3) * 0.006;
       lat = BACOLOD[0] + radius * Math.cos(angle);
       lng = BACOLOD[1] + radius * Math.sin(angle);
     }
+
     bounds.push([lat, lng]);
-    var marker = L.marker([lat, lng], { icon: makeDashIcon(p.categorySlug) }).addTo(map);
 
-    // Preview-only: tooltip on hover, no full info card on click
-    var locLine = p.barangay ? p.barangay + ', Bacolod City' : 'Bacolod City';
-    marker.bindTooltip(
-      '<div style="font-family:\'Playfair Display\',serif;font-size:.82rem;font-weight:700;font-style:italic;color:#1C1710;">' + p.name + '</div>' +
-      '<div style="font-family:\'DM Mono\',monospace;font-size:.58rem;letter-spacing:.07em;text-transform:uppercase;color:#A88A38;margin-top:.1rem;">' + (p.category || '') + '</div>' +
-      '<div style="font-size:.65rem;color:rgba(28,23,16,.55);margin-top:.15rem;">📍 ' + locLine + '</div>',
-      { direction: 'top', className: 'qb-dash-tooltip', offset: [0, -38] }
-    );
+    var marker = L.marker([lat, lng], {
+      icon:  makeCatIcon(p.categorySlug, false, p.serviceMode),
+      title: p.name
+    }).addTo(map);
 
-    // Highlight provider card below map, no navigation
+    /* ── Popup on click ── */
+    var mode    = p.serviceMode || 'in_shop';
+    var meta    = MODE_META[mode] || MODE_META['in_shop'];
+    /* Photo fallback: initials avatar */
+    var initials = p.name.split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('').toUpperCase();
+    var photoHtml = p.photo
+      ? '<img src="' + p.photo + '" alt="' + p.name + '" class="pv-popup-photo">'
+      : '<div class="pv-popup-photo pv-popup-photo--initials">' + initials + '</div>';
+
+    var popupHtml =
+      '<div class="pv-map-popup">' +
+        /* Left: large flush photo */
+        photoHtml +
+        /* Right: all text stacked */
+        '<div class="pv-popup-body">' +
+          '<div class="pv-popup-name">' + p.name + '</div>' +
+          (p.category ? '<span class="pv-popup-cat-pill">' + p.category + '</span>' : '') +
+          '<div class="pv-popup-service-row">' +
+            '<span class="pv-popup-service-dot" style="background:' + meta.color + '"></span>' +
+            '<span class="pv-popup-service-label" style="color:' + meta.color + '">' + meta.label + '</span>' +
+          '</div>' +
+          '<div class="pv-popup-address">' +
+            '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>' +
+            '<span>' + p.address + '</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    marker.bindPopup(popupHtml, { maxWidth: 270, className: 'qb-dash-popup' });
+
+    /* Active state on click + highlight card */
     marker.on('click', function () {
+      /* Reset all markers to inactive */
+      Object.values(allMarkers).forEach(function (m) {
+        var pid = Object.keys(allMarkers).find(function (k) { return allMarkers[k] === m; });
+        var prov = providers.find(function (x) { return x.id == pid; });
+        if (prov) m.setIcon(makeCatIcon(prov.categorySlug, false, prov.serviceMode));
+      });
+      /* Set this marker active */
+      marker.setIcon(makeCatIcon(p.categorySlug, true, p.serviceMode));
+
+      /* Highlight provider card */
       document.querySelectorAll('.pv-provider-card').forEach(function (c) {
         c.classList.remove('is-highlighted');
       });
       var card = document.querySelector('[data-provider-id="' + p.id + '"]');
       if (card) {
         card.classList.add('is-highlighted');
-        setTimeout(function () { card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 200);
+        setTimeout(function () {
+          card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 180);
       }
     });
+
+    allMarkers[p.id] = marker;
   });
 
-  /* "Open full map" overlay hint */
-  var browseUrl = (typeof BASE_URL !== 'undefined' ? '' : '') + '<?= BASE_URL ?>browse?view=map';
-  var overlay = L.Control.extend({
-    onAdd: function() {
-      var el = L.DomUtil.create('a', '');
-      el.href = browseUrl;
-      el.innerHTML = '<span style="' +
-        'display:flex;align-items:center;gap:.35rem;' +
-        'font-family:\'DM Mono\',monospace;font-size:.62rem;font-weight:600;' +
-        'letter-spacing:.06em;text-transform:uppercase;' +
-        'background:linear-gradient(135deg,#A88A38,#C9A84C);' +
-        'color:#fff8e8;padding:.4rem .75rem;' +
-        'border-radius:99px;' +
-        'box-shadow:0 2px 8px rgba(201,168,76,.4);' +
-        'text-decoration:none;' +
-        '">' +
-        '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#fff8e8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 1C4.34 1 3 2.34 3 4c0 2.44 3 7 3 7s3-4.56 3-7c0-1.66-1.34-3-3-3z"/><circle cx="6" cy="4" r="1"/></svg>' +
-        'Open Full Map' +
-        '</span>';
-      L.DomEvent.disableClickPropagation(el);
-      return el;
-    }
-  });
-  map.addControl(new overlay({ position: 'bottomright' }));
-
+  /* ── Fit to markers ── */
   if (bounds.length === 1) {
     map.setView(bounds[0], 15);
   } else if (bounds.length > 1) {
-    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+    map.fitBounds(bounds, { padding: [52, 52], maxZoom: 14 });
   }
 })();
 </script>
+
+
+
+<style>
+/* ================================================================
+   DASHBOARD MAP — Styles
+================================================================ */
+
+/* Ensure map container is fully visible — no overlay */
+#providerMap {
+  position: relative !important;
+  z-index: 1 !important;
+  cursor: grab !important;
+  background: #f5f0e8 !important;   /* matches Browse light */
+}
+[data-theme="dark"] #providerMap { background: #0D1117 !important; }
+#providerMap .leaflet-marker-icon { cursor: pointer !important; }
+
+/* Leaflet container must not be covered */
+.pv-map-wrap { isolation: isolate; }
+.leaflet-container { background: #f5f0e8 !important; }
+[data-theme="dark"] .leaflet-container { background: #0D1117 !important; }
+
+/* ── SVG pin markers — compact, no rotation ── */
+.qb-map-marker { transition: all .18s cubic-bezier(.22,1,.36,1); }
+.qb-map-marker:hover { transform: scale(1.12) translateY(-2px) !important; }
+.qb-map-marker.is-active { transform: scale(1.18) translateY(-3px) !important; }
+#providerMap .leaflet-marker-shadow { display: none !important; }
+
+/* ── "Open Full Map" pill button ── */
+.qb-open-map-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: .4rem !important;
+  font-family: 'DM Mono', monospace !important;
+  font-size: .62rem !important;
+  font-weight: 600 !important;
+  letter-spacing: .06em !important;
+  text-transform: uppercase !important;
+  background: linear-gradient(135deg, #A88A38, #C9A84C) !important;
+  color: #fff8e8 !important;
+  padding: .42rem .85rem !important;
+  border-radius: 99px !important;
+  text-decoration: none !important;
+  box-shadow: 0 2px 10px rgba(201,168,76,.45) !important;
+  border: none !important;
+  white-space: nowrap !important;
+  transition: filter .15s !important;
+  margin-bottom: .5rem !important;
+  margin-right: .5rem !important;
+}
+.qb-open-map-btn:hover { filter: brightness(1.1) !important; }
+
+/* ── Pin marker legend ── */
+.qb-map-legend {
+  background: rgba(255,255,255,.94) !important;
+  border: 1.5px solid rgba(201,168,76,.35) !important;
+  border-radius: 10px !important;
+  padding: .55rem .75rem !important;
+  box-shadow: 0 3px 14px rgba(0,0,0,.12) !important;
+  font-family: 'DM Mono', monospace !important;
+  margin-bottom: .5rem !important;
+  margin-left: .5rem !important;
+  pointer-events: none !important;
+}
+[data-theme="dark"] .qb-map-legend {
+  background: rgba(18,24,38,.94) !important;
+  border-color: rgba(201,168,76,.25) !important;
+}
+.qb-map-legend-title {
+  font-size: .52rem !important;
+  font-weight: 700 !important;
+  letter-spacing: .1em !important;
+  text-transform: uppercase !important;
+  color: #888 !important;
+  margin-bottom: .38rem !important;
+}
+[data-theme="dark"] .qb-map-legend-title { color: rgba(237,227,204,.45) !important; }
+.qb-map-legend-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: .4rem !important;
+  margin-bottom: .22rem !important;
+}
+.qb-map-legend-row:last-child { margin-bottom: 0 !important; }
+.qb-map-legend-dot { display: none !important; } /* replaced by inline SVG pins */
+.qb-map-legend-label {
+  font-size: .6rem !important;
+  color: #444 !important;
+  line-height: 1.2 !important;
+}
+[data-theme="dark"] .qb-map-legend-label { color: rgba(237,227,204,.75) !important; }
+
+/* ── Popup styling ── */
+.leaflet-popup.qb-dash-popup .leaflet-popup-content-wrapper {
+  border-radius: 12px !important;
+  border: 1.5px solid rgba(201,168,76,.32) !important;
+  box-shadow: 0 8px 28px rgba(0,0,0,.18) !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: #fff !important;
+}
+[data-theme="dark"] .leaflet-popup.qb-dash-popup .leaflet-popup-content-wrapper {
+  background: rgba(18,24,38,.97) !important;
+  border-color: rgba(201,168,76,.28) !important;
+}
+.leaflet-popup.qb-dash-popup .leaflet-popup-content { margin: 0 !important; }
+.leaflet-popup.qb-dash-popup .leaflet-popup-tip-container { display: none !important; }
+</style>
 
 <script>
 /* ── Theme Toggle ── */
@@ -837,6 +1169,14 @@ $spentDisplay = fmtMoney($totalSpent);
   var btn  = document.getElementById('themeToggle');
   var moon = document.querySelector('.icon-moon');
   var sun  = document.querySelector('.icon-sun');
+
+  function applyMapTheme(theme) {
+    var tilePane = document.querySelector('#providerMap .leaflet-tile-pane');
+    if (!tilePane) return;
+    tilePane.style.filter = theme === 'dark'
+      ? 'brightness(0.7) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7)'
+      : 'none';
+  }
 
   function applyTheme(theme) {
     if (theme === 'light') {
@@ -848,6 +1188,9 @@ $spentDisplay = fmtMoney($totalSpent);
       if (moon) moon.style.display = 'block';
       if (sun)  sun.style.display  = 'none';
     }
+    applyMapTheme(theme);
+    // retry after map tiles render
+    setTimeout(function() { applyMapTheme(theme); }, 500);
   }
 
   applyTheme(localStorage.getItem('qb-theme') || 'light');

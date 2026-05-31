@@ -51,7 +51,6 @@ $routes = [
     'GET:bookings'                          => ['CustomerController', 'bookings'],
     'GET:bookings/{any}'                    => ['CustomerController', 'bookingDetail'],
     'POST:bookings/{any}/cancel'            => ['CustomerController', 'cancelBooking'],
-    'GET:bookings/{any}/cancel'             => ['CustomerController', 'cancelBooking'],
     'POST:bookings/{any}/accept-reschedule' => ['CustomerController', 'acceptReschedule'],
     'GET:bookings/{any}/review'             => ['CustomerController', 'review'],
     'POST:bookings/{any}/review'            => ['CustomerController', 'review'],
@@ -59,6 +58,8 @@ $routes = [
     'POST:loyalty/redeem'                   => ['CustomerController', 'redeemLoyalty'],
     'GET:profile'                           => ['CustomerController', 'profile'],
     'POST:profile'                          => ['CustomerController', 'updateProfile'],
+    'POST:profile/deactivate' => ['CustomerController', 'deactivateAccount'],
+    'POST:profile/delete'     => ['CustomerController', 'deleteAccount'],
 
     // Browse & booking flow
     'GET:browse'         => ['BrowseController',   'index'],
