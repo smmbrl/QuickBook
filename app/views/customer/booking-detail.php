@@ -543,11 +543,9 @@ $bdAvg    = $bdTotal
 
       <div class="bd-actions">
         <?php if ($isCancellable): ?>
-          <a href="<?= BASE_URL ?>bookings/<?= (int)$booking['id'] ?>/cancel"
-             class="pv-btn pv-btn--ghost bd-btn-full"
-             onclick="return confirm('Are you sure you want to cancel this booking?')">
-            ✖ Cancel Booking
-          </a>
+         <form method="POST" action="<?= BASE_URL ?>bookings/<?= (int)$booking['id'] ?>/cancel">
+  <button type="submit" onclick="return confirm('Cancel this booking?')">✖ Cancel Booking</button>
+</form>
         <?php elseif ($isCompleted && !$booking['has_review']): ?>
           <a href="<?= BASE_URL ?>bookings/<?= (int)$booking['id'] ?>/review"
              class="pv-btn pv-btn--review bd-btn-full">
