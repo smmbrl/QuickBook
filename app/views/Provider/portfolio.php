@@ -5,8 +5,7 @@ $db           = Database::getInstance();
 $userId       = (int)($_SESSION['user_id'] ?? 0);
 $providerName = htmlspecialchars($_SESSION['user_name'] ?? 'Provider');
 $email        = htmlspecialchars($_SESSION['user_email'] ?? '');
-$firstName    = htmlspecialchars(explode(' ', $providerName)[0]);
-$initials     = strtoupper(substr($providerName, 0, 2));
+// $firstName and $initials are set after profile DB fetch below
 
 // ── Fetch provider profile ────────────────────────────────────────────────────
 $stmt = $db->prepare("
@@ -30,6 +29,10 @@ $fullName     = htmlspecialchars(trim(($profile['first_name'] ?? '') . ' ' . ($p
 $categoryName = htmlspecialchars($profile['category_name'] ?? 'Service Provider');
 $photoUrl     = !empty($profile['profile_photo']) ? $profile['profile_photo'] : null;
 
+// Use full name from DB for the nav display (not the truncated session value)
+$firstName = htmlspecialchars(trim(($profile['first_name'] ?? '') . ' ' . ($profile[''] ?? '')) ?: $providerName);
+$initials  = strtoupper(substr($profile['first_name'] ?? $providerName, 0, 1) . substr($profile[''] ?? '', 0, 1));
+
 // ── Pending count (nav badge) ─────────────────────────────────────────────────
 $stPending = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE provider_id = ? AND status = 'pending'");
 $stPending->execute([$profileId]);
@@ -44,7 +47,8 @@ $services = $stServices->fetchAll();
 $portfolioItems = [];
 try {
     $stPort = $db->prepare("
-        SELECT p.*, s.name AS service_name
+        SELECT p.*,
+               COALESCE(p.service_name, s.name) AS service_name
         FROM tbl_portfolio p
         LEFT JOIN tbl_services s ON s.id = p.service_id
         WHERE p.provider_id = ?
@@ -54,8 +58,8 @@ try {
     $portfolioItems = $stPort->fetchAll();
 } catch (\Exception $e) { $portfolioItems = []; }
 
-// ── Verification status ───────────────────────────────────────────────────────
-$isVerified = !empty($profile['is_verified']) && (int)$profile['is_verified'] === 1;
+// ── Verification status — tied to admin approval (is_approved) ────────────────
+$isVerified = !empty($profile['is_approved']) && (int)$profile['is_approved'] === 1;
 
 // No demo data — show real data only, or empty state for unverified/new providers
 $items        = $portfolioItems;
@@ -91,6 +95,35 @@ $itemsJson = json_encode(array_values($items));
     .pf-card-icon-btn.is-featured { color: var(--gold-dim) !important; background: var(--gold-lt) !important; border-color: var(--gold-border-md) !important; }
     .pf-card-icon-btn .fa-star { transition: transform .25s cubic-bezier(.34,1.56,.64,1); }
     .pf-card-icon-btn.is-featured .fa-star { transform: scale(1.25) rotate(-8deg); }
+
+    /* ── Edit & Upload modal form layout improvements ── */
+    .pf-split-right { display: flex; flex-direction: column; }
+    .pf-split-right .pf-form-group {
+      display: flex; flex-direction: column; gap: .32rem;
+      margin-bottom: 0;
+    }
+    .pf-split-right .pf-split-title {
+      font-size: 1.2rem; font-weight: 700; letter-spacing: -.01em;
+      color: var(--text-primary); margin-bottom: .05rem;
+      display: flex; align-items: center; gap: .48rem;
+    }
+    .pf-split-right .pf-form-label {
+      font-family: var(--font-m); font-size: .62rem; font-weight: 600;
+      letter-spacing: .09em; text-transform: uppercase;
+      color: var(--text-muted); margin-bottom: 0;
+    }
+    /* Text input focused state consistent with gold theme */
+    .pf-split-right .pf-form-control:focus {
+      border-color: var(--gold-border-md);
+      box-shadow: 0 0 0 3px var(--gold-glow);
+      outline: none;
+    }
+    /* Textarea tighter */
+    .pf-split-right textarea.pf-form-control { resize: none; }
+    /* Tighter right panel overall */
+    .pf-split-right { gap: .82rem !important; padding: 1.55rem 1.7rem !important; }
+    /* Hierarchy strip tighter */
+    .pf-hierarchy-strip { margin-bottom: .1rem !important; }
 
     /* ── Edit modal image preview ── */
 /* Edit modal image panel */
@@ -147,6 +180,122 @@ $itemsJson = json_encode(array_values($items));
       border:2px solid currentColor;border-top-color:transparent;border-radius:50%;
       animation:spin .6s linear infinite;vertical-align:middle; }
     @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* ── Info pills (category + provider name) ── */
+    .pf-info-pills {
+      display: flex; align-items: center; gap: .45rem;
+      flex-wrap: wrap; margin-bottom: .75rem;
+    }
+    .pf-info-pill {
+      display: inline-flex; align-items: center; gap: .38rem;
+      padding: .28rem .78rem;
+      border-radius: 99px;
+      font-family: var(--font-m); font-size: .73rem; font-weight: 600;
+      letter-spacing: .03em;
+      background: rgba(201,168,76,.10);
+      border: 1.5px solid rgba(201,168,76,.30);
+      color: var(--gold-dim);
+    }
+    .pf-info-pill--name {
+      background: rgba(201,168,76,.16);
+      border-color: rgba(201,168,76,.42);
+      letter-spacing: .06em; text-transform: uppercase; font-size: .68rem;
+    }
+    [data-theme="dark"] .pf-info-pill {
+      background: rgba(201,168,76,.08); border-color: rgba(201,168,76,.28); color: var(--gold-dim);
+    }
+    /* ── Price row: ₱ prefix + number input ── */
+    .pf-price-row {
+      display: flex; align-items: center;
+      background: rgba(255,255,255,.55);
+      border: 1.5px solid var(--border-md);
+      border-radius: var(--r-md);
+      overflow: hidden;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .pf-price-row:focus-within {
+      border-color: var(--gold-border-md);
+      box-shadow: 0 0 0 3px var(--gold-glow);
+    }
+    .pf-price-prefix {
+      padding: 0 .7rem 0 1rem;
+      font-family: var(--font-m); font-size: .95rem; font-weight: 700;
+      color: var(--gold-dim); flex-shrink: 0; pointer-events: none;
+    }
+    .pf-price-input {
+      border: none !important; box-shadow: none !important;
+      background: transparent !important;
+      border-radius: 0 !important;
+      padding-left: 0 !important;
+      flex: 1; min-width: 0;
+      -moz-appearance: textfield;
+    }
+    .pf-price-input::-webkit-outer-spin-button,
+    .pf-price-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .pf-price-spinner {
+      display: flex; flex-direction: column;
+      border-left: 1.5px solid var(--border-md);
+      flex-shrink: 0;
+    }
+    .pf-spinner-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 2rem; height: 1.35rem;
+      background: transparent;
+      border: none; outline: none; cursor: pointer;
+      font-size: .5rem; line-height: 1;
+      color: var(--gold-dim);
+      transition: background .15s, color .15s;
+      user-select: none;
+    }
+    .pf-spinner-btn:hover { background: rgba(201,168,76,.13); color: var(--gold); }
+    .pf-spinner-btn:active { background: rgba(201,168,76,.22); }
+    .pf-spinner-up { border-bottom: 1px solid var(--border-md); border-radius: 0 var(--r-md) 0 0; }
+    .pf-spinner-down { border-radius: 0 0 var(--r-md) 0; }
+    [data-theme="dark"] .pf-price-row {
+      background: rgba(255,255,255,.06); border-color: rgba(201,168,76,.25);
+    }
+    [data-theme="dark"] .pf-price-row:focus-within {
+      border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,168,76,.14);
+    }
+    [data-theme="dark"] .pf-price-spinner { border-left-color: rgba(201,168,76,.2); }
+    [data-theme="dark"] .pf-spinner-up { border-bottom-color: rgba(201,168,76,.2); }
+
+
+
+
+    /* ── Card multi-image navigation ── */
+    .pf-card-img-wrap { position: relative; overflow: hidden; }
+    .pf-card-nav {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      width: 32px; height: 32px; border-radius: 50%;
+      background: rgba(0,0,0,.52); border: 1.5px solid rgba(255,255,255,.18);
+      color: #fff; font-size: 1.25rem; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; opacity: 0; transition: opacity .2s, background .15s;
+      z-index: 4;
+    }
+    .pf-card-img-wrap:hover .pf-card-nav { opacity: 1; }
+    .pf-card-nav--prev { left: .5rem; }
+    .pf-card-nav--next { right: .5rem; }
+    .pf-card-nav:hover { background: rgba(201,168,76,.75); border-color: rgba(201,168,76,.6); }
+    .pf-card-nav:disabled { opacity: .25 !important; cursor: default; pointer-events: none; }
+    .pf-card-img-dots {
+      position: absolute; bottom: .5rem; left: 50%; transform: translateX(-50%);
+      display: flex; gap: .35rem; z-index: 4;
+    }
+    .pf-card-img-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: rgba(255,255,255,.45); transition: background .2s, transform .2s;
+    }
+    .pf-card-img-dot.active { background: #fff; transform: scale(1.3); }
+    .pf-card-img-count {
+      position: absolute; top: .55rem; left: .6rem;
+      background: rgba(0,0,0,.5); color: #fff;
+      font-size: .65rem; font-weight: 600; letter-spacing: .04em;
+      padding: .18rem .55rem; border-radius: 99px; z-index: 4;
+      opacity: 0; transition: opacity .2s;
+    }
+    .pf-card-img-wrap:hover .pf-card-img-count { opacity: 1; }
 
     /* ── Account verification banner ── */
     .pf-verify-banner {
@@ -236,14 +385,7 @@ $itemsJson = json_encode(array_values($items));
         <div class="pv-pd-divider"></div>
         <a href="<?= BASE_URL ?>provider/profile" class="pv-pd-item" role="menuitem">
           <span class="pv-pd-item-ico"><i class="fa-solid fa-store"></i></span>
-          <span>Business Profile</span>
-          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
-               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </a>
-        <a href="<?= BASE_URL ?>provider/settings" class="pv-pd-item" role="menuitem">
-          <span class="pv-pd-item-ico"><i class="fa-solid fa-gear"></i></span>
-          <span>Settings</span>
+          <span>Profile</span>
           <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
@@ -468,10 +610,38 @@ $itemsJson = json_encode(array_values($items));
         <span class="pf-ba-label pf-ba-label--before">Before</span>
         <span class="pf-ba-label pf-ba-label--after">After</span>
       </div>
-      <?php else: ?>
-      <div class="pf-card-img-wrap">
-        <?php if (!empty($item['image_url'])): ?>
-          <img src="<?= $imgUrl ?>" alt="<?= htmlspecialchars($item['title']) ?>" loading="lazy">
+      <?php else:
+        // Collect all images: primary + extras
+        $allImgs = [];
+        if (!empty($item['image_url'])) $allImgs[] = $item['image_url'];
+        if (!empty($item['extra_images'])) {
+          $extras = json_decode($item['extra_images'], true);
+          if (is_array($extras)) $allImgs = array_merge($allImgs, $extras);
+        }
+        $imgCount = count($allImgs);
+      ?>
+      <div class="pf-card-img-wrap" id="imgwrap-<?= $item['id'] ?>"
+           data-imgs="<?= htmlspecialchars(json_encode($allImgs)) ?>"
+           data-idx="0">
+        <?php if ($imgCount > 0): ?>
+          <img src="<?= htmlspecialchars($allImgs[0]) ?>"
+               id="cardimg-<?= $item['id'] ?>"
+               alt="<?= htmlspecialchars($item['title']) ?>" loading="lazy">
+          <?php if ($imgCount > 1): ?>
+          <button type="button" class="pf-card-nav pf-card-nav--prev"
+                  onclick="event.stopPropagation();cardImgNav(<?= $item['id'] ?>,-1)"
+                  aria-label="Previous image">&#8249;</button>
+          <button type="button" class="pf-card-nav pf-card-nav--next"
+                  onclick="event.stopPropagation();cardImgNav(<?= $item['id'] ?>,1)"
+                  aria-label="Next image">&#8250;</button>
+          <div class="pf-card-img-dots">
+            <?php for($di=0;$di<$imgCount;$di++): ?>
+            <span class="pf-card-img-dot<?= $di===0?' active':'' ?>"
+                  id="dot-<?= $item['id'] ?>-<?= $di ?>"></span>
+            <?php endfor; ?>
+          </div>
+          <div class="pf-card-img-count"><?= $imgCount ?> photos</div>
+          <?php endif; ?>
         <?php else: ?>
           <div class="pf-card-img-placeholder"><i class="fa-solid fa-image"></i></div>
         <?php endif; ?>
@@ -550,7 +720,7 @@ $itemsJson = json_encode(array_values($items));
 
           <!-- Single drop zone (default) -->
           <div id="singleDropWrap" style="flex:1;display:flex;flex-direction:column;">
-            <div class="pf-drop-zone" id="dropZone" onclick="document.getElementById('portfolioFileInput').click()">
+            <div class="pf-drop-zone" id="dropZone">
               <input type="file" id="portfolioFileInput" name="portfolio_images[]" accept="image/jpeg,image/png,image/webp" multiple style="display:none" onchange="previewFiles(this)">
               <div class="pf-drop-preview" id="dropPreview">
                 <div class="pf-drop-placeholder">
@@ -558,7 +728,7 @@ $itemsJson = json_encode(array_values($items));
                   <p class="pf-drop-main">Drop file here</p>
                   <p class="pf-drop-or">OR</p>
                   <span class="pf-drop-browse-btn">Browse File</span>
-                  <p class="pf-drop-hint">JPG, PNG, WebP — max 5 MB each</p>
+                  <p class="pf-drop-hint">JPG, PNG, WebP — max 5 MB each (up to 3 images)</p>
                 </div>
               </div>
             </div>
@@ -604,33 +774,46 @@ $itemsJson = json_encode(array_values($items));
         <div class="pf-split-right">
           <h2 class="pf-split-title" id="uploadModalTitle">Work Details</h2>
 
-          <!-- Provider info chips (read-only) -->
-          <div class="pf-info-chips">
-            <div class="pf-info-chip">
-              <i class="fa-solid fa-tag"></i>
-              <?= $categoryName ?>
+          <!-- Info pills: Category + Provider name -->
+          <div class="pf-info-pills">
+            <span class="pf-info-pill">
+              <i class="fa-solid fa-tag"></i> <?= $categoryName ?>
+            </span>
+            <span class="pf-info-pill pf-info-pill--name">
+              <i class="fa-solid fa-store"></i> <?= strtoupper($fullName) ?>
+            </span>
+          </div>
+
+          <div class="pf-form-group">
+            <label class="pf-form-label" for="portfolioTitle">WORK TITLE <span style="color:#DC2626;">*</span></label>
+            <input type="text" name="title" id="portfolioTitle" class="pf-form-control"
+                   placeholder="e.g. Glossy Nude Nails" required>
+          </div>
+
+          <div class="pf-form-group">
+            <label class="pf-form-label" for="portfolioServiceName">SERVICE</label>
+            <input type="text" name="service_name" id="portfolioServiceName" class="pf-form-control"
+                   placeholder="e.g. Nail Extension, Hair Color, Massage">
+            <input type="hidden" name="service_id" id="portfolioServiceId" value="0">
+          </div>
+
+          <div class="pf-form-group">
+            <label class="pf-form-label" for="portfolioCaption">SHORT CAPTION</label>
+            <textarea name="caption" id="portfolioCaption" class="pf-form-control" rows="2" placeholder="Describe this work briefly..."></textarea>
+          </div>
+
+          <div class="pf-form-group">
+            <label class="pf-form-label" for="portfolioPriceAmount">PRICE <span style="color:#DC2626;">*</span></label>
+            <div class="pf-price-row">
+              <span class="pf-price-prefix">₱</span>
+              <input type="number" name="price_amount" id="portfolioPriceAmount" class="pf-form-control pf-price-input"
+                     placeholder="0" min="0" step="50" required>
+              <input type="hidden" name="price" id="portfolioPriceHidden">
+              <div class="pf-price-spinner">
+                <button type="button" class="pf-spinner-btn pf-spinner-up" onclick="stepPrice('portfolioPriceAmount', 1)" aria-label="Increase price">&#9650;</button>
+                <button type="button" class="pf-spinner-btn pf-spinner-down" onclick="stepPrice('portfolioPriceAmount', -1)" aria-label="Decrease price">&#9660;</button>
+              </div>
             </div>
-            <?php if (!empty($profile['business_name'])): ?>
-            <div class="pf-info-chip">
-              <i class="fa-solid fa-store"></i>
-              <?= htmlspecialchars($profile['business_name']) ?>
-            </div>
-            <?php endif; ?>
-          </div>
-
-          <div class="pf-form-group">
-            <label class="pf-form-label" for="portfolioTitle">Work Title <span style="color:#DC2626;">*</span></label>
-            <input type="text" name="title" id="portfolioTitle" class="pf-form-control" placeholder="e.g. Glossy Nude Nails" required>
-          </div>
-
-          <div class="pf-form-group">
-            <label class="pf-form-label" for="portfolioCaption">Short Caption</label>
-            <textarea name="caption" id="portfolioCaption" class="pf-form-control" rows="3" placeholder="Describe this work briefly..."></textarea>
-          </div>
-
-          <div class="pf-form-group">
-            <label class="pf-form-label" for="portfolioPrice">Price (optional)</label>
-            <input type="text" name="price" id="portfolioPrice" class="pf-form-control" placeholder="e.g. ₱900">
           </div>
 
           <div class="pf-toggle-row">
@@ -690,42 +873,54 @@ $itemsJson = json_encode(array_values($items));
           </p>
         </div>
 
-        <!-- RIGHT: Form fields -->
+        <!-- RIGHT: Form fields — matches upload modal structure -->
         <div class="pf-split-right">
-          <h2 class="pf-split-title" id="editModalTitle">
-            <i class="fa-solid fa-pen-to-square" style="font-size:.9rem;color:var(--gold-dim);"></i>
-            Edit Work
-          </h2>
+          <h2 class="pf-split-title" id="editModalTitle">Edit Work</h2>
 
-          <!-- Provider info chips -->
-          <div class="pf-info-chips">
-            <div class="pf-info-chip"><i class="fa-solid fa-tag"></i> <?= $categoryName ?></div>
-            <?php if (!empty($profile['business_name'])): ?>
-            <div class="pf-info-chip"><i class="fa-solid fa-store"></i> <?= htmlspecialchars($profile['business_name']) ?></div>
-            <?php endif; ?>
+          <!-- Info pills: Category + Provider name (same as upload modal) -->
+          <div class="pf-info-pills">
+            <span class="pf-info-pill">
+              <i class="fa-solid fa-tag"></i> <?= $categoryName ?>
+            </span>
+            <span class="pf-info-pill pf-info-pill--name">
+              <i class="fa-solid fa-store"></i> <?= strtoupper($fullName) ?>
+            </span>
           </div>
 
           <div class="pf-form-group">
-            <label class="pf-form-label" for="editTitle">Work Title <span style="color:#DC2626;">*</span></label>
+            <label class="pf-form-label" for="editTitle">WORK TITLE <span style="color:#DC2626;">*</span></label>
             <input type="text" name="title" id="editTitle" class="pf-form-control"
                    placeholder="e.g. Glossy Nude Nails" required>
           </div>
 
           <div class="pf-form-group">
-            <label class="pf-form-label" for="editCaption">Short Caption</label>
-            <textarea name="caption" id="editCaption" class="pf-form-control"
-                      rows="3" placeholder="Describe this work briefly..."></textarea>
+            <label class="pf-form-label" for="editServiceName">SERVICE</label>
+            <input type="text" name="service_name" id="editServiceName" class="pf-form-control"
+                   placeholder="e.g. Nail Extension, Hair Color, Massage">
+            <input type="hidden" name="service_id" value="0">
           </div>
 
           <div class="pf-form-group">
-            <label class="pf-form-label" for="editPrice">Price (optional)</label>
-            <input type="text" name="price" id="editPrice" class="pf-form-control" placeholder="e.g. ₱900">
+            <label class="pf-form-label" for="editCaption">SHORT CAPTION</label>
+            <textarea name="caption" id="editCaption" class="pf-form-control" rows="2" placeholder="Describe this work briefly..."></textarea>
+          </div>
+
+          <div class="pf-form-group">
+            <label class="pf-form-label" for="editPriceAmount">PRICE <span style="color:#DC2626;">*</span></label>
+            <div class="pf-price-row">
+              <span class="pf-price-prefix">₱</span>
+              <input type="number" name="price_amount" id="editPriceAmount" class="pf-form-control pf-price-input"
+                     placeholder="0" min="0" step="50" required>
+              <input type="hidden" name="price" id="editPriceHidden">
+              <div class="pf-price-spinner">
+                <button type="button" class="pf-spinner-btn pf-spinner-up" onclick="stepPrice('editPriceAmount',1)" aria-label="Increase price">&#9650;</button>
+                <button type="button" class="pf-spinner-btn pf-spinner-down" onclick="stepPrice('editPriceAmount',-1)" aria-label="Decrease price">&#9660;</button>
+              </div>
+            </div>
           </div>
 
           <div class="pf-toggle-row">
-            <span class="pf-toggle-label">
-              <i class="fa-solid fa-star" style="color:var(--gold-dim);"></i> Feature this work
-            </span>
+            <span class="pf-toggle-label"><i class="fa-solid fa-star" style="color:var(--gold-dim);"></i> Feature this work</span>
             <label class="pf-toggle">
               <input type="checkbox" name="is_featured" id="editFeatured">
               <span class="pf-toggle-track"></span><span class="pf-toggle-thumb"></span>
@@ -895,6 +1090,34 @@ $itemsJson = json_encode(array_values($items));
     if (e.target === this) closeUploadModal();
   });
 
+  // ── Sync service placeholder to match work title example ─────────────────────
+  (function() {
+    var titleInput   = document.getElementById('portfolioTitle');
+    var serviceInput = document.getElementById('portfolioServiceName');
+    // Keyword → suggested service
+    var hints = [
+      { keys: ['nail','nails','manicure','pedicure','gel','acrylic'], hint: 'e.g. Nail Art' },
+      { keys: ['hair','haircut','cut','trim','blowout','blowdry','color','highlight','balayage','ombre'], hint: 'e.g. Haircut & Styling' },
+      { keys: ['beard','shave','barber','fade','undercut','buzz'], hint: 'e.g. Beard Trim' },
+      { keys: ['brow','eyebrow','lash','lashes','wax','threading'], hint: 'e.g. Brow Shaping' },
+      { keys: ['facial','face','skin','peel','hydra','glow'], hint: 'e.g. Facial Treatment' },
+      { keys: ['massage','spa','relax','body'], hint: 'e.g. Full Body Massage' },
+      { keys: ['makeup','glam','bridal','contour','foundation'], hint: 'e.g. Bridal Makeup' },
+      { keys: ['tattoo','ink','piercing'], hint: 'e.g. Custom Tattoo' },
+    ];
+    titleInput.addEventListener('input', function() {
+      var val = this.value.toLowerCase();
+      var matched = null;
+      for (var i = 0; i < hints.length; i++) {
+        for (var j = 0; j < hints[i].keys.length; j++) {
+          if (val.indexOf(hints[i].keys[j]) !== -1) { matched = hints[i].hint; break; }
+        }
+        if (matched) break;
+      }
+      serviceInput.placeholder = matched || 'e.g. Nail Art';
+    });
+  })();
+
   window.toggleBAFields = function(cb) {
     var single = document.getElementById('singleDropWrap');
     var dual   = document.getElementById('baDropWrap');
@@ -931,26 +1154,100 @@ $itemsJson = json_encode(array_values($items));
     preview.innerHTML = '';
     if (!input.files || !input.files.length) return;
 
-    // Use first file as the big cover preview
-    var f = input.files[0];
-    var r = new FileReader();
-    r.onload = function(e) {
-      preview.innerHTML =
-        '<div class="pf-drop-full-preview" style="background-image:url(\'' + e.target.result + '\')">' +
-          '<div class="pf-drop-full-overlay">' +
-            '<span class="pf-drop-full-badge"><i class="fa-solid fa-image"></i> ' + f.name + '</span>' +
-            '<button type="button" class="pf-drop-full-change" onclick="document.getElementById(\'portfolioFileInput\').click()">' +
-              '<i class="fa-solid fa-arrows-rotate"></i> Change Image' +
-            '</button>' +
-          '</div>' +
-        '</div>';
-      dropZone.style.padding = '0';
-    };
-    r.readAsDataURL(f);
+    var MAX_IMAGES = 3;
+    if (input.files.length > MAX_IMAGES) {
+      showToast('fa-circle-xmark', 'You can upload up to 3 images only.', 'error');
+      input.value = '';
+      preview.innerHTML = '<div class="pf-drop-placeholder"><div class="pf-drop-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div><p class="pf-drop-main">Drop file here</p><p class="pf-drop-or">OR</p><span class="pf-drop-browse-btn" onclick="document.getElementById(\'portfolioFileInput\').click()">Browse File</span><p class="pf-drop-hint">JPG, PNG, WebP — max 5 MB each (up to 3 images)</p></div>';
+      dropZone.style.padding = null;
+      return;
+    }
+
+    var files = Array.prototype.slice.call(input.files, 0, MAX_IMAGES);
+    var loaded = 0;
+    var results = new Array(files.length);
+    files.forEach(function(f, i) {
+      var r = new FileReader();
+      r.onload = function(e) {
+        results[i] = { url: e.target.result, name: f.name };
+        loaded++;
+        if (loaded === files.length) {
+          _carouselImgs = results;
+          _carouselIdx  = 0;
+          dropZone.style.padding = '0';
+          buildCarouselDOM(preview);
+        }
+      };
+      r.readAsDataURL(f);
+    });
+  };
+
+  // ── Carousel state & renderer ────────────────────────────────────────────────
+  var _carouselIdx  = 0;
+  var _carouselImgs = [];
+
+  function buildCarouselDOM(preview) {
+    var imgs  = _carouselImgs;
+    var idx   = _carouselIdx;
+    var total = imgs.length;
+
+    var dotsHtml = '';
+    if (total > 1) {
+      dotsHtml = '<div class="pf-carousel-dots">';
+      for (var d = 0; d < total; d++) {
+        dotsHtml += '<span class="pf-carousel-dot' + (d === idx ? ' active' : '') +
+                    '" onclick="event.stopPropagation();carouselGo(' + d + ')"></span>';
+      }
+      dotsHtml += '</div>';
+    }
+
+    var navHtml = '';
+    if (total > 1) {
+      navHtml =
+        '<button type="button" class="pf-carousel-arrow pf-carousel-prev" onclick="event.stopPropagation();carouselNav(-1)"' +
+          (idx > 0 ? '' : ' disabled') + '>' +
+          '&#8249;' +
+        '</button>' +
+        '<button type="button" class="pf-carousel-arrow pf-carousel-next" onclick="event.stopPropagation();carouselNav(1)"' +
+          (idx < total - 1 ? '' : ' disabled') + '>' +
+          '&#8250;' +
+        '</button>';
+    }
+
+    preview.innerHTML =
+      '<div class="pf-carousel">' +
+        '<div class="pf-carousel-img" style="background-image:url(\'' + imgs[idx].url + '\')"></div>' +
+        navHtml +
+        dotsHtml +
+        '<div class="pf-carousel-bar">' +
+          (total > 1 ? '<span class="pf-carousel-count">' + (idx + 1) + ' / ' + total + '</span>' : '<span></span>') +
+          '<button type="button" class="pf-carousel-change" onclick="event.stopPropagation();document.getElementById(\'portfolioFileInput\').click()">' +
+            '<i class="fa-solid fa-arrows-rotate"></i> Change' +
+          '</button>' +
+          (total > 1 ? '<span class="pf-carousel-count" style="visibility:hidden">' + (idx + 1) + ' / ' + total + '</span>' : '<span></span>') +
+        '</div>' +
+      '</div>';
+  }
+
+  window.carouselNav = function(dir) {
+    _carouselIdx = Math.max(0, Math.min(_carouselImgs.length - 1, _carouselIdx + dir));
+    buildCarouselDOM(document.getElementById('dropPreview'));
+  };
+  window.carouselGo = function(i) {
+    _carouselIdx = i;
+    buildCarouselDOM(document.getElementById('dropPreview'));
   };
 
   var dz = document.getElementById('dropZone');
   if (dz) {
+    dz.addEventListener('click', function(e) {
+      // Only open file browser when clicking the empty zone or placeholder,
+      // not when clicking carousel arrows, dots, or the Change button.
+      var closest = e.target.closest('button, .pf-carousel-dot, .pf-carousel-arrow');
+      if (!closest) {
+        document.getElementById('portfolioFileInput').click();
+      }
+    });
     dz.addEventListener('dragover',  function(e){ e.preventDefault(); this.classList.add('is-dragover'); });
     dz.addEventListener('dragleave', function(){  this.classList.remove('is-dragover'); });
     dz.addEventListener('drop', function(e) {
@@ -960,9 +1257,26 @@ $itemsJson = json_encode(array_values($items));
     });
   }
 
+  // ── Price spinner step function ──────────────────────────────────────────────
+  window.stepPrice = function(inputId, direction) {
+    var input = document.getElementById(inputId);
+    if (!input) return;
+    var step = parseFloat(input.step) || 50;
+    var current = parseFloat(input.value) || 0;
+    var next = Math.max(0, current + direction * step);
+    input.value = next;
+    input.dispatchEvent(new Event('input'));
+  };
+
   window.submitUpload = function() {
     var title = document.getElementById('portfolioTitle').value.trim();
     if (!title) { showToast('fa-circle-xmark', 'Please enter a work title.', 'error'); return; }
+    // service_name is optional — no validation needed
+    // Sync price hidden field: format as ₱NNN
+    var priceAmt = document.getElementById('portfolioPriceAmount').value.trim();
+    if (!priceAmt || parseFloat(priceAmt) <= 0) { showToast('fa-circle-xmark', 'Please enter a price.', 'error'); return; }
+    var priceHidden = document.getElementById('portfolioPriceHidden');
+    priceHidden.value = '₱' + parseFloat(priceAmt).toLocaleString('en-PH', {minimumFractionDigits: 0, maximumFractionDigits: 2});
     var submitBtn = document.getElementById('uploadSubmitBtn');
     submitBtn.classList.add('btn-loading');
     submitBtn.disabled = true;
@@ -983,8 +1297,17 @@ $itemsJson = json_encode(array_values($items));
     // Populate fields
     document.getElementById('editTitle').value   = item.title   || '';
     document.getElementById('editCaption').value = item.caption || '';
-    document.getElementById('editPrice').value   = item.price   || '';
     document.getElementById('editFeatured').checked = !!item.is_featured;
+
+    // Populate price spinner — strip ₱ symbol and commas if present
+    var rawPrice = (item.price || '').replace(/[₱,]/g, '').trim();
+    var priceNum = parseFloat(rawPrice) || 0;
+    var editPriceAmt = document.getElementById('editPriceAmount');
+    if (editPriceAmt) editPriceAmt.value = priceNum > 0 ? priceNum : '';
+
+    // Pre-fill service text input
+    var svcInput = document.getElementById('editServiceName');
+    if (svcInput) svcInput.value = item.service_name || '';
 
     // Show current image as big cover
     var curImg  = document.getElementById('editCurrentImg');
@@ -1026,6 +1349,11 @@ $itemsJson = json_encode(array_values($items));
   window.submitEdit = function() {
     var title = document.getElementById('editTitle').value.trim();
     if (!title) { showToast('fa-circle-xmark', 'Please enter a work title.', 'error'); return; }
+    // service_name is optional — no validation needed
+    var priceAmt = document.getElementById('editPriceAmount').value.trim();
+    if (!priceAmt || parseFloat(priceAmt) <= 0) { showToast('fa-circle-xmark', 'Please enter a price.', 'error'); return; }
+    var priceHidden = document.getElementById('editPriceHidden');
+    priceHidden.value = '₱' + parseFloat(priceAmt).toLocaleString('en-PH', {minimumFractionDigits: 0, maximumFractionDigits: 2});
     var submitBtn = document.getElementById('editSubmitBtn');
     submitBtn.classList.add('btn-loading');
     submitBtn.disabled = true;
@@ -1245,6 +1573,33 @@ $itemsJson = json_encode(array_values($items));
     document.addEventListener('touchmove', function(e){ if (drag) setPos(e.touches[0].clientX); }, { passive: true });
     document.addEventListener('touchend',  function(){ drag = false; });
   });
+
+
+  /* ═══════════════════════════════════════
+     CARD MULTI-IMAGE NAV
+  ═══════════════════════════════════════ */
+  window.cardImgNav = function(id, dir) {
+    var wrap = document.getElementById('imgwrap-' + id);
+    if (!wrap) return;
+    var imgs = JSON.parse(wrap.dataset.imgs || '[]');
+    if (imgs.length < 2) return;
+    var idx  = parseInt(wrap.dataset.idx || '0', 10);
+    idx = (idx + dir + imgs.length) % imgs.length;
+    wrap.dataset.idx = idx;
+    // Swap image src
+    var imgEl = document.getElementById('cardimg-' + id);
+    if (imgEl) imgEl.src = imgs[idx];
+    // Update dots
+    for (var d = 0; d < imgs.length; d++) {
+      var dot = document.getElementById('dot-' + id + '-' + d);
+      if (dot) dot.classList.toggle('active', d === idx);
+    }
+    // Update prev/next disabled state
+    var prev = wrap.querySelector('.pf-card-nav--prev');
+    var next = wrap.querySelector('.pf-card-nav--next');
+    if (prev) prev.disabled = false;
+    if (next) next.disabled = false;
+  };
 
 })();
 </script>

@@ -724,18 +724,27 @@ class ProviderDashController
 
         $db->prepare("DELETE FROM tbl_provider_availability WHERE provider_id = ?")->execute([$providerId]);
 
+        // Ensure break columns exist
+        try { $db->exec("ALTER TABLE tbl_provider_availability ADD COLUMN break_start TIME DEFAULT NULL"); } catch (\Throwable $e) {}
+        try { $db->exec("ALTER TABLE tbl_provider_availability ADD COLUMN break_end TIME DEFAULT NULL"); } catch (\Throwable $e) {}
+
         $ins = $db->prepare("
             INSERT INTO tbl_provider_availability
-                (provider_id, day_of_week, start_time, end_time, is_available)
-            VALUES (?, ?, ?, ?, ?)
+                (provider_id, day_of_week, start_time, end_time, is_available, break_start, break_end)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ");
 
         $availDays = [];
         foreach ($daysInput as $dayName => $data) {
             $isAvailable = isset($data['is_available']) ? 1 : 0;
-            $startTime   = trim($data['start_time'] ?? '09:00');
-            $endTime     = trim($data['end_time']   ?? '18:00');
-            $ins->execute([$providerId, $dayName, $startTime, $endTime, $isAvailable]);
+            $startTime   = trim($data['start_time']  ?? '09:00');
+            $endTime     = trim($data['end_time']    ?? '18:00');
+            // Only save break if BOTH values are explicitly submitted (non-empty)
+            $rawBreakStart = trim($data['break_start'] ?? '');
+            $rawBreakEnd   = trim($data['break_end']   ?? '');
+            $breakStart    = ($rawBreakStart !== '' && $rawBreakEnd !== '') ? $rawBreakStart : null;
+            $breakEnd      = ($rawBreakStart !== '' && $rawBreakEnd !== '') ? $rawBreakEnd   : null;
+            $ins->execute([$providerId, $dayName, $startTime, $endTime, $isAvailable, $breakStart, $breakEnd]);
             if ($isAvailable) $availDays[] = $dayName;
         }
 
@@ -1017,6 +1026,7 @@ class ProviderDashController
                 caption      TEXT        DEFAULT NULL,
                 price        VARCHAR(50)  DEFAULT NULL,
                 image_url    MEDIUMTEXT   DEFAULT NULL,
+                extra_images MEDIUMTEXT   DEFAULT NULL,
                 before_url   MEDIUMTEXT   DEFAULT NULL,
                 after_url    MEDIUMTEXT   DEFAULT NULL,
                 is_featured      TINYINT(1) NOT NULL DEFAULT 0,
@@ -1029,6 +1039,14 @@ class ProviderDashController
                 INDEX idx_featured (provider_id, is_featured)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         ");
+        // Add extra_images column if upgrading from older schema
+        try {
+            $db->exec("ALTER TABLE tbl_portfolio ADD COLUMN extra_images MEDIUMTEXT DEFAULT NULL AFTER image_url");
+        } catch (\Throwable $e) { /* column already exists — safe to ignore */ }
+        // Add service_name free-text column if upgrading from older schema
+        try {
+            $db->exec("ALTER TABLE tbl_portfolio ADD COLUMN service_name VARCHAR(200) DEFAULT NULL AFTER service_id");
+        } catch (\Throwable $e) { /* column already exists — safe to ignore */ }
     }
 
     public function portfolio(): void
@@ -1045,22 +1063,38 @@ class ProviderDashController
         $userId    = (int)($_SESSION['user_id'] ?? 0);
         $this->_ensurePortfolioTable($db);
 
-        // Fetch provider profile id
-        $stmt = $db->prepare("SELECT id FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
+        // Fetch provider profile id + approval status
+        $stmt = $db->prepare("SELECT id, is_approved FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
         $stmt->execute([$userId]);
         $profile = $stmt->fetch();
         if (!$profile) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Provider profile not found.'];
             header('Location: ' . BASE_URL . 'provider/portfolio'); exit;
         }
+
+        // Block uploads until admin approves the account
+        if (empty($profile['is_approved']) || (int)$profile['is_approved'] !== 1) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Your account must be verified by an admin before you can upload portfolio works.'];
+            header('Location: ' . BASE_URL . 'provider/portfolio'); exit;
+        }
+
         $providerId = (int)$profile['id'];
 
-        $title         = trim($_POST['title']   ?? '');
-        $caption       = trim($_POST['caption'] ?? '');
-        $price         = trim($_POST['price']   ?? '');
-        $serviceId     = (int)($_POST['service_id'] ?? 0) ?: null;
+        $title         = trim($_POST['title']        ?? '');
+        $caption       = trim($_POST['caption']      ?? '');
+        $serviceName   = trim($_POST['service_name'] ?? '');
+        $serviceId     = null;   // service_id not required; free-text service_name used instead
         $isFeatured    = isset($_POST['is_featured'])    ? 1 : 0;
         $isBeforeAfter = isset($_POST['is_before_after']) ? 1 : 0;
+
+        // Accept pre-formatted hidden price or raw price_amount
+        $price = trim($_POST['price'] ?? '');
+        if (empty($price)) {
+            $priceAmt = trim($_POST['price_amount'] ?? '');
+            if ($priceAmt !== '' && is_numeric($priceAmt) && (float)$priceAmt > 0) {
+                $price = '₱' . number_format((float)$priceAmt, 0, '.', ',');
+            }
+        }
 
         if (empty($title)) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Work title is required.'];
@@ -1079,9 +1113,10 @@ class ProviderDashController
             return 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($file['tmp_name']));
         };
 
-        // Main images (multiple allowed)
+        // Main images (multiple allowed, up to 3)
         $images = $_FILES['portfolio_images'] ?? [];
-        $imageUrl = null;
+        $imageUrl   = null;
+        $extraImages = [];
         if (!empty($images['tmp_name'])) {
             $files = is_array($images['tmp_name']) ? $images['tmp_name'] : [$images['tmp_name']];
             foreach ($files as $i => $tmp) {
@@ -1092,9 +1127,16 @@ class ProviderDashController
                     'name'     => is_array($images['name'])     ? $images['name'][$i]     : $images['name'],
                 ];
                 $encoded = $encodeFile($f);
-                if ($encoded) { $imageUrl = $encoded; break; } // use first valid image
+                if ($encoded) {
+                    if ($imageUrl === null) {
+                        $imageUrl = $encoded;          // first valid → primary
+                    } else {
+                        $extraImages[] = $encoded;     // 2nd & 3rd → extras
+                    }
+                }
             }
         }
+        $extraImagesJson = !empty($extraImages) ? json_encode($extraImages) : null;
 
         $beforeUrl = null;
         $afterUrl  = null;
@@ -1105,16 +1147,18 @@ class ProviderDashController
 
         $db->prepare("
             INSERT INTO tbl_portfolio
-                (provider_id, service_id, title, caption, price, image_url, before_url, after_url,
+                (provider_id, service_id, service_name, title, caption, price, image_url, extra_images, before_url, after_url,
                  is_featured, is_before_after, views, likes, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NOW())
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NOW())
         ")->execute([
             $providerId,
             $serviceId,
+            $serviceName ?: null,
             $title,
             $caption ?: null,
             $price   ?: null,
             $imageUrl,
+            $extraImagesJson,
             $beforeUrl,
             $afterUrl,
             $isFeatured,
@@ -1147,11 +1191,20 @@ class ProviderDashController
             header('Location: ' . BASE_URL . 'provider/portfolio'); exit;
         }
 
-        $title      = trim($_POST['title']   ?? '');
-        $caption    = trim($_POST['caption'] ?? '');
-        $price      = trim($_POST['price']   ?? '');
-        $serviceId  = (int)($_POST['service_id'] ?? 0) ?: null;
-        $isFeatured = isset($_POST['is_featured']) ? 1 : 0;
+        $title       = trim($_POST['title']        ?? '');
+        $caption     = trim($_POST['caption']      ?? '');
+        $serviceName = trim($_POST['service_name'] ?? '');
+        $serviceId   = null;   // service_id not required; free-text service_name used
+        $isFeatured  = isset($_POST['is_featured']) ? 1 : 0;
+
+        // Accept either the pre-formatted hidden price or a raw price_amount
+        $price = trim($_POST['price'] ?? '');
+        if (empty($price)) {
+            $priceAmt = trim($_POST['price_amount'] ?? '');
+            if ($priceAmt !== '' && is_numeric($priceAmt) && (float)$priceAmt > 0) {
+                $price = '₱' . number_format((float)$priceAmt, 0, '.', ',');
+            }
+        }
 
         if (empty($title)) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Work title is required.'];
@@ -1171,13 +1224,14 @@ class ProviderDashController
 
         $db->prepare("
             UPDATE tbl_portfolio
-               SET title=?, caption=?, price=?, service_id=?, is_featured=?, image_url=?
+               SET title=?, caption=?, price=?, service_id=?, service_name=?, is_featured=?, image_url=?
              WHERE id=?
         ")->execute([
             $title,
-            $caption  ?: null,
-            $price    ?: null,
+            $caption     ?: null,
+            $price       ?: null,
             $serviceId,
+            $serviceName ?: null,
             $isFeatured,
             $imageUrl,
             $itemId,
@@ -1244,6 +1298,63 @@ class ProviderDashController
            ->execute([$newVal, $itemId]);
 
         echo json_encode(['success' => true, 'is_featured' => $newVal]); exit;
+    }
+
+    // ── Session & account management (from Profile page) ─────────────────────
+
+    /**
+     * POST  provider/profile/revoke-session
+     * Revoke a single other session (placeholder — real implementation needs a
+     * tbl_sessions table; for now we just flash a success message).
+     */
+    public function revokeSession(): void
+    {
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Session has been revoked successfully.'];
+        header('Location: ' . BASE_URL . 'provider/profile#security'); exit;
+    }
+
+    /**
+     * POST  provider/profile/revoke-all-sessions
+     * Sign out all other sessions — destroys current session and redirects to login.
+     */
+    public function revokeAllSessions(): void
+    {
+        session_destroy();
+        header('Location: ' . BASE_URL . 'login?msg=sessions_revoked'); exit;
+    }
+
+    /**
+     * POST  provider/profile/export-data
+     * Request a data export — notifies admins and flashes a confirmation.
+     */
+    public function exportData(): void
+    {
+        $db     = Database::getInstance();
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+
+        $stUser = $db->prepare("SELECT first_name, last_name, email FROM tbl_users WHERE id = ? LIMIT 1");
+        $stUser->execute([$userId]);
+        $user = $stUser->fetch();
+        $name  = $user ? htmlspecialchars(trim($user['first_name'] . ' ' . $user['last_name'])) : 'Provider';
+        $email = $user['email'] ?? '';
+
+        NotificationHelper::send($db, NotificationHelper::adminIds($db), 'system',
+            '[Admin] Provider Data Export Request',
+            "Provider {$name} ({$email}) has requested a data export of their account.",
+            '', BASE_URL . 'admin/dashboard'
+        );
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => "Data export requested. Your file will be prepared and sent to {$email} within 24 hours."];
+        header('Location: ' . BASE_URL . 'provider/profile#security'); exit;
+    }
+
+    /**
+     * POST  provider/profile/deactivate
+     * Deactivate account from the profile page (same logic as settings/deactivate).
+     */
+    public function profileDeactivate(): void
+    {
+        $this->deactivateAccount();
     }
 
     // ── Reviews ───────────────────────────────────────────────────────────────

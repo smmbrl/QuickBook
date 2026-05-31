@@ -163,14 +163,7 @@ $currentIdx  = array_search($status, $statusOrder);
         <div class="pv-pd-divider"></div>
         <a href="<?= BASE_URL ?>provider/profile" class="pv-pd-item" role="menuitem">
           <span class="pv-pd-item-ico"><i class="fa-solid fa-store"></i></span>
-          <span>Business Profile</span>
-          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
-               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </a>
-        <a href="<?= BASE_URL ?>provider/settings" class="pv-pd-item" role="menuitem">
-          <span class="pv-pd-item-ico"><i class="fa-solid fa-gear"></i></span>
-          <span>Settings</span>
+          <span>Profile</span>
           <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
