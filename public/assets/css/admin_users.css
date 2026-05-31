@@ -496,3 +496,90 @@ body::before {
 @media (max-width: 900px) {
   .usr-kpi-grid { grid-template-columns: repeat(2, 1fr); }
 }
+/* ══════════════════════════════════════
+   MOBILE RESPONSIVE — Full mobile view
+   Breakpoints: 768px, 520px, 380px
+══════════════════════════════════════ */
+@media (max-width: 768px) {
+  .usr-page { padding: .75rem 1rem 3rem; }
+  .usr-title { font-size: 1.8rem; }
+  .usr-kpi-grid { grid-template-columns: repeat(2, 1fr); gap: .75rem; margin-bottom: 1.25rem; }
+
+  /* Panel head: wrap title & search */
+  .usr-panel-head { flex-wrap: wrap; gap: .75rem; padding: 1rem 1.1rem; }
+  .usr-search-wrap { width: 100%; margin-left: 0; }
+  .usr-search { width: 100%; }
+
+  /* Filter bar: scrollable */
+  .usr-filter-bar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    padding: .75rem 1rem; gap: .4rem; }
+  .usr-filter-bar::-webkit-scrollbar { display: none; }
+  .usr-filter-btn { flex-shrink: 0; white-space: nowrap; }
+
+  /* Table horizontal scroll */
+  .usr-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .usr-table th, .usr-table td { padding: .75rem 1rem; }
+}
+
+@media (max-width: 520px) {
+  .usr-kpi-grid { grid-template-columns: 1fr 1fr; gap: .6rem; }
+  .usr-kpi { padding: .9rem 1rem; }
+  .usr-kpi-val { font-size: 1.6rem; }
+
+  /* Card-style rows */
+  .usr-table, .usr-table thead, .usr-table tbody,
+  .usr-table th, .usr-table td, .usr-table tr { display: block; }
+  .usr-table thead { display: none; }
+
+  .usr-table tbody tr {
+    margin-bottom: .75rem;
+    border-radius: var(--r-md);
+    border: 1px solid rgba(201,168,76,.18);
+    background: rgba(255,255,255,.6);
+    padding: .9rem 1rem;
+  }
+  [data-theme="dark"] .usr-table tbody tr {
+    background: rgba(18,24,38,.55);
+    border-color: rgba(201,168,76,.15);
+  }
+
+  .usr-table td {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    padding: .3rem 0; border-bottom: none;
+    font-size: .82rem; gap: .5rem;
+  }
+  .usr-table td::before {
+    content: attr(data-label);
+    font-family: var(--font-mono); font-size: .58rem; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--text-dim); flex-shrink: 0; min-width: 80px;
+  }
+  .usr-table td:last-child {
+    margin-top: .5rem; padding-top: .6rem;
+    border-top: 1px dashed rgba(201,168,76,.15);
+    justify-content: flex-start; gap: .5rem;
+  }
+
+  /* Mini bar: full width */
+  .usr-mini-bar { width: 60px; }
+
+  /* Limit long service list */
+  .usr-td-services { max-width: none; }
+}
+
+@media (max-width: 380px) {
+  .usr-page { padding: .5rem .75rem 3rem; }
+  .usr-kpi-grid { gap: .5rem; }
+  .usr-kpi-val { font-size: 1.4rem; }
+  .usr-title { font-size: 1.5rem; }
+}
+
+/* ── Spacing fixes ── */
+@media (max-width: 768px) {
+  .usr-header { margin-bottom: 1rem; }
+  .usr-kpi-grid { margin-bottom: 1rem; }
+}
+@media (max-width: 520px) {
+  .usr-header { margin-bottom: .75rem; }
+  .usr-kpi-grid { gap: .5rem; margin-bottom: .75rem; }
+}

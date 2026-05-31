@@ -2,6 +2,7 @@
 // app/views/Provider/profile.php
 // Provider's unified profile + account management page (merged with Settings)
 
+date_default_timezone_set('Asia/Manila');
 require_once __DIR__ . '/../../../config/database.php';
 $db           = Database::getInstance();
 $userId       = (int)($_SESSION['user_id'] ?? 0);

@@ -3,6 +3,7 @@
 $total    = count($providers);
 $approved = count(array_filter($providers, fn($p) => $p['is_approved']));
 $pending  = $total - $approved;
+$flash    = $_SESSION['flash'] ?? null; unset($_SESSION['flash']);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -21,6 +22,17 @@ $pending  = $total - $approved;
 <?php require_once __DIR__ . '/_nav.php'; adminNav('providers'); ?>
 
 <div class="pv-page">
+
+  <!-- Flash message from server-side action -->
+  <?php if ($flash): ?>
+  <div style="margin:0 0 1rem;padding:.75rem 1rem;border-radius:10px;display:flex;align-items:center;gap:.6rem;font-size:.88rem;font-weight:500;
+              background:<?= $flash['type']==='success' ? 'rgba(22,163,74,.1)' : 'rgba(220,38,38,.1)' ?>;
+              border:1px solid <?= $flash['type']==='success' ? 'rgba(22,163,74,.3)' : 'rgba(220,38,38,.3)' ?>;
+              color:<?= $flash['type']==='success' ? '#16A34A' : '#DC2626' ?>">
+    <i class="fa-solid <?= $flash['type']==='success' ? 'fa-circle-check' : 'fa-circle-exclamation' ?>"></i>
+    <?= htmlspecialchars($flash['msg']) ?>
+  </div>
+  <?php endif ?>
 
   <!-- Hero -->
   <div class="pv-hero">
@@ -74,7 +86,7 @@ $pending  = $total - $approved;
           <tr>
             <th class="c-h-provider">Provider</th>
             <th class="c-h-email">Email</th>
-            <th class="c-h-svc">Service</th>
+            <th class="c-h-svc">Business Name</th>
             <th class="c-h-joined">Joined</th>
             <th class="c-h-status">Status</th>
             <th class="c-h-action">Action</th>
@@ -92,34 +104,29 @@ $pending  = $total - $approved;
           <?php foreach ($providers as $p):
             $initials   = strtoupper(substr($p['first_name'],0,1).substr($p['last_name'],0,1));
             $isApproved = (bool)$p['is_approved'];
-            $bizLabel   = !empty($p['category_name'])
-              ? $p['category_name']
-              : ((!empty($p['business_name']) && strtolower(trim($p['business_name'])) !== strtolower(trim($p['first_name'].' '.$p['last_name'])))
-                ? $p['business_name']
-                : '');
+            $bizLabel   = (!empty($p['business_name']) && strtolower(trim($p['business_name'])) !== strtolower(trim($p['first_name'].' '.$p['last_name'])))
+              ? $p['business_name']
+              : '';
             $search = strtolower($p['first_name'].' '.$p['last_name'].' '.($p['business_name'] ?? ''));
           ?>
           <tr data-approved="<?= (int)$p['is_approved'] ?>" data-search="<?= htmlspecialchars($search) ?>">
 
-            <td class="c-h-provider">
+            <td class="c-h-provider" data-label="Provider">
               <div class="pv-cell">
                 <div class="pv-av"><?= $initials ?></div>
                 <div>
                   <div class="pv-name"><?= htmlspecialchars($p['first_name'].' '.$p['last_name']) ?></div>
-                  <?php if ($bizLabel): ?>
-                    <div class="pv-sub"><?= htmlspecialchars($bizLabel) ?></div>
-                  <?php endif ?>
                 </div>
               </div>
             </td>
 
-            <td class="c-h-email"><?= htmlspecialchars($p['email']) ?></td>
+            <td class="c-h-email" data-label="Email"><?= htmlspecialchars($p['email']) ?></td>
 
-            <td class="c-h-svc"><?= htmlspecialchars($p['service_names'] ?? '—') ?></td>
+            <td class="c-h-svc" data-label="Business"><?= !empty($p['business_name']) ? htmlspecialchars($p['business_name']) : '—' ?></td>
 
-            <td class="c-h-joined"><?= date('M j, Y', strtotime($p['created_at'])) ?></td>
+            <td class="c-h-joined" data-label="Joined"><?= date('M j, Y', strtotime($p['created_at'])) ?></td>
 
-            <td class="c-h-status">
+            <td class="c-h-status" data-label="Status">
               <?php if ($isApproved): ?>
                 <span class="pv-pill pv-pill--approved">Approved</span>
               <?php else: ?>
@@ -127,10 +134,10 @@ $pending  = $total - $approved;
               <?php endif ?>
             </td>
 
-            <td class="c-h-action">
+            <td class="c-h-action" data-label="Actions">
               <div class="pv-actions">
                 <!-- View profile -->
-                <a href="<?= BASE_URL ?>admin/providers/<?= $p['id'] ?>/profile"
+                <a href="<?= BASE_URL ?>providers/<?= $p['provider_profile_id'] ?>"
                    class="pv-icon-btn pv-icon-btn--view" title="View Profile">
                   <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 </a>

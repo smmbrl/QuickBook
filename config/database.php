@@ -1,11 +1,10 @@
 <?php
 
-define('DB_HOST',    '153.92.15.53');
-define('DB_NAME',    'u831562186_quickbook');
-define('DB_USER',    'u831562186_quickbook');
-define('DB_PASS',    'CiyUKODu3lV+');
+define('DB_HOST', 'localhost');
+define('DB_NAME', 'quickbook');
+define('DB_USER', 'root');
+define('DB_PASS', '');
 define('DB_CHARSET', 'utf8mb4');
-
 class Database
 {
     private static ?PDO $instance = null;

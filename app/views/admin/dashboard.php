@@ -1,5 +1,6 @@
 <?php
 // app/views/admin/dashboard.php
+date_default_timezone_set('Asia/Manila');
 $adminName = htmlspecialchars($_SESSION['user_name'] ?? 'Admin');
 $today     = date('F j, Y');
 $dayName   = date('l, F j, Y');
@@ -31,9 +32,6 @@ $stNew = $db->query("SELECT COUNT(*) FROM tbl_users WHERE MONTH(created_at)=MONT
 $newThisMonth = (int)$stNew->fetchColumn();
 
 /* ── Analytics: new users per month (last 6 months) ── */
-require_once __DIR__ . '/../../../config/database.php';
-$db = Database::getInstance();
-
 $stGrowth = $db->query("
     SELECT DATE_FORMAT(created_at,'%b') AS mo,
            DATE_FORMAT(created_at,'%Y-%m') AS mo_key,

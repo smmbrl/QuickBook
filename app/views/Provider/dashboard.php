@@ -166,6 +166,7 @@ $stSchedule->execute([$providerId]);
 $todaySlots = $stSchedule->fetchAll();
 
 /* ── Helpers ── */
+date_default_timezone_set('Asia/Manila');
 $hour     = (int)date('H');
 $greeting = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good evening');
 $initials = strtoupper(substr($provFullName, 0, 2));
