@@ -36,7 +36,8 @@ $selectedCat    = isset($_GET['category'])     ? (int)$_GET['category']         
 $search         = trim($_GET['search']         ?? '');
 $locationFilter = trim($_GET['service_type']   ?? '');
 $sortBy         = $_GET['sort']                ?? 'rating';
-$quickFilter    = trim($_GET['quick']          ?? ''); // NEW: quick discovery chips
+$quickFilter    = trim($_GET['quick']          ?? '');
+$viewMode       = trim($_GET['view']           ?? 'grid'); // 'grid' or 'map'
 
 // ── Build WHERE ────────────────────────────────────────────────────────────────
 $where  = ["pp.is_approved = 1", "u.is_active = 1"];
@@ -64,7 +65,6 @@ if ($locationFilter !== '') {
         $where[]  = "FIND_IN_SET('Remote', pp.location_types_offered)";
     }
 }
-// Quick-filter chips
 if ($quickFilter === 'home') {
     $where[] = "pp.offers_home_service = 1";
 } elseif ($quickFilter === 'top') {
@@ -89,6 +89,8 @@ $sql = "
            COALESCE(pp.avg_rating, 0)     AS avg_rating,
            COALESCE(pp.total_reviews, 0)  AS total_reviews,
            pp.city, pp.barangay,
+           pp.latitude, pp.longitude,
+           pp.business_address,
            pp.offers_home_service,
            pp.location_types_offered,
            pp.profile_photo,
@@ -97,6 +99,7 @@ $sql = "
            pp.business_hours,
            c.name  AS category_name,
            c.slug  AS category_slug,
+           c.id    AS category_id_ref,
            u.first_name, u.last_name, u.avatar_url,
            (SELECT MIN(s.price) FROM tbl_services s
             WHERE s.provider_id = pp.id AND s.is_active = 1) AS min_price,
@@ -198,6 +201,39 @@ $allIcon = '
     <rect x="17" y="17" width="9" height="9" rx="2" fill="#C9A84C" opacity=".9"/>
 ';
 
+// ── Map icon SVG strings for JS (inline SVG encoded for divIcon) ─────────────
+$mapIconSvgMap = [];
+foreach ($catIconMap as $slug => $paths) {
+    $svgStr = '<svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">' . $paths . '</svg>';
+    $mapIconSvgMap[$slug] = $svgStr;
+}
+$mapIconSvgJson = json_encode($mapIconSvgMap, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+
+// ── Build provider map JSON ────────────────────────────────────────────────────
+$mapProviders = [];
+foreach ($providers as $p) {
+    $mapProviders[] = [
+        'id'          => (int)$p['profile_id'],
+        'name'        => $p['business_name'],
+        'provider'    => htmlspecialchars(trim($p['first_name'] . ' ' . $p['last_name'])),
+        'category'    => $p['category_name'] ?? '',
+        'categorySlug'=> $p['category_slug'] ?? '',
+        'rating'      => round((float)$p['avg_rating'], 1),
+        'reviews'     => (int)$p['total_reviews'],
+        'lat'         => !empty($p['latitude'])  ? (float)$p['latitude']  : null,
+        'lng'         => !empty($p['longitude']) ? (float)$p['longitude'] : null,
+        'barangay'    => $p['barangay'] ?? '',
+        'city'        => $p['city'] ?? '',
+        'address'     => $p['business_address'] ?? '',
+        'minPrice'    => $p['min_price'] !== null ? '₱' . number_format((float)$p['min_price'], 0) : '',
+        'urlView'     => BASE_URL . 'providers/' . (int)$p['profile_id'],
+        'urlBook'     => BASE_URL . 'book/'      . (int)$p['profile_id'],
+        'photo'       => $p['profile_photo'] ?? $p['avatar_url'] ?? '',
+        'isVerified'  => !empty($p['is_verified']),
+    ];
+}
+$mapProvidersJson = json_encode($mapProviders, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+
 function catSvg(string $slug, array $map, string $allIcon): string {
     $paths = $map[$slug] ?? $allIcon;
     return '<svg viewBox="0 0 30 30" fill="none" aria-hidden="true">' . $paths . '</svg>';
@@ -210,13 +246,11 @@ function renderStars(float $rating): string {
     return str_repeat('★', $filled) . ($half ? '½' : '') . str_repeat('☆', $empty);
 }
 
-// ── Simple open/closed check ──────────────────────────────────────────────────
-// Checks if current time falls within business_hours JSON (e.g. {"mon":{"open":"09:00","close":"18:00"},...})
 function isOpenNow(?string $hoursJson): ?bool {
     if (!$hoursJson) return null;
     $hours = json_decode($hoursJson, true);
     if (!$hours) return null;
-    $dayKey = strtolower(date('D')); // mon, tue, wed ...
+    $dayKey = strtolower(date('D'));
     $day    = $hours[$dayKey] ?? null;
     if (!$day || empty($day['open']) || empty($day['close'])) return null;
     $now   = strtotime(date('H:i'));
@@ -241,6 +275,7 @@ $serviceTypeLabels = [
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_browse.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
   <style>
     .pv-cat-scroll { --cat-count: <?= $catCount ?>; }
     .pv-svc-av-float img { width:50px;height:50px;object-fit:cover;border-radius:calc(var(--r-md) - 2px); }
@@ -265,7 +300,6 @@ $serviceTypeLabels = [
       <span class="pv-logo-badge">Customer</span>
     </a>
 
-    <!-- Center links — Profile removed per design doc -->
     <div class="pv-nav-links">
       <a href="<?= BASE_URL ?>dashboard"  class="pv-nav-link">Dashboard</a>
       <a href="<?= BASE_URL ?>browse"     class="pv-nav-link is-active">Browse</a>
@@ -293,7 +327,6 @@ $serviceTypeLabels = [
         </svg>
       </button>
 
-      <!-- Profile dropdown trigger -->
       <div class="pv-profile-trigger" id="profileTrigger" role="button" tabindex="0"
            aria-haspopup="true" aria-expanded="false">
         <div class="pv-nav-av">
@@ -312,7 +345,6 @@ $serviceTypeLabels = [
              stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </div>
 
-      <!-- Profile dropdown panel -->
       <div class="pv-profile-dropdown" id="profileDropdown" role="menu">
         <div class="pv-pd-header">
           <div class="pv-pd-avatar">
@@ -384,7 +416,7 @@ $serviceTypeLabels = [
   </div>
 </header>
 
-<!-- ════════════ QUICK DISCOVERY CHIPS (replaces stats bar) ════════════ -->
+<!-- ════════════ QUICK DISCOVERY CHIPS ════════════ -->
 <div class="pv-discovery-strip" role="region" aria-label="Quick discovery filters">
   <span class="pv-discovery-label">Quick find</span>
 
@@ -403,6 +435,7 @@ $serviceTypeLabels = [
         'sort'         => $sortBy,
         'service_type' => $locationFilter,
         'quick'        => $val,
+        'view'         => $viewMode !== 'grid' ? $viewMode : '',
       ]));
   ?>
   <a href="<?= $href ?>"
@@ -417,11 +450,38 @@ $serviceTypeLabels = [
   </a>
   <?php endforeach; ?>
 
-  <!-- Provider count pill on the right -->
   <span style="margin-left:auto;font-family:var(--font-mono);font-size:.65rem;color:var(--text-dim);">
     <strong style="color:var(--text-primary);font-size:.8rem;font-family:var(--font-display);"><?= $totalProviders ?></strong>
     provider<?= $totalProviders !== 1 ? 's' : '' ?> available
   </span>
+
+  <!-- View toggle: Grid / Map -->
+  <div class="pv-view-toggle" role="group" aria-label="View mode">
+    <?php
+      $gridHref = BASE_URL . 'browse?' . http_build_query(array_filter([
+        'category' => $selectedCat ?: '', 'search' => $search, 'sort' => $sortBy,
+        'service_type' => $locationFilter, 'quick' => $quickFilter, 'view' => 'grid',
+      ]));
+      $mapHref = BASE_URL . 'browse?' . http_build_query(array_filter([
+        'category' => $selectedCat ?: '', 'search' => $search, 'sort' => $sortBy,
+        'service_type' => $locationFilter, 'quick' => $quickFilter, 'view' => 'map',
+      ]));
+    ?>
+    <a href="<?= $gridHref ?>" class="pv-view-btn <?= $viewMode !== 'map' ? 'is-active' : '' ?>" title="Grid view">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="1" y="1" width="5" height="5" rx="1"/><rect x="8" y="1" width="5" height="5" rx="1"/>
+        <rect x="1" y="8" width="5" height="5" rx="1"/><rect x="8" y="8" width="5" height="5" rx="1"/>
+      </svg>
+      <span>Grid</span>
+    </a>
+    <a href="<?= $mapHref ?>" class="pv-view-btn <?= $viewMode === 'map' ? 'is-active' : '' ?>" title="Map view">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7 1C4.79 1 3 2.79 3 5c0 3.25 4 8 4 8s4-4.75 4-8c0-2.21-1.79-4-4-4z"/>
+        <circle cx="7" cy="5" r="1.2"/>
+      </svg>
+      <span>Map</span>
+    </a>
+  </div>
 </div>
 
 <!-- ════════════ PAGE BODY ════════════ -->
@@ -434,8 +494,7 @@ $serviceTypeLabels = [
     </div>
     <div class="pv-cat-scroll" role="list">
 
-      <!-- All -->
-      <a href="<?= BASE_URL ?>browse<?= $search ? '?search='.urlencode($search) : '' ?>"
+      <a href="<?= BASE_URL ?>browse<?= $search ? '?search='.urlencode($search) : '' ?><?= $viewMode === 'map' ? ($search ? '&' : '?').'view=map' : '' ?>"
          class="pv-cat-item <?= !$selectedCat ? 'active' : '' ?>"
          role="listitem" aria-label="All categories">
         <div class="pv-cat-circle">
@@ -451,7 +510,8 @@ $serviceTypeLabels = [
         $href = BASE_URL . 'browse?category=' . $cat['id']
               . ($search         ? '&search='.urlencode($search)               : '')
               . ($locationFilter ? '&service_type='.urlencode($locationFilter) : '')
-              . ($sortBy !== 'rating' ? '&sort='.urlencode($sortBy)            : '');
+              . ($sortBy !== 'rating' ? '&sort='.urlencode($sortBy)            : '')
+              . ($viewMode === 'map' ? '&view=map' : '');
       ?>
       <a href="<?= $href ?>"
          class="pv-cat-item <?= $isActive ? 'active' : '' ?>"
@@ -513,6 +573,7 @@ $serviceTypeLabels = [
                 'search'       => $search,
                 'sort'         => $sortBy,
                 'service_type' => $val,
+                'view'         => $viewMode !== 'grid' ? $viewMode : '',
               ]));
           ?>
           <a href="<?= $href ?>"
@@ -539,6 +600,7 @@ $serviceTypeLabels = [
         <?php if ($search):         ?><input type="hidden" name="search"       value="<?= htmlspecialchars($search) ?>"><?php endif; ?>
         <?php if ($locationFilter): ?><input type="hidden" name="service_type" value="<?= htmlspecialchars($locationFilter) ?>"><?php endif; ?>
         <?php if ($quickFilter):    ?><input type="hidden" name="quick"        value="<?= htmlspecialchars($quickFilter) ?>"><?php endif; ?>
+        <?php if ($viewMode !== 'grid'): ?><input type="hidden" name="view"   value="<?= htmlspecialchars($viewMode) ?>"><?php endif; ?>
         <div class="pv-sort-wrap">
           <svg class="pv-sort-ico" viewBox="0 0 14 14" fill="none" stroke="currentColor"
                stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
@@ -558,10 +620,179 @@ $serviceTypeLabels = [
       </form>
 
       <?php if ($search || $selectedCat || $locationFilter || $quickFilter): ?>
-        <a href="<?= BASE_URL ?>browse" class="pv-clear-btn">✕ Clear</a>
+        <a href="<?= BASE_URL ?>browse<?= $viewMode === 'map' ? '?view=map' : '' ?>" class="pv-clear-btn">✕ Clear</a>
       <?php endif; ?>
     </div>
   </div>
+
+  <!-- ════ MAP VIEW ════ -->
+  <?php if ($viewMode === 'map'): ?>
+
+  <?php if (empty($providers)): ?>
+  <div class="pv-empty-state">
+    <div class="pv-empty-icon" aria-hidden="true">🔍</div>
+    <p>No providers found. Try adjusting your filters or search term.</p>
+    <a href="<?= BASE_URL ?>browse?view=map" class="pv-empty-cta">Clear All Filters →</a>
+  </div>
+  <?php else: ?>
+
+  <!-- Split layout: Left = shop list, Right = map -->
+  <div class="pv-map-layout" id="mapLayout">
+
+    <!-- Sidebar toggle button -->
+    <button class="pv-map-sidebar-toggle" id="sidebarToggle" aria-label="Toggle shop list" title="Toggle shop list">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="5" x2="15" y2="5"/><line x1="3" y1="9" x2="15" y2="9"/><line x1="3" y1="13" x2="15" y2="13"/>
+      </svg>
+    </button>
+
+    <!-- Left Panel: Shop list -->
+    <aside class="pv-map-panel" id="mapPanel" aria-label="Nearby shops">
+      <div class="pv-map-panel-header">
+        <div class="pv-map-panel-title">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M7 1C4.79 1 3 2.79 3 5c0 3.25 4 8 4 8s4-4.75 4-8c0-2.21-1.79-4-4-4z"/>
+            <circle cx="7" cy="5" r="1.2"/>
+          </svg>
+          Nearby Shops
+        </div>
+        <span class="pv-map-panel-count" id="panelCount"><?= count($providers) ?> found</span>
+      </div>
+
+      <!-- Use My Location -->
+      <button class="pv-use-location-btn" id="useLocationBtn" type="button">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="7" cy="7" r="3"/><line x1="7" y1="1" x2="7" y2="3"/><line x1="7" y1="11" x2="7" y2="13"/>
+          <line x1="1" y1="7" x2="3" y2="7"/><line x1="11" y1="7" x2="13" y2="7"/>
+        </svg>
+        <span id="useLocationLabel">Use My Location</span>
+      </button>
+
+      <!-- Shop list -->
+      <div class="pv-map-shop-list" id="mapShopList">
+        <?php
+          // Pre-fetch gallery for map list shops
+          $providerIds = array_column($providers, 'profile_id');
+          $galleryMap  = [];
+          if (!empty($providerIds)) {
+              $placeholders = implode(',', array_fill(0, count($providerIds), '?'));
+              $gStmt = $db->prepare("
+                  SELECT provider_id, image_url
+                  FROM tbl_provider_gallery
+                  WHERE provider_id IN ($placeholders)
+                  ORDER BY sort_order ASC, id ASC
+              ");
+              $gStmt->execute($providerIds);
+              foreach ($gStmt->fetchAll() as $gRow) {
+                  $galleryMap[$gRow['provider_id']][] = $gRow['image_url'];
+              }
+          }
+        ?>
+        <?php foreach ($providers as $idx => $p):
+          $slug       = $p['category_slug'] ?? '';
+          $rating     = (float)$p['avg_rating'];
+          $reviews    = (int)$p['total_reviews'];
+          $fullName   = htmlspecialchars(trim($p['first_name'] . ' ' . $p['last_name']));
+          $providerAv = $p['profile_photo'] ?? $p['avatar_url'] ?? null;
+          $locLine    = implode(', ', array_filter([$p['barangay'] ?? '', $p['city'] ?? '']));
+          $openStatus = isOpenNow($p['business_hours'] ?? null);
+          $hasHome    = (int)$p['offers_home_service'] === 1;
+          $isVerified = !empty($p['is_verified']);
+          $minPrice   = $p['min_price'];
+        ?>
+        <div class="pv-map-shop-item" data-provider-id="<?= (int)$p['profile_id'] ?>"
+             data-lat="<?= $p['latitude'] ?? '' ?>" data-lng="<?= $p['longitude'] ?? '' ?>">
+          <div class="pv-map-shop-photo">
+            <?php if ($providerAv): ?>
+              <img src="<?= htmlspecialchars($providerAv) ?>" alt="<?= htmlspecialchars($p['business_name']) ?>" loading="lazy">
+            <?php else: ?>
+              <div class="pv-map-shop-photo-placeholder">
+                <?= catSvg($slug, $catIconMap, $allIcon) ?>
+              </div>
+            <?php endif; ?>
+            <?php if ($openStatus === true): ?>
+              <span class="pv-map-shop-status open"></span>
+            <?php elseif ($openStatus === false): ?>
+              <span class="pv-map-shop-status closed"></span>
+            <?php endif; ?>
+          </div>
+          <div class="pv-map-shop-info">
+            <div class="pv-map-shop-name"><?= htmlspecialchars($p['business_name']) ?>
+              <?php if ($isVerified): ?><span class="pv-map-shop-verified" title="Verified">✔</span><?php endif; ?>
+            </div>
+            <div class="pv-map-shop-provider"><?= $fullName ?></div>
+            <div class="pv-map-shop-cat"><?= htmlspecialchars($p['category_name'] ?? '') ?></div>
+            <div class="pv-map-shop-meta">
+              <?php if ($rating > 0): ?>
+                <span class="pv-map-shop-stars">★ <?= number_format($rating, 1) ?></span>
+                <span class="pv-map-shop-reviews">(<?= $reviews ?>)</span>
+              <?php else: ?>
+                <span class="pv-map-shop-reviews">New</span>
+              <?php endif; ?>
+              <span class="pv-map-shop-dist" id="dist-<?= (int)$p['profile_id'] ?>"></span>
+            </div>
+            <?php if ($locLine): ?>
+            <div class="pv-map-shop-loc">📍 <?= htmlspecialchars($locLine) ?></div>
+            <?php endif; ?>
+          </div>
+          <div class="pv-map-shop-actions">
+            <?php if ($minPrice !== null): ?>
+              <div class="pv-map-shop-price">₱<?= number_format((float)$minPrice, 0) ?></div>
+            <?php endif; ?>
+            <a href="<?= BASE_URL ?>providers/<?= (int)$p['profile_id'] ?>" class="pv-map-shop-view-btn">View Shop</a>
+          </div>
+        </div>
+        <?php endforeach; ?>
+      </div>
+    </aside>
+
+    <!-- Right Panel: Map -->
+    <div class="pv-map-container" id="mapContainer">
+      <div id="browseMap" class="pv-browse-map" aria-label="Map of providers"></div>
+
+      <!-- Floating info card (shown on marker click) -->
+      <div class="pv-map-info-card" id="mapInfoCard" role="dialog" aria-label="Provider details" aria-hidden="true">
+        <button class="pv-map-info-close" id="mapInfoClose" aria-label="Close">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="12" y2="12"/><line x1="12" y1="2" x2="2" y2="12"/></svg>
+        </button>
+
+        <div class="pv-map-info-photo-wrap">
+          <div class="pv-map-info-photo" id="cardPhoto"></div>
+          <div class="pv-map-info-badges" id="cardBadges"></div>
+        </div>
+
+        <div class="pv-map-info-body">
+          <div class="pv-map-info-cat" id="cardCat"></div>
+          <div class="pv-map-info-name" id="cardName"></div>
+          <div class="pv-map-info-provider" id="cardProvider"></div>
+
+          <div class="pv-map-info-row">
+            <span class="pv-map-info-rating" id="cardRating"></span>
+            <span class="pv-map-info-dist" id="cardDist"></span>
+          </div>
+
+          <div class="pv-map-info-address" id="cardAddress"></div>
+
+          <div class="pv-map-info-actions">
+            <a href="#" class="pv-map-info-btn pv-map-info-btn--outline" id="cardViewShop">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 11 L11 1M5 1h6v6"/></svg>
+              View Shop
+            </a>
+            <a href="#" class="pv-map-info-btn pv-map-info-btn--primary" id="cardBookNow">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="2" width="10" height="9" rx="1.5"/><path d="M8 1v2M4 1v2M1 5h10"/></svg>
+              Book Now
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /pv-map-layout -->
+
+  <?php endif; ?>
+
+  <!-- ════ GRID VIEW ════ -->
+  <?php else: ?>
 
   <!-- PROVIDER GRID -->
   <?php if (empty($providers)): ?>
@@ -601,18 +832,14 @@ $serviceTypeLabels = [
       $hasHome   = (int)$p['offers_home_service'] === 1;
       $isVerified = !empty($p['is_verified']);
 
-      // Cover image: prefer cover_photo, fallback to first gallery image
       $coverImg   = $p['cover_photo'] ?? ($galleryMap[$p['profile_id']][0] ?? null);
-      // Avatar: prefer profile_photo, fallback avatar_url
       $providerAv = $p['profile_photo'] ?? $p['avatar_url'] ?? null;
-      // Gallery (skip cover if used)
       $allGallery  = $galleryMap[$p['profile_id']] ?? [];
       $galleryImgs = $coverImg && $allGallery && $allGallery[0] === $coverImg
                     ? array_slice($allGallery, 1, 3)
                     : array_slice($allGallery, 0, 3);
       $extraCount = max(0, count($allGallery) - (($coverImg && $allGallery && $allGallery[0] === $coverImg) ? 4 : 3));
 
-      // Location badges
       $badges = [];
       if ($hasHome)                               $badges[] = ['label'=>'Home Service','class'=>'badge-onsite'];
       if (strpos($locTypes,'In-shop')  !== false) $badges[] = ['label'=>'In-shop',    'class'=>'badge-inshop'];
@@ -629,7 +856,6 @@ $serviceTypeLabels = [
 
       <div class="pv-svc-accent" aria-hidden="true"></div>
 
-      <!-- Cover image area -->
       <div class="pv-svc-cover">
         <?php if ($coverImg): ?>
           <img src="<?= htmlspecialchars($coverImg) ?>"
@@ -641,7 +867,6 @@ $serviceTypeLabels = [
           </div>
         <?php endif; ?>
 
-        <!-- Overlaid status + verified badges -->
         <div class="pv-svc-cover-badges">
           <?php if ($openStatus === true): ?>
             <span class="pv-svc-status open">
@@ -657,7 +882,6 @@ $serviceTypeLabels = [
           <?php endif; ?>
         </div>
 
-        <!-- Floating provider avatar -->
         <div class="pv-svc-av-float" aria-hidden="true">
           <?php if ($providerAv): ?>
             <img src="<?= htmlspecialchars($providerAv) ?>" alt="<?= htmlspecialchars($p['business_name']) ?>">
@@ -667,7 +891,6 @@ $serviceTypeLabels = [
         </div>
       </div>
 
-      <!-- Category + service type badges (below cover, beside avatar space) -->
       <div class="pv-svc-head">
         <div class="pv-svc-head-right">
           <div class="pv-svc-category"><?= htmlspecialchars($p['category_name'] ?? 'Service') ?></div>
@@ -679,7 +902,6 @@ $serviceTypeLabels = [
         </div>
       </div>
 
-      <!-- Card body -->
       <div class="pv-svc-body">
         <div class="pv-svc-name"><?= htmlspecialchars($p['business_name']) ?></div>
         <div class="pv-svc-provider"><?= $fullName ?></div>
@@ -695,7 +917,6 @@ $serviceTypeLabels = [
         <?php endif; ?>
       </div>
 
-      <!-- Portfolio gallery strip -->
       <?php if (!empty($galleryImgs)): ?>
       <div class="pv-svc-gallery">
         <?php foreach ($galleryImgs as $imgUrl): ?>
@@ -711,7 +932,6 @@ $serviceTypeLabels = [
       </div>
       <?php endif; ?>
 
-      <!-- Rating -->
       <div class="pv-svc-meta">
         <div class="pv-svc-rating">
           <span class="pv-svc-stars" aria-label="Rating <?= number_format($rating,1) ?> out of 5">
@@ -722,7 +942,6 @@ $serviceTypeLabels = [
         </div>
       </div>
 
-      <!-- Footer: price + CTA -->
       <div class="pv-svc-footer">
         <div class="pv-svc-price">
           <?php if ($minPrice !== null): ?>
@@ -740,10 +959,15 @@ $serviceTypeLabels = [
   </div>
   <?php endif; ?>
 
+  <?php endif; // end grid vs map view ?>
+
 </main>
 
 <!-- ════════════ SCRIPTS ════════════ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
 <script>
+/* ── Service type dropdown ── */
 function toggleStype(e) {
   e.stopPropagation();
   const menu = document.getElementById('stypeMenu');
@@ -756,7 +980,312 @@ document.addEventListener('click', () => {
   document.getElementById('stypeBtn')?.setAttribute('aria-expanded','false');
 });
 </script>
+
+<?php if ($viewMode === 'map' && !empty($providers)): ?>
 <script>
+/* ══════════════════════════════════════
+   BROWSE MAP — Full interactive map
+══════════════════════════════════════ */
+(function () {
+  var BACOLOD    = [10.6840, 122.9560];
+  var providers  = <?= $mapProvidersJson ?>;
+  var iconSvgMap = <?= $mapIconSvgJson ?>;
+  var userLatLng = null;
+  var markers    = {};
+  var activeMarkerId = null;
+
+  // ── Init Leaflet map ──────────────────────────────────────────────────────
+  var map = L.map('browseMap', {
+    center: BACOLOD, zoom: 13,
+    zoomControl: true,
+    scrollWheelZoom: true,
+    attributionControl: true
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 18
+  }).addTo(map);
+
+  // Apply dark tile filter if dark mode active
+  if (document.documentElement.getAttribute('data-theme') === 'dark') {
+    document.querySelector('.leaflet-tile-pane').style.filter =
+      'brightness(0.7) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7)';
+  }
+
+  // ── Build category map icon ───────────────────────────────────────────────
+  function makeCatIcon(slug, isActive) {
+    var svgContent = iconSvgMap[slug] || iconSvgMap['all'];
+    var bg    = isActive ? '#C9A84C' : '#fff';
+    var bgDk  = isActive ? '#C9A84C' : 'rgba(18,24,38,0.95)';
+    var size  = isActive ? 46 : 38;
+    var shadow = isActive
+      ? 'drop-shadow(0 4px 12px rgba(201,168,76,.65))'
+      : 'drop-shadow(0 2px 6px rgba(0,0,0,.28))';
+
+    var html = '<div class="qb-map-marker' + (isActive ? ' is-active' : '') + '" style="' +
+      'width:' + size + 'px;height:' + size + 'px;' +
+      'background:' + bg + ';' +
+      'border:2px solid #C9A84C;' +
+      'border-radius:50% 50% 50% 0;' +
+      'transform:rotate(-45deg);' +
+      'display:flex;align-items:center;justify-content:center;' +
+      'filter:' + shadow + ';' +
+      'transition:all .2s cubic-bezier(.22,1,.36,1);' +
+      'cursor:pointer;' +
+      '">' +
+      '<div style="transform:rotate(45deg);width:22px;height:22px;display:flex;align-items:center;justify-content:center;">' +
+        (svgContent || '') +
+      '</div>' +
+      '</div>';
+
+    return L.divIcon({
+      className: '',
+      html: html,
+      iconSize:   [size, size],
+      iconAnchor: [size/2, size],
+      popupAnchor:[0, -(size + 4)]
+    });
+  }
+
+  // ── Haversine distance (km) ───────────────────────────────────────────────
+  function haversine(lat1, lon1, lat2, lon2) {
+    var R = 6371;
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLon = (lon2 - lon1) * Math.PI / 180;
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+            Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+            Math.sin(dLon/2)*Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function fmtDist(km) {
+    return km < 1 ? Math.round(km * 1000) + 'm away' : km.toFixed(1) + 'km away';
+  }
+
+  // ── Show floating info card ───────────────────────────────────────────────
+  function showInfoCard(p) {
+    activeMarkerId = p.id;
+
+    // Update marker icons
+    Object.keys(markers).forEach(function(id) {
+      markers[id].setIcon(makeCatIcon(providers.find(x => x.id == id)?.categorySlug || '', id == p.id));
+    });
+
+    var card      = document.getElementById('mapInfoCard');
+    var locLine   = [p.barangay, p.city].filter(Boolean).join(', ') || 'Bacolod City';
+    var addrLine  = p.address || locLine;
+    var distEl    = document.getElementById('dist-' + p.id);
+    var distText  = distEl ? distEl.textContent : '';
+
+    // Photo
+    var photoEl = document.getElementById('cardPhoto');
+    if (p.photo) {
+      photoEl.innerHTML = '<img src="' + p.photo + '" alt="' + p.name + '" style="width:100%;height:100%;object-fit:cover;">';
+    } else {
+      photoEl.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:var(--gold-lt);">' +
+        (iconSvgMap[p.categorySlug] || '') + '</div>';
+    }
+
+    // Badges
+    var badgesEl = document.getElementById('cardBadges');
+    var badgesHtml = '';
+    if (p.isVerified) badgesHtml += '<span class="pv-map-card-badge pv-map-card-badge--verified">✔ Verified</span>';
+    badgesEl.innerHTML = badgesHtml;
+
+    document.getElementById('cardCat').textContent    = p.category || '';
+    document.getElementById('cardName').textContent   = p.name;
+    document.getElementById('cardProvider').textContent = p.provider ? '👤 ' + p.provider : '';
+    document.getElementById('cardAddress').textContent = '📍 ' + addrLine;
+
+    var ratingEl = document.getElementById('cardRating');
+    ratingEl.innerHTML = p.rating > 0
+      ? '<span style="color:#C9A84C;">★</span> ' + p.rating.toFixed(1) +
+        ' <span style="opacity:.6;font-size:.7em;">(' + p.reviews + ' reviews)</span>'
+      : '<span style="opacity:.5;">No reviews yet</span>';
+
+    var distCardEl = document.getElementById('cardDist');
+    distCardEl.textContent = distText || '';
+
+    document.getElementById('cardViewShop').href = p.urlView;
+    document.getElementById('cardBookNow').href  = p.urlBook;
+
+    card.setAttribute('aria-hidden', 'false');
+    card.classList.add('is-visible');
+
+    // Highlight sidebar item
+    document.querySelectorAll('.pv-map-shop-item').forEach(function(el) {
+      el.classList.toggle('is-active', parseInt(el.dataset.providerId) === p.id);
+    });
+    var activeEl = document.querySelector('.pv-map-shop-item.is-active');
+    if (activeEl) activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function hideInfoCard() {
+    var card = document.getElementById('mapInfoCard');
+    card.classList.remove('is-visible');
+    card.setAttribute('aria-hidden', 'true');
+    // Reset marker icons
+    if (activeMarkerId !== null) {
+      var p = providers.find(x => x.id == activeMarkerId);
+      if (p && markers[activeMarkerId]) {
+        markers[activeMarkerId].setIcon(makeCatIcon(p.categorySlug, false));
+      }
+    }
+    activeMarkerId = null;
+    document.querySelectorAll('.pv-map-shop-item').forEach(function(el) {
+      el.classList.remove('is-active');
+    });
+  }
+
+  // ── Close button ─────────────────────────────────────────────────────────
+  document.getElementById('mapInfoClose').addEventListener('click', hideInfoCard);
+  document.getElementById('browseMap').addEventListener('click', function(e) {
+    if (e.target === this) hideInfoCard();
+  });
+
+  // ── Add markers ──────────────────────────────────────────────────────────
+  var bounds = [];
+
+  providers.forEach(function(p, idx) {
+    var lat = p.lat, lng = p.lng;
+    if (!lat || !lng) {
+      var angle  = (idx / Math.max(providers.length, 1)) * 2 * Math.PI;
+      var radius = 0.012 + (idx % 3) * 0.006;
+      lat = BACOLOD[0] + radius * Math.cos(angle);
+      lng = BACOLOD[1] + radius * Math.sin(angle);
+    }
+    bounds.push([lat, lng]);
+    var marker = L.marker([lat, lng], { icon: makeCatIcon(p.categorySlug, false) }).addTo(map);
+    markers[p.id] = marker;
+    marker.on('click', function(e) {
+      L.DomEvent.stopPropagation(e);
+      showInfoCard(p);
+      map.panTo([lat, lng], { animate: true, duration: 0.4 });
+    });
+  });
+
+  if (bounds.length === 1) {
+    map.setView(bounds[0], 15);
+  } else if (bounds.length > 1) {
+    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 14 });
+  }
+
+  // ── Sidebar shop item click → pan + show card ─────────────────────────────
+  document.querySelectorAll('.pv-map-shop-item').forEach(function(el) {
+    el.addEventListener('click', function() {
+      var id  = parseInt(el.dataset.providerId);
+      var p   = providers.find(x => x.id === id);
+      if (!p) return;
+      var lat = p.lat, lng = p.lng;
+      if (!lat || !lng) {
+        var idx = providers.indexOf(p);
+        var angle  = (idx / Math.max(providers.length, 1)) * 2 * Math.PI;
+        var radius = 0.012 + (idx % 3) * 0.006;
+        lat = BACOLOD[0] + radius * Math.cos(angle);
+        lng = BACOLOD[1] + radius * Math.sin(angle);
+      }
+      map.panTo([lat, lng], { animate: true, duration: 0.5 });
+      setTimeout(function() { showInfoCard(p); }, 300);
+    });
+  });
+
+  // ── Update distances given user location ────────────────────────────────
+  function updateDistances(userLat, userLng) {
+    var sorted = providers.map(function(p, idx) {
+      var lat = p.lat, lng = p.lng;
+      if (!lat || !lng) {
+        var angle  = (idx / Math.max(providers.length, 1)) * 2 * Math.PI;
+        var radius = 0.012 + (idx % 3) * 0.006;
+        lat = BACOLOD[0] + radius * Math.cos(angle);
+        lng = BACOLOD[1] + radius * Math.sin(angle);
+      }
+      return { p: p, dist: haversine(userLat, userLng, lat, lng), lat: lat, lng: lng };
+    });
+    sorted.sort(function(a, b) { return a.dist - b.dist; });
+
+    // Update inline distance elements
+    sorted.forEach(function(item) {
+      var el = document.getElementById('dist-' + item.p.id);
+      if (el) el.textContent = '· ' + fmtDist(item.dist);
+    });
+
+    // Update card dist if open
+    if (activeMarkerId !== null) {
+      var active = sorted.find(x => x.p.id === activeMarkerId);
+      if (active) {
+        document.getElementById('cardDist').textContent = fmtDist(active.dist);
+      }
+    }
+
+    // Reorder sidebar list by distance
+    var list = document.getElementById('mapShopList');
+    sorted.forEach(function(item) {
+      var el = list.querySelector('[data-provider-id="' + item.p.id + '"]');
+      if (el) list.appendChild(el);
+    });
+
+    document.getElementById('panelCount').textContent = sorted.length + ' found · sorted by distance';
+  }
+
+  // ── Use My Location ────────────────────────────────────────────────────
+  var userMarker = null;
+  document.getElementById('useLocationBtn').addEventListener('click', function() {
+    var btn   = this;
+    var label = document.getElementById('useLocationLabel');
+    if (!navigator.geolocation) {
+      label.textContent = 'Geolocation not supported';
+      return;
+    }
+    btn.classList.add('is-loading');
+    label.textContent = 'Locating…';
+    navigator.geolocation.getCurrentPosition(
+      function(pos) {
+        userLatLng = [pos.coords.latitude, pos.coords.longitude];
+        btn.classList.remove('is-loading');
+        btn.classList.add('is-located');
+        label.textContent = 'Location Found';
+
+        // Add user marker
+        if (userMarker) map.removeLayer(userMarker);
+        userMarker = L.marker(userLatLng, {
+          icon: L.divIcon({
+            className: '',
+            html: '<div style="width:18px;height:18px;background:#3B82F6;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 8px rgba(59,130,246,.5);"></div>',
+            iconSize:   [18, 18],
+            iconAnchor: [9, 9]
+          })
+        }).addTo(map);
+        userMarker.bindTooltip('You are here', { permanent: false, direction: 'top' });
+
+        map.setView(userLatLng, 14, { animate: true, duration: 1 });
+        updateDistances(userLatLng[0], userLatLng[1]);
+      },
+      function(err) {
+        btn.classList.remove('is-loading');
+        label.textContent = err.code === 1 ? 'Permission denied' : 'Could not locate';
+        setTimeout(function() { label.textContent = 'Use My Location'; btn.classList.remove('is-located'); }, 3000);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+
+  // ── Sidebar toggle ────────────────────────────────────────────────────
+  document.getElementById('sidebarToggle').addEventListener('click', function() {
+    var layout = document.getElementById('mapLayout');
+    var panel  = document.getElementById('mapPanel');
+    var isHidden = layout.classList.toggle('panel-hidden');
+    panel.setAttribute('aria-hidden', isHidden ? 'true' : 'false');
+    this.setAttribute('aria-label', isHidden ? 'Show shop list' : 'Hide shop list');
+    setTimeout(function() { map.invalidateSize(); }, 320);
+  });
+
+})();
+</script>
+<?php endif; ?>
+
+<script>
+/* ── Theme toggle ── */
 (function () {
   var btn  = document.getElementById('themeToggle');
   var moon = document.querySelector('.icon-moon');
@@ -783,6 +1312,7 @@ document.addEventListener('click', () => {
 })();
 </script>
 <script>
+/* ── Profile dropdown ── */
 (function () {
   const trigger  = document.getElementById('profileTrigger');
   const dropdown = document.getElementById('profileDropdown');

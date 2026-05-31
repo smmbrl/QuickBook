@@ -116,9 +116,31 @@ $catEmojiMap = [
 ];
 $catEmoji = $catEmojiMap[$provider['category_slug'] ?? ''] ?? '🛠️';
 
+// Category accent color map
+$catAccentMap = [
+    'barbershop'       => '#2563EB',
+    'hair-salon'       => '#7C3AED',
+    'nail-care'        => '#DB2777',
+    'massage-therapy'  => '#16A34A',
+    'skincare-facial'  => '#D97706',
+    'fitness-training' => '#EA580C',
+    'home-cleaning'    => '#0D9488',
+    'pet-grooming'     => '#C9A84C',
+    'event-styling'    => '#6366F1',
+    'dental'           => '#0EA5E9',
+    'makeup'           => '#EC4899',
+];
+$catAccent = $catAccentMap[$provider['category_slug'] ?? ''] ?? '#C9A84C';
+
 function renderStars(float $r): string {
-    $f = floor($r); $h = ($r - $f) >= .5 ? 1 : 0; $e = 5 - $f - $h;
-    return str_repeat('★', $f) . ($h ? '½' : '') . str_repeat('☆', $e);
+    $full = (int)floor($r);
+    $half = ($r - $full) >= .5 ? 1 : 0;
+    $empty = 5 - $full - $half;
+    $out = '';
+    for ($i = 0; $i < $full; $i++)  $out .= '<i class="fa-solid fa-star" style="color:#f59e0b"></i>';
+    if ($half)                       $out .= '<i class="fa-solid fa-star-half-stroke" style="color:#f59e0b"></i>';
+    for ($i = 0; $i < $empty; $i++) $out .= '<i class="fa-regular fa-star" style="color:#f59e0b"></i>';
+    return $out;
 }
 
 function isOpenNow(?string $hoursJson): ?bool {
@@ -139,7 +161,7 @@ foreach ($availability as $av) {
     if ($av['day_of_week'] === $todayName) { $todayAvail = $av; break; }
 }
 
-// Open/closed status: prefer business_hours JSON, fallback to availability table
+// Open/closed status
 $openStatus = isOpenNow($provider['business_hours'] ?? null);
 if ($openStatus === null && $todayAvail) {
     $nowTs      = strtotime(date('H:i'));
@@ -147,9 +169,9 @@ if ($openStatus === null && $todayAvail) {
                && $nowTs <= strtotime($todayAvail['end_time']);
 }
 
-// Next available day (if closed today)
+// Next available day
 $daysOfWeek = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-$todayIdx   = (int)(date('N')) - 1; // 0=Mon … 6=Sun
+$todayIdx   = (int)(date('N')) - 1;
 $availDays  = array_column($availability, 'day_of_week');
 $nextAvail  = null;
 for ($i = 1; $i <= 7; $i++) {
@@ -169,6 +191,13 @@ $showToggle = $offersHome && $offersShop;
 $isVerified = !empty($provider['is_verified']);
 $minPrice   = $services ? min(array_column($services, 'price')) : null;
 
+// Contact info
+$phone     = $provider['phone'] ?? $provider['contact_number'] ?? '';
+$email     = $provider['email'] ?? '';
+$website   = $provider['website'] ?? '';
+$instagram = $provider['instagram'] ?? $provider['social_instagram'] ?? '';
+$facebook  = $provider['facebook'] ?? $provider['social_facebook'] ?? '';
+
 $colorAccents = [
     'blue'   => '#2563EB', 'purple' => '#7C3AED', 'pink'   => '#DB2777',
     'green'  => '#16A34A', 'yellow' => '#D97706', 'orange' => '#EA580C',
@@ -186,6 +215,14 @@ $locIcons = [
     'Flexible' => '<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6h2.5M7.5 6H10M6 2v2.5M6 7.5V10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="6" cy="6" r="1.5" stroke="currentColor" stroke-width="1.3"/></svg>',
     'Remote'   => '<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="3" width="9" height="6" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M4 9.5L6 11L8 9.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 ];
+
+// Address & map
+$addrParts   = array_filter([$provider['address'] ?? '', $provider['barangay'] ?? '', $provider['city'] ?? '']);
+$fullAddress = implode(', ', $addrParts);
+$mapQuery    = urlencode($fullAddress ?: ($provider['city'] ?? 'Bacolod City'));
+$lat         = $provider['latitude']  ?? null;
+$lng         = $provider['longitude'] ?? null;
+$hasCoords   = $lat && $lng;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -196,12 +233,53 @@ $locIcons = [
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/customer_provider.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <!-- Leaflet for mini map -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
   <style>
     /* ══════════════════════════════════════
-       HERO ENHANCEMENTS
+       CATEGORY ACCENT VARIABLE
     ══════════════════════════════════════ */
-    .pv-hero-badge-row {
-      display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .6rem;
+    :root {
+      --cat-accent: <?= $catAccent ?>;
+      --cat-accent-soft: <?= $catAccent ?>22;
+      --cat-accent-border: <?= $catAccent ?>55;
+    }
+
+    /* ══════════════════════════════════════
+       HERO — UPGRADED
+    ══════════════════════════════════════ */
+    .pp-hero-category-badge {
+      display: inline-flex; align-items: center; gap: .45rem;
+      background: var(--cat-accent-soft);
+      border: 1.5px solid var(--cat-accent-border);
+      color: var(--cat-accent);
+      font-family: var(--font-mono); font-size: .63rem; font-weight: 700;
+      letter-spacing: .1em; text-transform: uppercase;
+      padding: .3rem .85rem; border-radius: 99px;
+      box-shadow: 0 2px 8px <?= $catAccent ?>30;
+    }
+    .pp-hero-category-badge .cat-dot {
+      width: 6px; height: 6px; border-radius: 99px;
+      background: var(--cat-accent); flex-shrink: 0;
+      animation: pp-pulse 1.8s ease infinite;
+    }
+    .pp-hero-business-name {
+      font-family: var(--font-display);
+      font-size: clamp(1.8rem, 4vw, 2.9rem);
+      font-weight: 700; letter-spacing: -.035em;
+      color: var(--text-primary); line-height: 1.0;
+      margin: .45rem 0 .25rem;
+    }
+    .pp-hero-provider-byline {
+      display: flex; align-items: center; gap: .45rem;
+      font-family: var(--font-mono); font-size: .7rem;
+      color: var(--text-dim); letter-spacing: .04em;
+      margin-bottom: .65rem;
+    }
+    .pp-hero-provider-byline .byline-sep {
+      width: 3px; height: 3px; border-radius: 99px;
+      background: var(--text-faint); flex-shrink: 0;
     }
     .pp-verified-badge {
       display: inline-flex; align-items: center; gap: .32rem;
@@ -211,7 +289,6 @@ $locIcons = [
       border: 1.5px solid var(--gold-border-md);
       padding: .26rem .7rem; border-radius: 99px;
     }
-    .pp-verified-badge svg { flex-shrink: 0; }
     .pp-open-badge {
       display: inline-flex; align-items: center; gap: .32rem;
       font-family: var(--font-mono); font-size: .62rem; font-weight: 700;
@@ -223,15 +300,38 @@ $locIcons = [
     .pp-open-dot { width: 6px; height: 6px; border-radius: 99px; flex-shrink: 0; }
     .open  .pp-open-dot { background: var(--green); }
     .closed .pp-open-dot{ background: var(--red); }
+    .pv-hero-badge-row {
+      display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .7rem;
+    }
+
+    /* hero avatar - larger, category-accented ring */
+    .pv-provider-av {
+      width: 96px; height: 96px; border-radius: var(--r-lg); flex-shrink: 0;
+      background: linear-gradient(135deg, var(--cat-accent-soft), var(--gold-lt));
+      border: 2.5px solid var(--cat-accent-border);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display); font-size: 2.2rem; font-weight: 700; color: var(--cat-accent);
+      box-shadow: 0 8px 28px <?= $catAccent ?>33, 0 0 0 4px var(--cat-accent-soft);
+      overflow: hidden; position: relative;
+    }
+    .pv-provider-av img { width:100%; height:100%; object-fit:cover; border-radius:inherit; display:block; }
+    .pv-provider-av-ring {
+      position: absolute; inset: -5px;
+      border-radius: calc(var(--r-lg) + 5px);
+      border: 1.5px solid var(--cat-accent-border);
+      pointer-events: none; animation: ring-spin 8s linear infinite;
+      background: transparent;
+    }
+    @keyframes ring-spin { to { transform: rotate(360deg); } }
 
     .pv-hero-cta-row {
-      display: flex; align-items: center; gap: .75rem; margin-top: 1.1rem; flex-wrap: wrap;
+      display: flex; align-items: center; gap: .75rem; margin-top: 1rem; flex-wrap: wrap;
     }
     .pp-hero-book-btn {
       display: inline-flex; align-items: center; gap: .5rem;
-      padding: .72rem 1.9rem; border-radius: var(--r-md);
+      padding: .75rem 2rem; border-radius: var(--r-md);
       background: linear-gradient(135deg, var(--gold-dim), var(--gold), #e8c060);
-      color: #140e00; font-family: var(--font-display); font-size: .92rem; font-weight: 700;
+      color: #140e00; font-family: var(--font-display); font-size: .95rem; font-weight: 700;
       letter-spacing: -.01em; text-decoration: none;
       box-shadow: 0 4px 20px rgba(201,168,76,.40), 0 1px 0 rgba(255,255,255,.25) inset;
       transition: transform .2s var(--ease-out), box-shadow .2s, filter .15s;
@@ -239,53 +339,86 @@ $locIcons = [
     }
     .pp-hero-book-btn:hover {
       transform: translateY(-2px);
-      box-shadow: 0 8px 28px rgba(201,168,76,.50);
+      box-shadow: 0 8px 28px rgba(201,168,76,.55);
       filter: brightness(1.06);
     }
-    .pp-hero-book-btn svg { flex-shrink: 0; }
-    .pp-hero-msg-btn {
+    .pp-hero-contact-btn {
       display: inline-flex; align-items: center; gap: .45rem;
-      padding: .68rem 1.35rem; border-radius: var(--r-md);
+      padding: .7rem 1.4rem; border-radius: var(--r-md);
       background: rgba(255,255,255,.55); color: var(--text-primary);
       font-family: var(--font-body); font-size: .84rem; font-weight: 500;
       border: 1.5px solid rgba(255,255,255,.70); backdrop-filter: blur(12px);
       text-decoration: none; white-space: nowrap;
       transition: background .2s, border-color .2s, transform .15s var(--ease-out);
     }
-    [data-theme="dark"] .pp-hero-msg-btn {
+    [data-theme="dark"] .pp-hero-contact-btn {
       background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.15);
       color: var(--text-muted);
     }
-    .pp-hero-msg-btn:hover {
+    .pp-hero-contact-btn:hover {
       background: rgba(255,255,255,.80); border-color: var(--gold-border);
       transform: translateY(-1px);
     }
 
-    /* ══════════════════════════════════════
-       STATS BAR
-    ══════════════════════════════════════ */
+    /* hero bio */
+    .pp-hero-bio {
+      font-size: .84rem; color: var(--text-muted); max-width: 600px;
+      line-height: 1.65; margin-top: .7rem;
+      border-left: 2.5px solid var(--cat-accent-border);
+      padding-left: .9rem;
+    }
+
+    /* ── QUICK STATS ── */
     .pv-provider-quick-stats { flex-wrap: nowrap; }
     .pv-qs-item { min-width: 90px; }
+    .pv-qs-val--accent { color: var(--cat-accent); }
+
+    /* ══════════════════════════════════════
+       SECTION HEADER (inside main column)
+    ══════════════════════════════════════ */
+    .pp-section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.2rem 1.5rem .9rem;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, var(--gold-lt) 0%, transparent 100%);
+    }
+    .pp-section-title {
+      font-family: var(--font-display); font-size: 1.05rem; font-weight: 700;
+      letter-spacing: -.02em; color: var(--text-primary);
+      display: flex; align-items: center; gap: .6rem;
+    }
+    .pp-section-title-icon {
+      width: 30px; height: 30px; border-radius: var(--r-sm);
+      background: var(--cat-accent-soft); border: 1px solid var(--cat-accent-border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .85rem; flex-shrink: 0;
+    }
+    .pp-section-badge {
+      font-family: var(--font-mono); font-size: .6rem; font-weight: 700;
+      background: var(--surface-md); border: 1px solid var(--border);
+      padding: .12rem .48rem; border-radius: 99px; color: var(--text-dim);
+    }
 
     /* ══════════════════════════════════════
        TABS
     ══════════════════════════════════════ */
     .pp-tabs {
-      display: flex; gap: 2px; padding: 1.1rem 1.3rem .25rem;
+      display: flex; gap: 2px; padding: 1rem 1.3rem .2rem;
       border-bottom: 1.5px solid var(--card-border);
+      overflow-x: auto; -webkit-overflow-scrolling: touch;
     }
     .pp-tab {
-      display: flex; align-items: center; gap: .42rem;
+      display: flex; align-items: center; gap: .42rem; flex-shrink: 0;
       padding: .52rem 1rem; border-radius: var(--r-sm);
       font-family: var(--font-body); font-size: .82rem; font-weight: 500;
       color: var(--text-muted); background: transparent; border: none;
       cursor: pointer; transition: all .2s; position: relative;
     }
     .pp-tab:hover { color: var(--text-primary); background: var(--surface-md); }
-    .pp-tab.active { color: var(--gold-dim); background: var(--gold-lt); font-weight: 600; }
+    .pp-tab.active { color: var(--cat-accent); background: var(--cat-accent-soft); font-weight: 600; }
     .pp-tab.active::after {
       content: ''; position: absolute; bottom: -1px; left: .75rem; right: .75rem;
-      height: 2px; background: var(--gold); border-radius: 99px;
+      height: 2px; background: var(--cat-accent); border-radius: 99px;
     }
     .pp-tab-count {
       font-family: var(--font-mono); font-size: .6rem;
@@ -293,7 +426,7 @@ $locIcons = [
       padding: .1rem .42rem; border-radius: 99px; color: var(--text-dim);
     }
     .pp-tab.active .pp-tab-count {
-      background: var(--gold-soft-md); border-color: var(--gold-border); color: var(--gold-dim);
+      background: var(--cat-accent-soft); border-color: var(--cat-accent-border); color: var(--cat-accent);
     }
     .pp-panel { padding: 1.25rem 1.3rem 1.4rem; }
     .pp-panel--hidden { display: none; }
@@ -304,7 +437,7 @@ $locIcons = [
     .pp-masonry {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      grid-template-rows: repeat(3, 120px);
+      grid-template-rows: repeat(3, 130px);
       gap: 8px;
     }
     .pp-masonry-item {
@@ -318,12 +451,12 @@ $locIcons = [
       width: 100%; height: 100%; object-fit: cover; display: block;
       transition: transform .3s var(--ease-out);
     }
-    .pp-masonry-item:hover img { transform: scale(1.05); }
+    .pp-masonry-item:hover img { transform: scale(1.06); }
     .pp-masonry-caption {
       position: absolute; bottom: 0; left: 0; right: 0;
-      background: linear-gradient(0deg, rgba(0,0,0,.6) 0%, transparent 100%);
-      padding: .6rem .65rem .45rem; font-size: .66rem;
-      color: rgba(255,255,255,.9); font-family: var(--font-mono);
+      background: linear-gradient(0deg, rgba(0,0,0,.65) 0%, transparent 100%);
+      padding: .7rem .7rem .5rem; font-size: .66rem;
+      color: rgba(255,255,255,.92); font-family: var(--font-mono);
       opacity: 0; transition: opacity .2s;
     }
     .pp-masonry-item:hover .pp-masonry-caption { opacity: 1; }
@@ -335,7 +468,7 @@ $locIcons = [
     }
     .pp-masonry-item:hover .pp-masonry-zoom { opacity: 1; }
     .pp-masonry-more { background: var(--surface-md); }
-    .pp-masonry-more img { opacity: .35; }
+    .pp-masonry-more img { opacity: .3; }
     .pp-masonry-more-label {
       position: absolute; inset: 0;
       display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .2rem;
@@ -353,38 +486,55 @@ $locIcons = [
       font-size: .8rem; color: var(--text-faint); font-family: var(--font-mono);
       letter-spacing: .06em;
     }
+    .pp-gallery-all-btn {
+      display: inline-flex; align-items: center; gap: .4rem;
+      margin-top: 1rem; padding: .48rem 1.1rem; border-radius: var(--r-sm);
+      background: var(--surface-md); border: 1px solid var(--border);
+      color: var(--text-muted); font-size: .78rem; font-weight: 500;
+      cursor: pointer; transition: all .2s;
+    }
+    .pp-gallery-all-btn:hover { background: var(--gold-lt); border-color: var(--gold-border); color: var(--gold-dim); }
 
     /* ══════════════════════════════════════
-       SERVICE CARDS (in tab)
+       SERVICE CARDS
     ══════════════════════════════════════ */
+    .pp-svc-category-header {
+      display: flex; align-items: center; gap: .65rem;
+      padding: .9rem 1.3rem .6rem;
+      font-family: var(--font-mono); font-size: .62rem; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text-dim);
+    }
+    .pp-svc-category-line {
+      flex: 1; height: 1px; background: var(--border);
+    }
     .pp-svc-grid { display: flex; flex-direction: column; gap: 10px; }
     .pp-svc-item {
-      border-radius: var(--r-md); padding: 1rem 1.1rem;
+      border-radius: var(--r-md); padding: 1.1rem 1.15rem;
       background: var(--surface); border: 1.5px solid var(--card-border);
       transition: border-color .2s, box-shadow .2s, background .2s;
       position: relative; overflow: hidden;
     }
     .pp-svc-item::before {
       content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3.5px;
-      background: var(--accent, var(--gold)); border-radius: 2px 0 0 2px;
+      background: var(--accent, var(--cat-accent)); border-radius: 2px 0 0 2px;
     }
     .pp-svc-item:hover {
-      border-color: var(--accent, var(--gold-border));
-      box-shadow: 0 4px 20px rgba(0,0,0,.06);
+      border-color: var(--accent, var(--cat-accent-border));
+      box-shadow: 0 4px 20px rgba(0,0,0,.07);
       background: var(--card-bg);
     }
     .pp-svc-item-top {
-      display: flex; align-items: flex-start; gap: .85rem; margin-bottom: .75rem;
+      display: flex; align-items: flex-start; gap: .9rem; margin-bottom: .8rem;
     }
     .pp-svc-item-icon {
-      width: 40px; height: 40px; border-radius: var(--r-sm); flex-shrink: 0;
-      background: var(--surface-md); border: 1px solid var(--border);
-      display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+      width: 42px; height: 42px; border-radius: var(--r-sm); flex-shrink: 0;
+      background: var(--cat-accent-soft); border: 1px solid var(--cat-accent-border);
+      display: flex; align-items: center; justify-content: center; font-size: 1.15rem;
     }
     .pp-svc-item-info { flex: 1; min-width: 0; }
     .pp-svc-item-name {
-      font-family: var(--font-display); font-size: .95rem; font-weight: 600;
-      color: var(--text-primary); line-height: 1.3; margin-bottom: .2rem;
+      font-family: var(--font-display); font-size: .97rem; font-weight: 600;
+      color: var(--text-primary); line-height: 1.3; margin-bottom: .22rem;
     }
     .pp-svc-item-desc {
       font-size: .78rem; color: var(--text-muted); line-height: 1.5;
@@ -392,8 +542,8 @@ $locIcons = [
     }
     .pp-svc-item-price { flex-shrink: 0; text-align: right; }
     .pp-svc-item-price-val {
-      font-family: var(--font-display); font-size: 1.1rem; font-weight: 700;
-      color: var(--accent, var(--gold-dim));
+      font-family: var(--font-display); font-size: 1.15rem; font-weight: 700;
+      color: var(--accent, var(--cat-accent));
     }
     .pp-svc-item-bottom {
       display: flex; align-items: center; justify-content: space-between;
@@ -406,14 +556,12 @@ $locIcons = [
       text-transform: uppercase; padding: .22rem .55rem; border-radius: 99px; border: 1px solid;
       white-space: nowrap;
     }
-    .pp-svc-tag--type {
-      background: var(--surface-md); border-color: var(--border); color: var(--text-muted);
-    }
+    .pp-svc-tag--type { background: var(--surface-md); border-color: var(--border); color: var(--text-muted); }
     .pp-svc-tag--loc  { background: var(--surface-md); border-color: var(--border); color: var(--text-muted); }
     .pp-svc-tag--dur  { background: var(--blue-soft);  border-color: var(--blue-border); color: var(--blue); }
     .pp-svc-book-btn {
       display: inline-flex; align-items: center; gap: .4rem;
-      padding: .48rem 1.05rem; border-radius: var(--r-sm);
+      padding: .5rem 1.1rem; border-radius: var(--r-sm);
       background: linear-gradient(135deg, var(--gold-dim), var(--gold));
       color: #140e00; font-size: .78rem; font-weight: 700;
       text-decoration: none; white-space: nowrap; flex-shrink: 0;
@@ -428,8 +576,6 @@ $locIcons = [
       padding: 2.5rem 1.5rem; text-align: center;
       display: flex; flex-direction: column; align-items: center; gap: .6rem;
     }
-    .pp-svc-empty-icon { font-size: 2.2rem; }
-    .pp-svc-empty p { font-size: .82rem; color: var(--text-muted); }
 
     /* ══════════════════════════════════════
        REVIEWS TAB
@@ -439,20 +585,19 @@ $locIcons = [
       padding: .25rem 0 1.2rem; border-bottom: 1px solid var(--border); margin-bottom: 1.1rem;
       flex-wrap: wrap;
     }
-    .pp-rating-big-block { text-align: center; flex-shrink: 0; min-width: 80px; }
+    .pp-rating-big-block { text-align: center; flex-shrink: 0; min-width: 90px; }
     .pp-rating-big-num {
-      font-family: var(--font-display); font-size: 3.2rem; font-weight: 700;
-      color: var(--gold-dim); line-height: 1; letter-spacing: -.04em;
+      font-family: var(--font-display); font-size: 3.4rem; font-weight: 700;
+      color: var(--gold-dim); line-height: 1; letter-spacing: -.05em;
     }
-    .pp-rating-big-stars { color: #f59e0b; font-size: .9rem; letter-spacing: .05em; margin: .3rem 0 .2rem; }
+    .pp-rating-big-stars { margin: .35rem 0 .25rem; font-size: .85rem; gap: 2px; display: flex; align-items: center; justify-content: center; }
     .pp-rating-big-count { font-family: var(--font-mono); font-size: .6rem; color: var(--text-dim); letter-spacing: .04em; }
-    .pp-rating-bars { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: .38rem; }
+    .pp-rating-bars { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: .42rem; }
     .pp-rating-bar-row { display: flex; align-items: center; gap: .6rem; }
     .pp-rating-bar-label {
-      font-family: var(--font-mono); font-size: .6rem; color: var(--text-dim);
-      display: flex; align-items: center; gap: .22rem; width: 30px; flex-shrink: 0;
+      font-family: var(--font-mono); font-size: .62rem; color: var(--text-dim);
+      display: flex; align-items: center; gap: .22rem; width: 36px; flex-shrink: 0;
     }
-    .pp-rating-bar-label i { color: #f59e0b; font-size: .5rem; }
     .pp-rating-bar-track {
       flex: 1; height: 7px; background: var(--surface-md); border-radius: 99px; overflow: hidden;
     }
@@ -469,30 +614,47 @@ $locIcons = [
       padding: 1.1rem 0; border-bottom: 1px solid var(--border);
     }
     .pp-review-item:last-child { border-bottom: none; }
-    .pp-review-head { display: flex; align-items: center; gap: .65rem; margin-bottom: .45rem; }
+    .pp-review-head { display: flex; align-items: center; gap: .7rem; margin-bottom: .5rem; }
     .pp-review-av {
-      width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+      width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
       background: var(--gold-lt); border: 1.5px solid var(--gold-border);
-      color: var(--gold-dim); font-family: var(--font-display); font-weight: 700; font-size: .68rem;
+      color: var(--gold-dim); font-family: var(--font-display); font-weight: 700; font-size: .7rem;
       display: flex; align-items: center; justify-content: center; overflow: hidden;
     }
     .pp-review-av img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
-    .pp-review-name { font-size: .84rem; font-weight: 600; color: var(--text-primary); }
+    .pp-review-name { font-size: .86rem; font-weight: 600; color: var(--text-primary); }
     .pp-review-date { font-family: var(--font-mono); font-size: .6rem; color: var(--text-faint); margin-top: .05rem; }
-    .pp-review-stars { color: #f59e0b; font-size: .72rem; letter-spacing: .04em; margin-left: auto; }
-    .pp-review-text { font-size: .82rem; color: var(--text-muted); line-height: 1.6; margin-bottom: .35rem; }
+    .pp-review-stars { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+    .pp-review-text {
+      font-size: .83rem; color: var(--text-muted); line-height: 1.62;
+      margin-bottom: .4rem; font-style: italic;
+    }
     .pp-review-service {
       display: inline-flex; align-items: center; gap: .3rem;
-      font-family: var(--font-mono); font-size: .6rem; color: var(--gold-dim);
-      background: var(--gold-lt); border: 1px solid var(--gold-border);
+      font-family: var(--font-mono); font-size: .6rem; color: var(--cat-accent);
+      background: var(--cat-accent-soft); border: 1px solid var(--cat-accent-border);
       padding: .12rem .55rem; border-radius: 99px;
+    }
+    /* Provider reply */
+    .pp-review-reply {
+      margin-top: .65rem; padding: .75rem 1rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-left: 3px solid var(--cat-accent-border);
+      border-radius: 0 var(--r-sm) var(--r-sm) 0;
+    }
+    .pp-review-reply-header {
+      display: flex; align-items: center; gap: .4rem;
+      font-family: var(--font-mono); font-size: .62rem; font-weight: 700;
+      color: var(--cat-accent); text-transform: uppercase; letter-spacing: .06em;
+      margin-bottom: .35rem;
+    }
+    .pp-review-reply-text {
+      font-size: .8rem; color: var(--text-muted); line-height: 1.55;
     }
     .pp-reviews-empty {
       padding: 2.5rem 1.5rem; text-align: center;
       display: flex; flex-direction: column; align-items: center; gap: .6rem;
     }
-    .pp-reviews-empty-icon { font-size: 2rem; opacity: .4; }
-    .pp-reviews-empty p { font-size: .82rem; color: var(--text-muted); }
 
     /* ══════════════════════════════════════
        BOOKING TYPE TOGGLE
@@ -563,9 +725,9 @@ $locIcons = [
     .pp-qb-fact .qb-open    { color: var(--green); }
     .pp-qb-fact .qb-closed  { color: #ef4444; }
     .pp-qb-cta {
-      display: block; width: 100%; padding: .8rem 1.25rem; text-align: center;
+      display: block; width: 100%; padding: .85rem 1.25rem; text-align: center;
       background: linear-gradient(135deg, var(--gold-dim), var(--gold), #e8c060);
-      color: #140e00; font-family: var(--font-display); font-size: .92rem; font-weight: 700;
+      color: #140e00; font-family: var(--font-display); font-size: .95rem; font-weight: 700;
       border-radius: var(--r-md); text-decoration: none;
       box-shadow: 0 4px 20px rgba(201,168,76,.35), 0 1px 0 rgba(255,255,255,.25) inset;
       transition: transform .2s var(--ease-out), box-shadow .2s, filter .15s;
@@ -580,7 +742,7 @@ $locIcons = [
        SIDEBAR — AVAILABILITY CARD
     ══════════════════════════════════════ */
     .pp-avail-today {
-      padding: .9rem 1.2rem; border-bottom: 1px solid var(--border);
+      padding: .95rem 1.25rem; border-bottom: 1px solid var(--border);
       display: flex; align-items: center; justify-content: space-between; gap: 1rem;
     }
     .pp-avail-today-label {
@@ -588,7 +750,7 @@ $locIcons = [
       letter-spacing: .1em; color: var(--text-dim); margin-bottom: .18rem;
     }
     .pp-avail-today-hours {
-      font-family: var(--font-display); font-size: .92rem; font-weight: 700;
+      font-family: var(--font-display); font-size: .95rem; font-weight: 700;
       color: var(--text-primary); letter-spacing: -.01em;
     }
     .pp-avail-status-pill {
@@ -610,32 +772,64 @@ $locIcons = [
     .pp-next-avail strong { color: var(--gold-dim); }
 
     /* ══════════════════════════════════════
-       SIDEBAR — MAP CARD
+       SIDEBAR — LEAFLET MAP CARD
     ══════════════════════════════════════ */
     .pp-map-card { overflow: hidden; padding: 0 !important; }
     .pp-map-card .pv-card-head { padding: 1.1rem 1.3rem .9rem; border-bottom: 1px solid var(--border); }
-    .pp-map-wrap { position: relative; width: 100%; height: 200px; overflow: hidden; }
-    .pp-map-wrap iframe {
-      width: 100%; height: 100%; border: none; display: block;
+    .pp-map-wrap {
+      position: relative; width: 100%; height: 220px; overflow: hidden;
+    }
+    #leafletMap {
+      width: 100%; height: 100%;
+    }
+    .pp-map-fallback iframe {
+      width: 100%; height: 220px; border: none; display: block;
       filter: saturate(.85) contrast(.95);
     }
-    [data-theme="dark"] .pp-map-wrap iframe {
+    [data-theme="dark"] .pp-map-fallback iframe {
       filter: saturate(.7) contrast(.9) brightness(.85) hue-rotate(180deg);
     }
-    .pp-map-addr { padding: .85rem 1.15rem 1rem; }
+    .pp-map-addr { padding: .9rem 1.2rem 1.05rem; }
     .pp-map-addr-row {
       display: flex; align-items: flex-start; gap: .5rem;
-      font-size: .8rem; color: var(--text-muted); margin-bottom: .35rem;
+      font-size: .8rem; color: var(--text-muted); margin-bottom: .38rem;
+      line-height: 1.5;
     }
     .pp-map-home-row { color: var(--green); }
     .pp-map-directions-btn {
       display: inline-flex; align-items: center; gap: .45rem;
-      margin-top: .5rem; padding: .5rem 1rem; border-radius: var(--r-sm);
+      margin-top: .55rem; padding: .52rem 1rem; border-radius: var(--r-sm);
       background: var(--gold-lt); border: 1.5px solid var(--gold-border);
       color: var(--gold-dim); font-size: .78rem; font-weight: 600;
       text-decoration: none; transition: all .2s;
     }
     .pp-map-directions-btn:hover { background: var(--gold-soft-md); border-color: var(--gold-border-md); }
+
+    /* ══════════════════════════════════════
+       SIDEBAR — CONTACT CARD
+    ══════════════════════════════════════ */
+    .pp-contact-card { }
+    .pp-contact-list { display: flex; flex-direction: column; }
+    .pp-contact-item {
+      display: flex; align-items: center; gap: .85rem;
+      padding: .75rem 1.3rem; border-bottom: 1px solid var(--border);
+      font-size: .81rem; color: var(--text-muted); transition: background .15s;
+    }
+    .pp-contact-item:last-child { border-bottom: none; }
+    .pp-contact-item:hover { background: var(--surface); }
+    .pp-contact-icon {
+      width: 32px; height: 32px; border-radius: var(--r-sm); flex-shrink: 0;
+      background: var(--cat-accent-soft); border: 1px solid var(--cat-accent-border);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--cat-accent); font-size: .82rem;
+    }
+    .pp-contact-label {
+      font-family: var(--font-mono); font-size: .58rem; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--text-dim); display: block; margin-bottom: .08rem;
+    }
+    .pp-contact-val { color: var(--text-primary); font-weight: 500; }
+    .pp-contact-val a { color: var(--cat-accent); text-decoration: none; transition: opacity .15s; }
+    .pp-contact-val a:hover { opacity: .75; }
 
     /* ══════════════════════════════════════
        BREADCRUMB + MISC
@@ -665,12 +859,12 @@ $locIcons = [
     ══════════════════════════════════════ */
     .pp-lightbox {
       display: none; position: fixed; inset: 0; z-index: 9999;
-      background: rgba(0,0,0,.88); backdrop-filter: blur(8px);
+      background: rgba(0,0,0,.9); backdrop-filter: blur(10px);
       align-items: center; justify-content: center; padding: 1.5rem;
     }
     .pp-lightbox.open { display: flex; }
     .pp-lightbox-inner {
-      position: relative; max-width: 860px; width: 100%;
+      position: relative; max-width: 880px; width: 100%;
       display: flex; flex-direction: column; align-items: center; gap: .75rem;
     }
     .pp-lightbox img {
@@ -706,7 +900,7 @@ $locIcons = [
     ══════════════════════════════════════ */
     @media (max-width: 680px) {
       .pp-masonry { grid-template-rows: repeat(3, 100px); }
-      .pp-hero-book-btn { padding: .6rem 1.4rem; font-size: .84rem; }
+      .pp-hero-book-btn { padding: .65rem 1.4rem; font-size: .86rem; }
       .pv-provider-quick-stats { flex-wrap: wrap; }
       .pv-qs-div:nth-child(4) { display: none; }
     }
@@ -803,7 +997,7 @@ $locIcons = [
   <div class="pv-hero-inner">
     <div class="pv-provider-hero-wrap">
 
-      <!-- Avatar -->
+      <!-- Avatar with category ring -->
       <?php
         $provPhoto    = $provider['profile_photo'] ?? '';
         $provInitials = strtoupper(substr($provider['first_name'] ?? 'P', 0, 1) . substr($provider['last_name'] ?? 'R', 0, 1));
@@ -813,49 +1007,59 @@ $locIcons = [
           <img src="<?= htmlspecialchars($provPhoto) ?>"
                alt="<?= htmlspecialchars($provider['business_name']) ?>">
         <?php else: ?>
-          <?= $provInitials ?>
+          <?= $catEmoji ?>
         <?php endif; ?>
       </div>
 
       <!-- Info -->
       <div class="pv-provider-info">
 
-        <!-- Category eyebrow -->
-        <p class="pv-hero-eyebrow">
-          <span class="pv-dot-pulse" aria-hidden="true"></span>
-          <?= htmlspecialchars($provider['category_name'] ?? 'Service Provider') ?>
-        </p>
+        <!-- Category eyebrow — replaces generic "Service Provider" -->
+        <div style="margin-bottom:.5rem;">
+          <span class="pp-hero-category-badge">
+            <span class="cat-dot"></span>
+            <?= htmlspecialchars($provider['category_name'] ?? 'Service Provider') ?>
+          </span>
+        </div>
 
-        <!-- Business name -->
-        <h1 class="pv-hero-name"><?= htmlspecialchars($provider['business_name']) ?></h1>
-        <p style="font-size:.8rem;color:var(--text-dim);margin:-.25rem 0 .75rem;font-family:var(--font-mono);">
-          <?= htmlspecialchars(trim($provider['first_name'] . ' ' . $provider['last_name'])) ?>
-        </p>
+        <!-- BUSINESS NAME — primary identity -->
+        <h1 class="pp-hero-business-name">
+          <?= htmlspecialchars($provider['business_name']) ?>
+        </h1>
 
-        <!-- Verified + Open badges -->
+        <!-- Provider name — secondary -->
+        <div class="pp-hero-provider-byline">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <circle cx="6" cy="4" r="2.5" stroke="currentColor" stroke-width="1.3"/>
+            <path d="M1.5 11c0-2.485 2.015-4.5 4.5-4.5s4.5 2.015 4.5 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          </svg>
+          Managed by <?= htmlspecialchars(trim($provider['first_name'] . ' ' . $provider['last_name'])) ?>
+          <?php if ($provider['years_experience'] ?? 0): ?>
+            <span class="byline-sep"></span>
+            <?= (int)$provider['years_experience'] ?>+ yrs experience
+          <?php endif; ?>
+        </div>
+
+        <!-- Verified + Open/Closed badges -->
         <div class="pv-hero-badge-row">
           <?php if ($isVerified): ?>
           <span class="pp-verified-badge">
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
               <path d="M2 5l2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            Verified Provider
+            Verified Business
           </span>
           <?php endif; ?>
 
           <?php if ($openStatus === true): ?>
-          <span class="pp-open-badge open">
-            <span class="pp-open-dot"></span> Open Now
-          </span>
+          <span class="pp-open-badge open"><span class="pp-open-dot"></span> Open Now</span>
           <?php elseif ($openStatus === false): ?>
-          <span class="pp-open-badge closed">
-            <span class="pp-open-dot"></span> Closed Now
-          </span>
+          <span class="pp-open-badge closed"><span class="pp-open-dot"></span> Closed Now</span>
           <?php endif; ?>
         </div>
 
         <!-- Meta chips -->
-        <div class="pv-provider-meta" style="margin-top:.55rem;">
+        <div class="pv-provider-meta">
           <?php if ($provider['avg_rating'] > 0): ?>
           <span class="pv-meta-chip pv-meta-chip--gold">
             ⭐ <?= number_format($provider['avg_rating'], 1) ?>
@@ -875,14 +1079,15 @@ $locIcons = [
 
           <?php if (!empty($galleryPhotos)): ?>
           <span class="pv-meta-chip">
-            🖼️ <?= count($galleryPhotos) ?> portfolio photo<?= count($galleryPhotos) !== 1 ? 's' : '' ?>
+            🖼️ <?= count($galleryPhotos) ?> portfolio work<?= count($galleryPhotos) !== 1 ? 's' : '' ?>
           </span>
           <?php endif; ?>
         </div>
 
+        <!-- Business Bio / Description -->
         <?php if ($provider['bio']): ?>
-        <p class="pv-provider-bio" style="margin-top:.7rem;">
-          <?= htmlspecialchars($provider['bio']) ?>
+        <p class="pp-hero-bio">
+          <?= nl2br(htmlspecialchars($provider['bio'])) ?>
         </p>
         <?php endif; ?>
 
@@ -898,12 +1103,21 @@ $locIcons = [
             Book Appointment
           </a>
           <?php endif; ?>
+          <?php if ($phone || $email): ?>
+          <button type="button" class="pp-hero-contact-btn" onclick="document.getElementById('sidebarContact')?.scrollIntoView({behavior:'smooth'})">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M3 2.5h8a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1v-7a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M2 4l5 4 5-4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+            Contact
+          </button>
+          <?php endif; ?>
         </div>
 
       </div>
-    </div>
+    </div><!-- /hero-wrap -->
 
-    <!-- Quick stats -->
+    <!-- Quick stats bar -->
     <div class="pv-provider-quick-stats">
       <div class="pv-qs-item">
         <span class="pv-qs-val"><?= count($services) ?></span>
@@ -916,14 +1130,21 @@ $locIcons = [
       </div>
       <div class="pv-qs-div"></div>
       <div class="pv-qs-item">
-        <span class="pv-qs-val gold"><?= (int)$provider['total_reviews'] ?></span>
-        <span class="pv-qs-label">Reviews</span>
+        <span class="pv-qs-val gold"><?= number_format((float)$provider['avg_rating'], 1) ?></span>
+        <span class="pv-qs-label">Rating</span>
       </div>
       <div class="pv-qs-div"></div>
       <div class="pv-qs-item">
         <span class="pv-qs-val">₱<?= $minPrice ? number_format((float)$minPrice, 0) : '—' ?></span>
-        <span class="pv-qs-label">Starting Price</span>
+        <span class="pv-qs-label">From</span>
       </div>
+      <?php if (!empty($galleryPhotos)): ?>
+      <div class="pv-qs-div"></div>
+      <div class="pv-qs-item">
+        <span class="pv-qs-val"><?= count($galleryPhotos) ?></span>
+        <span class="pv-qs-label">Portfolio</span>
+      </div>
+      <?php endif; ?>
     </div>
 
   </div>
@@ -953,8 +1174,9 @@ $locIcons = [
       <div class="pv-card">
 
         <!-- Tab bar -->
-        <div class="pp-tabs">
-          <button class="pp-tab active" onclick="switchTab('gallery',this)" id="tabGallery">
+        <div class="pp-tabs" role="tablist">
+          <button class="pp-tab active" onclick="switchTab('gallery',this)" id="tabGallery"
+                  role="tab" aria-selected="true" aria-controls="panelGallery">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <rect x=".7" y=".7" width="5.3" height="5.3" rx="1.2" stroke="currentColor" stroke-width="1.3"/>
               <rect x="8"  y=".7" width="5.3" height="5.3" rx="1.2" stroke="currentColor" stroke-width="1.3"/>
@@ -965,15 +1187,17 @@ $locIcons = [
             <span class="pp-tab-count"><?= count($galleryPhotos) ?></span>
           </button>
 
-          <button class="pp-tab" onclick="switchTab('services',this)" id="tabServices">
+          <button class="pp-tab" onclick="switchTab('services',this)" id="tabServices"
+                  role="tab" aria-selected="false" aria-controls="panelServices">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <path d="M1 3h12M1 7h12M1 11h7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
             </svg>
-            Services
+            <?= htmlspecialchars($provider['category_name'] ?? 'Services') ?>
             <span class="pp-tab-count"><?= count($services) ?></span>
           </button>
 
-          <button class="pp-tab" onclick="switchTab('reviews',this)" id="tabReviews">
+          <button class="pp-tab" onclick="switchTab('reviews',this)" id="tabReviews"
+                  role="tab" aria-selected="false" aria-controls="panelReviews">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <path d="M7 1l1.8 3.6L13 5.3l-3 2.9.7 4.1L7 10.2l-3.7 2.1.7-4.1-3-2.9 4.2-.7z"
                     stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
@@ -984,11 +1208,11 @@ $locIcons = [
         </div>
 
         <!-- ── PORTFOLIO PANEL ── -->
-        <div class="pp-panel" id="panelGallery">
+        <div class="pp-panel" id="panelGallery" role="tabpanel" aria-labelledby="tabGallery">
           <?php if (empty($galleryPhotos)): ?>
           <div class="pp-gallery-empty">
-            <div style="font-size:2.2rem;margin-bottom:.6rem;">📷</div>
-            No portfolio photos yet
+            <div style="font-size:2.4rem;margin-bottom:.75rem;"><?= $catEmoji ?></div>
+            No portfolio photos yet for this business.
           </div>
           <?php else:
             $displayPhotos = array_slice($galleryPhotos, 0, 9);
@@ -1000,19 +1224,20 @@ $locIcons = [
             ?>
             <?php if ($isLastSlot): ?>
               <div class="pp-masonry-item pp-masonry-more"
-                   onclick="openLightbox(<?= $idx ?>)" role="button" tabindex="0">
+                   onclick="openLightbox(<?= $idx ?>)" role="button" tabindex="0"
+                   aria-label="View all photos">
                 <img src="<?= htmlspecialchars($photo['image_url']) ?>" alt="" loading="lazy">
                 <div class="pp-masonry-more-label">
                   <span>+<?= $extraCount + 1 ?></span>
-                  <span>more photos</span>
+                  <span>more works</span>
                 </div>
               </div>
             <?php else: ?>
               <div class="pp-masonry-item <?= $idx === 0 ? 'pp-masonry-featured' : '' ?>"
                    onclick="openLightbox(<?= $idx ?>)" role="button" tabindex="0"
-                   aria-label="View photo <?= $idx + 1 ?>">
+                   aria-label="View portfolio photo <?= $idx + 1 ?>">
                 <img src="<?= htmlspecialchars($photo['image_url']) ?>"
-                     alt="<?= htmlspecialchars($photo['caption'] ?? '') ?>"
+                     alt="<?= htmlspecialchars($photo['caption'] ?? 'Portfolio work') ?>"
                      loading="<?= $idx === 0 ? 'eager' : 'lazy' ?>">
                 <?php if ($photo['caption']): ?>
                   <div class="pp-masonry-caption"><?= htmlspecialchars($photo['caption']) ?></div>
@@ -1027,21 +1252,37 @@ $locIcons = [
             <?php endif; ?>
             <?php endforeach; ?>
           </div>
+          <?php if (count($galleryPhotos) > 9): ?>
+          <div style="text-align:center;padding:.75rem 0 .25rem;">
+            <button class="pp-gallery-all-btn" onclick="alert('Full gallery view — implement as needed')">
+              <i class="fa-solid fa-images" style="font-size:.8rem;"></i>
+              View all <?= count($galleryPhotos) ?> portfolio works
+            </button>
+          </div>
+          <?php endif; ?>
           <?php endif; ?>
         </div>
 
         <!-- ── SERVICES PANEL ── -->
-        <div class="pp-panel pp-panel--hidden" id="panelServices">
+        <div class="pp-panel pp-panel--hidden" id="panelServices" role="tabpanel" aria-labelledby="tabServices">
           <?php if (empty($services)): ?>
           <div class="pp-svc-empty">
-            <div class="pp-svc-empty-icon">🛠️</div>
-            <p>No services listed yet.</p>
+            <div style="font-size:2.2rem;"><?= $catEmoji ?></div>
+            <p style="font-size:.82rem;color:var(--text-muted);">No services listed yet.</p>
           </div>
           <?php else: ?>
+
+          <!-- Category header for services -->
+          <div class="pp-svc-category-header">
+            <span><?= $catEmoji ?> <?= htmlspecialchars($provider['category_name'] ?? 'Services') ?></span>
+            <span class="pp-svc-category-line"></span>
+            <span><?= count($services) ?> service<?= count($services) !== 1 ? 's' : '' ?></span>
+          </div>
+
           <div class="pp-svc-grid" role="list">
             <?php foreach ($services as $s):
               $color     = $serviceTypeColors[$s['service_type'] ?? ''] ?? 'gold';
-              $accentHex = $colorAccents[$color] ?? '#C9A84C';
+              $accentHex = $colorAccents[$color] ?? $catAccent;
               $locType   = $s['location_type'] ?? 'In-shop';
               $locIcon   = $locIcons[$locType]  ?? $locIcons['In-shop'];
               $mins      = (int)($s['duration_minutes'] ?? 0);
@@ -1098,15 +1339,15 @@ $locIcons = [
         </div>
 
         <!-- ── REVIEWS PANEL ── -->
-        <div class="pp-panel pp-panel--hidden" id="panelReviews">
+        <div class="pp-panel pp-panel--hidden" id="panelReviews" role="tabpanel" aria-labelledby="tabReviews">
           <?php if (empty($allReviews)): ?>
           <div class="pp-reviews-empty">
-            <div class="pp-reviews-empty-icon">⭐</div>
-            <p>No reviews yet — be the first to book!</p>
+            <div style="font-size:2rem;opacity:.4;">⭐</div>
+            <p style="font-size:.82rem;color:var(--text-muted);">No reviews yet — be the first to book!</p>
           </div>
           <?php else:
-            $avgRating   = (float)$provider['avg_rating'];
-            $totalRevs   = count($allReviews);
+            $avgRating = (float)$provider['avg_rating'];
+            $totalRevs = count($allReviews);
           ?>
           <!-- Rating summary -->
           <div class="pp-rating-summary">
@@ -1121,7 +1362,7 @@ $locIcons = [
                 $pct = $totalRevs > 0 ? round(($cnt / $totalRevs) * 100) : 0;
               ?>
               <div class="pp-rating-bar-row">
-                <span class="pp-rating-bar-label"><?= $star ?> <i class="fa-solid fa-star"></i></span>
+                <span class="pp-rating-bar-label"><?= $star ?> <i class="fa-solid fa-star" style="color:#f59e0b;font-size:.5rem;"></i></span>
                 <div class="pp-rating-bar-track">
                   <div class="pp-rating-bar-fill" style="width:<?= $pct ?>%"></div>
                 </div>
@@ -1131,10 +1372,12 @@ $locIcons = [
             </div>
           </div>
 
-          <!-- Review list -->
+          <!-- Review list with provider replies -->
           <div class="pp-review-list">
             <?php foreach ($allReviews as $rev):
               $revInitials = strtoupper(substr($rev['first_name'],0,1).substr($rev['last_name'],0,1));
+              $hasReply    = !empty($rev['reply']) || !empty($rev['provider_reply']);
+              $replyText   = $rev['reply'] ?? $rev['provider_reply'] ?? '';
             ?>
             <div class="pp-review-item">
               <div class="pp-review-head">
@@ -1150,16 +1393,29 @@ $locIcons = [
                   <div class="pp-review-date"><?= date('M j, Y', strtotime($rev['created_at'])) ?></div>
                 </div>
                 <div class="pp-review-stars" aria-label="<?= $rev['rating'] ?> out of 5 stars">
-                  <?= renderStars((float)$rev['rating']) ?> <?= number_format((float)$rev['rating'], 1) ?>
+                  <?= renderStars((float)$rev['rating']) ?>
+                  <span style="font-family:var(--font-mono);font-size:.68rem;color:var(--text-dim);margin-left:.3rem;"><?= number_format((float)$rev['rating'], 1) ?></span>
                 </div>
               </div>
               <?php if (!empty($rev['comment'])): ?>
-                <div class="pp-review-text">"<?= htmlspecialchars($rev['comment']) ?>"</div>
+                <p class="pp-review-text">"<?= htmlspecialchars($rev['comment']) ?>"</p>
               <?php endif; ?>
               <?php if (!empty($rev['service_name'])): ?>
                 <span class="pp-review-service">
                   <?= $catEmoji ?> <?= htmlspecialchars($rev['service_name']) ?>
                 </span>
+              <?php endif; ?>
+              <?php if ($hasReply && $replyText): ?>
+              <div class="pp-review-reply">
+                <div class="pp-review-reply-header">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                    <path d="M1 3h10v6a1 1 0 01-1 1H2a1 1 0 01-1-1V3z" stroke="currentColor" stroke-width="1.2"/>
+                    <path d="M1 3l5 4 5-4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                  </svg>
+                  <?= htmlspecialchars($provider['business_name']) ?> replied
+                </div>
+                <p class="pp-review-reply-text"><?= htmlspecialchars($replyText) ?></p>
+              </div>
               <?php endif; ?>
             </div>
             <?php endforeach; ?>
@@ -1217,15 +1473,14 @@ $locIcons = [
       <?php if (!empty($services)): ?>
       <div class="pp-quickbook-card">
         <div class="pp-qb-body">
-          <div class="pp-qb-title">Ready to book?</div>
+          <div class="pp-qb-title">Book at <?= htmlspecialchars($provider['business_name']) ?></div>
           <div class="pp-qb-facts">
             <?php if ($isVerified): ?>
             <div class="pp-qb-fact">
               <span class="pp-qb-fact-ico">✔</span>
-              <span class="qb-verified"><strong>Verified</strong> Provider</span>
+              <span class="qb-verified"><strong>Verified</strong> Business</span>
             </div>
             <?php endif; ?>
-
             <?php if ($provider['avg_rating'] > 0): ?>
             <div class="pp-qb-fact">
               <span class="pp-qb-fact-ico">⭐</span>
@@ -1233,7 +1488,6 @@ $locIcons = [
                 (<?= (int)$provider['total_reviews'] ?> reviews)</span>
             </div>
             <?php endif; ?>
-
             <?php if ($openStatus === true): ?>
             <div class="pp-qb-fact">
               <span class="pp-qb-fact-ico">🟢</span>
@@ -1249,17 +1503,19 @@ $locIcons = [
               <span class="qb-closed"><strong>Closed Now</strong> · Opens <?= $nextAvail['day_of_week'] ?></span>
             </div>
             <?php endif; ?>
-
             <?php if ($minPrice): ?>
             <div class="pp-qb-fact">
               <span class="pp-qb-fact-ico">₱</span>
-              <span>From <strong>₱<?= number_format((float)$minPrice,0) ?></strong></span>
+              <span>From <strong>₱<?= number_format((float)$minPrice,0) ?></strong> · <?= count($services) ?> services</span>
             </div>
             <?php endif; ?>
           </div>
-
           <a href="<?= BASE_URL ?>services/<?= (int)$services[0]['id'] ?>"
              class="pp-qb-cta js-cta-link" id="ctaBookBtn">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style="display:inline-block;margin-right:.4rem;vertical-align:middle;" aria-hidden="true">
+              <rect x="2" y="3" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M5 1v3M11 1v3M2 7h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
             Book Appointment
           </a>
         </div>
@@ -1268,9 +1524,18 @@ $locIcons = [
 
       <!-- 2. AVAILABILITY CARD -->
       <div class="pv-card">
-        <div class="pv-card-head"><h2>Availability</h2></div>
+        <div class="pv-card-head">
+          <h2>
+            <span style="display:flex;align-items:center;gap:.55rem;">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <rect x="1" y="2" width="12" height="11" rx="2" stroke="currentColor" stroke-width="1.3"/>
+                <path d="M4 1v2M10 1v2M1 6h12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+              Availability
+            </span>
+          </h2>
+        </div>
 
-        <!-- Today highlight -->
         <?php if ($todayAvail): ?>
         <div class="pp-avail-today">
           <div>
@@ -1292,10 +1557,9 @@ $locIcons = [
         </div>
         <?php endif; ?>
 
-        <!-- Full weekly schedule -->
         <?php if (empty($availability)): ?>
-        <div class="pv-empty-state" style="padding:1.5rem">
-          <p style="font-size:.82rem;color:var(--text-dim)">No schedule set yet.</p>
+        <div style="padding:1.5rem;">
+          <p style="font-size:.82rem;color:var(--text-dim);">No schedule set yet.</p>
         </div>
         <?php else: ?>
         <div class="pv-avail-list">
@@ -1303,7 +1567,7 @@ $locIcons = [
           <div class="pv-avail-item <?= $av['day_of_week'] === $todayName ? 'pv-avail-item--today' : '' ?>">
             <span class="pv-avail-day">
               <?php if ($av['day_of_week'] === $todayName): ?>
-                <span style="color:var(--gold-dim);font-weight:700;"><?= $av['day_of_week'] ?></span>
+                <span style="color:var(--cat-accent);font-weight:700;"><?= $av['day_of_week'] ?></span>
               <?php else: ?>
                 <?= htmlspecialchars($av['day_of_week']) ?>
               <?php endif; ?>
@@ -1317,31 +1581,44 @@ $locIcons = [
         <?php endif; ?>
       </div>
 
-      <!-- 3. LOCATION CARD -->
-      <?php
-        $addrParts   = array_filter([$provider['address'] ?? '', $provider['barangay'] ?? '', $provider['city'] ?? '']);
-        $fullAddress = implode(', ', $addrParts);
-        $mapQuery    = urlencode($fullAddress ?: ($provider['city'] ?? 'Bacolod City'));
-      ?>
+      <!-- 3. LOCATION CARD with Leaflet Map -->
       <div class="pv-card pp-map-card">
-        <div class="pv-card-head"><h2>Location</h2></div>
+        <div class="pv-card-head">
+          <h2>
+            <span style="display:flex;align-items:center;gap:.55rem;">
+              <svg width="13" height="14" viewBox="0 0 13 14" fill="none" aria-hidden="true">
+                <path d="M6.5 1C4.57 1 3 2.57 3 4.5C3 7.3 6.5 13 6.5 13S10 7.3 10 4.5C10 2.57 8.43 1 6.5 1Z" stroke="currentColor" stroke-width="1.3"/>
+                <circle cx="6.5" cy="4.5" r="1.5" stroke="currentColor" stroke-width="1.2"/>
+              </svg>
+              Location
+            </span>
+          </h2>
+        </div>
         <div class="pp-map-wrap">
-          <iframe
-            title="Shop location"
-            loading="lazy"
-            referrerpolicy="no-referrer-when-downgrade"
-            src="https://maps.google.com/maps?q=<?= $mapQuery ?>&output=embed&z=15"
-            allowfullscreen></iframe>
+          <?php if ($hasCoords): ?>
+            <div id="leafletMap"></div>
+          <?php else: ?>
+            <div class="pp-map-fallback">
+              <iframe
+                title="Shop location"
+                loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade"
+                src="https://maps.google.com/maps?q=<?= $mapQuery ?>&output=embed&z=15"
+                allowfullscreen></iframe>
+            </div>
+          <?php endif; ?>
         </div>
         <div class="pp-map-addr">
+          <?php if ($fullAddress): ?>
           <div class="pp-map-addr-row">
             <span>📍</span>
-            <span style="line-height:1.5;"><?= htmlspecialchars($fullAddress ?: 'Bacolod City') ?></span>
+            <span><?= htmlspecialchars($fullAddress) ?></span>
           </div>
+          <?php endif; ?>
           <?php if ($offersHome): ?>
           <div class="pp-map-addr-row pp-map-home-row">
             <span>🏠</span>
-            <span>Home service available</span>
+            <span>Home service available in your area</span>
           </div>
           <?php endif; ?>
           <?php if ($fullAddress): ?>
@@ -1356,6 +1633,70 @@ $locIcons = [
           <?php endif; ?>
         </div>
       </div>
+
+      <!-- 4. CONTACT INFORMATION CARD -->
+      <?php if ($phone || $email || $website || $instagram || $facebook): ?>
+      <div class="pv-card pp-contact-card" id="sidebarContact">
+        <div class="pv-card-head">
+          <h2>
+            <span style="display:flex;align-items:center;gap:.55rem;">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <path d="M2.5 2h9a1 1 0 011 1v8a1 1 0 01-1 1h-9a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3"/>
+                <path d="M1.5 3.5l5 4.5 5-4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+              Contact
+            </span>
+          </h2>
+        </div>
+        <div class="pp-contact-list">
+          <?php if ($phone): ?>
+          <div class="pp-contact-item">
+            <div class="pp-contact-icon"><i class="fa-solid fa-phone"></i></div>
+            <div>
+              <span class="pp-contact-label">Phone</span>
+              <div class="pp-contact-val"><a href="tel:<?= htmlspecialchars($phone) ?>"><?= htmlspecialchars($phone) ?></a></div>
+            </div>
+          </div>
+          <?php endif; ?>
+          <?php if ($email): ?>
+          <div class="pp-contact-item">
+            <div class="pp-contact-icon"><i class="fa-solid fa-envelope"></i></div>
+            <div>
+              <span class="pp-contact-label">Email</span>
+              <div class="pp-contact-val"><a href="mailto:<?= htmlspecialchars($email) ?>"><?= htmlspecialchars($email) ?></a></div>
+            </div>
+          </div>
+          <?php endif; ?>
+          <?php if ($website): ?>
+          <div class="pp-contact-item">
+            <div class="pp-contact-icon"><i class="fa-solid fa-globe"></i></div>
+            <div>
+              <span class="pp-contact-label">Website</span>
+              <div class="pp-contact-val"><a href="<?= htmlspecialchars($website) ?>" target="_blank" rel="noopener"><?= htmlspecialchars(preg_replace('/^https?:\/\//', '', $website)) ?></a></div>
+            </div>
+          </div>
+          <?php endif; ?>
+          <?php if ($instagram): ?>
+          <div class="pp-contact-item">
+            <div class="pp-contact-icon"><i class="fa-brands fa-instagram"></i></div>
+            <div>
+              <span class="pp-contact-label">Instagram</span>
+              <div class="pp-contact-val"><a href="https://instagram.com/<?= htmlspecialchars(ltrim($instagram, '@')) ?>" target="_blank" rel="noopener">@<?= htmlspecialchars(ltrim($instagram, '@')) ?></a></div>
+            </div>
+          </div>
+          <?php endif; ?>
+          <?php if ($facebook): ?>
+          <div class="pp-contact-item">
+            <div class="pp-contact-icon"><i class="fa-brands fa-facebook-f"></i></div>
+            <div>
+              <span class="pp-contact-label">Facebook</span>
+              <div class="pp-contact-val"><a href="<?= strpos($facebook, 'http') === 0 ? htmlspecialchars($facebook) : 'https://facebook.com/'.htmlspecialchars($facebook) ?>" target="_blank" rel="noopener"><?= htmlspecialchars($facebook) ?></a></div>
+            </div>
+          </div>
+          <?php endif; ?>
+        </div>
+      </div>
+      <?php endif; ?>
 
     </aside><!-- /pv-sidebar -->
 
@@ -1384,7 +1725,7 @@ function closeLightbox()   { document.getElementById('lightbox').classList.remov
 function updateLightbox() {
   const p = galleryPhotos[currentIdx];
   document.getElementById('lightboxImg').src = p.url;
-  document.getElementById('lightboxImg').alt = p.caption || 'Photo ' + (currentIdx + 1);
+  document.getElementById('lightboxImg').alt = p.caption || 'Portfolio photo ' + (currentIdx + 1);
   document.getElementById('lightboxCaption').textContent = p.caption || '';
   document.getElementById('lightboxCounter').textContent = (currentIdx + 1) + ' / ' + galleryPhotos.length;
 }
@@ -1396,6 +1737,32 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeLightbox();
   if (e.key === 'ArrowRight') nextPhoto();
   if (e.key === 'ArrowLeft')  prevPhoto();
+});
+</script>
+<?php endif; ?>
+
+<!-- ════════════ LEAFLET MAP INIT ════════════ -->
+<?php if ($hasCoords): ?>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  var map = L.map('leafletMap', { zoomControl: true, scrollWheelZoom: false }).setView([<?= (float)$lat ?>, <?= (float)$lng ?>], 15);
+  var tileUrl = isDark
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+  L.tileLayer(tileUrl, {
+    attribution: '© OpenStreetMap contributors © CARTO',
+    subdomains: 'abcd', maxZoom: 19
+  }).addTo(map);
+
+  // Custom marker using category accent
+  var markerHtml = '<div style="width:36px;height:36px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:<?= $catAccent ?>;border:3px solid white;box-shadow:0 3px 12px rgba(0,0,0,.35);"></div>';
+  var customIcon = L.divIcon({ html: markerHtml, className: '', iconSize: [36, 36], iconAnchor: [18, 36], popupAnchor: [0, -36] });
+
+  L.marker([<?= (float)$lat ?>, <?= (float)$lng ?>], { icon: customIcon })
+    .addTo(map)
+    .bindPopup('<strong><?= htmlspecialchars(addslashes($provider['business_name'])) ?></strong><br><small><?= htmlspecialchars(addslashes($fullAddress)) ?></small>')
+    .openPopup();
 });
 </script>
 <?php endif; ?>
@@ -1438,9 +1805,10 @@ document.getElementById('homeAddress')?.addEventListener('input', updateBookLink
 <!-- ════════════ TAB SWITCHING ════════════ -->
 <script>
 function switchTab(name, btn) {
-  document.querySelectorAll('.pp-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.pp-tab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected','false'); });
   document.querySelectorAll('.pp-panel').forEach(p => p.classList.add('pp-panel--hidden'));
   btn.classList.add('active');
+  btn.setAttribute('aria-selected','true');
   const panelId = 'panel' + name.charAt(0).toUpperCase() + name.slice(1);
   document.getElementById(panelId)?.classList.remove('pp-panel--hidden');
 }
