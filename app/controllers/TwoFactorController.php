@@ -30,12 +30,14 @@ class TwoFactorController
         $appName = 'QuickBook';
         $email   = $user['email'];
 
-        // ✅ FIX: Use getQRCodeUrl() to get the otpauth:// URI.
-        //    The view will render it as a QR code using JavaScript (qrcodejs).
-        //    This avoids the broken server-side PNG generation on XAMPP.
+        // Use getQRCodeUrl() to get the otpauth:// URI.
+        // The view renders it as a QR code via JavaScript (qrcodejs).
         $otpauthUrl = $this->g2fa->getQRCodeUrl($appName, $email, $secret);
 
         $alreadyEnabled = (bool) $user['totp_enabled'];
+
+        // Pass role-aware back URL so the nav link returns to the right profile
+        $profileUrl = $this->profileUrlForRole($_SESSION['user_role'] ?? '');
 
         require_once __DIR__ . '/../views/auth/2fa-setup.php';
     }
@@ -44,7 +46,8 @@ class TwoFactorController
     {
         $this->requireLogin();
 
-        $otp    = trim($_POST['otp'] ?? '');
+        // Strip ALL non-digit characters (spaces, dashes, etc.) before verifying
+        $otp    = preg_replace('/\D/', '', $_POST['otp'] ?? '');
         $secret = $_SESSION['2fa_pending_secret'] ?? '';
 
         if (empty($secret)) {
@@ -52,9 +55,13 @@ class TwoFactorController
             header('Location: ' . BASE_URL . 'auth/2fa/setup'); exit;
         }
 
-        // window=2 allows ±1 minute tolerance for clock differences between
-        // your XAMPP server and the phone. Fixes "Invalid code" on local dev.
-        $valid = $this->g2fa->verifyKey($secret, $otp, 2);
+        if (strlen($otp) !== 6) {
+            $_SESSION['flash_error'] = 'Please enter a valid 6-digit code.';
+            header('Location: ' . BASE_URL . 'auth/2fa/setup'); exit;
+        }
+
+        // window=4 allows +-2 minutes tolerance for clock differences on local dev (XAMPP)
+        $valid = $this->g2fa->verifyKey($secret, $otp, 4);
 
         if (!$valid) {
             $_SESSION['flash_error'] = 'Invalid code. Please try again.';
@@ -69,7 +76,7 @@ class TwoFactorController
         unset($_SESSION['2fa_pending_secret']);
 
         $_SESSION['flash_success'] = '2FA has been enabled on your account!';
-        header('Location: ' . BASE_URL . 'profile'); exit;
+        header('Location: ' . BASE_URL . $this->profileUrlForRole($_SESSION['user_role'] ?? '')); exit;
     }
 
     public function showVerify(): void
@@ -88,7 +95,8 @@ class TwoFactorController
             header('Location: ' . BASE_URL . 'login'); exit;
         }
 
-        $otp    = trim($_POST['otp'] ?? '');
+        // Strip ALL non-digit characters before verifying
+        $otp    = preg_replace('/\D/', '', $_POST['otp'] ?? '');
         $userId = (int) $_SESSION['2fa_user_id'];
         $user   = $this->userModel->findById($userId);
 
@@ -98,7 +106,8 @@ class TwoFactorController
             header('Location: ' . BASE_URL . 'login'); exit;
         }
 
-        $valid = $this->g2fa->verifyKey($user['totp_secret'], $otp, 2);
+        // window=4 allows +-2 minutes tolerance
+        $valid = $this->g2fa->verifyKey($user['totp_secret'], $otp, 4);
 
         if (!$valid) {
             $_SESSION['flash_error'] = 'Invalid or expired code. Please try again.';
@@ -121,20 +130,22 @@ class TwoFactorController
     {
         $this->requireLogin();
 
-        $otp    = trim($_POST['otp'] ?? '');
+        // Strip ALL non-digit characters before verifying
+        $otp    = preg_replace('/\D/', '', $_POST['otp'] ?? '');
         $userId = (int) $_SESSION['user_id'];
         $user   = $this->userModel->findById($userId);
 
         if (!$user['totp_enabled']) {
             $_SESSION['flash_error'] = '2FA is not enabled on your account.';
-            header('Location: ' . BASE_URL . 'profile'); exit;
+            header('Location: ' . BASE_URL . $this->profileUrlForRole($_SESSION['user_role'] ?? '')); exit;
         }
 
-        $valid = $this->g2fa->verifyKey($user['totp_secret'], $otp, 2);
+        // window=4 allows +-2 minutes tolerance
+        $valid = $this->g2fa->verifyKey($user['totp_secret'], $otp, 4);
 
         if (!$valid) {
             $_SESSION['flash_error'] = 'Invalid code. 2FA was NOT disabled.';
-            header('Location: ' . BASE_URL . 'profile'); exit;
+            header('Location: ' . BASE_URL . $this->profileUrlForRole($_SESSION['user_role'] ?? '')); exit;
         }
 
         $db   = Database::getInstance();
@@ -144,7 +155,19 @@ class TwoFactorController
         $stmt->execute([$userId]);
 
         $_SESSION['flash_success'] = '2FA has been disabled.';
-        header('Location: ' . BASE_URL . 'profile'); exit;
+        header('Location: ' . BASE_URL . $this->profileUrlForRole($_SESSION['user_role'] ?? '')); exit;
+    }
+
+    /**
+     * Returns the correct profile URL for a given role.
+     */
+    private function profileUrlForRole(string $role): string
+    {
+        return match($role) {
+            'provider' => 'provider/profile',
+            'admin'    => 'admin/profile',
+            default    => 'profile',   // customer
+        };
     }
 
     private function requireLogin(): void

@@ -66,6 +66,7 @@ $routes = [
     'GET:browse/{any}'   => ['BrowseController',   'category'],
     'GET:services/{any}' => ['CustomerController', 'serviceDetail'],
     'GET:providers/{any}'=> ['ProviderController', 'show'],
+    'GET:book/{any}'     => ['BookingController',  'show'],    // booking form page
     'POST:book'          => ['BookingController',  'store'],
 
     // ── Provider dashboard ──────────────────────────────────────────
@@ -112,6 +113,10 @@ $routes = [
     'POST:provider/profile/update-personal'   => ['ProviderDashController', 'updatePersonalInfo'],
     'POST:provider/profile/update-password'   => ['ProviderDashController', 'updatePassword'],
     'POST:provider/profile/upload-photo'      => ['ProviderDashController', 'uploadProfilePhoto'],
+    'POST:provider/profile/revoke-session'    => ['ProviderDashController', 'revokeSession'],
+    'POST:provider/profile/revoke-all-sessions' => ['ProviderDashController', 'revokeAllSessions'],
+    'POST:provider/profile/export-data'       => ['ProviderDashController', 'exportData'],
+    'POST:provider/profile/deactivate'        => ['ProviderDashController', 'profileDeactivate'],
 
     // Portfolio
     // Reviews
@@ -132,6 +137,7 @@ $routes = [
     'POST:provider/settings/deactivate'       => ['ProviderDashController', 'deactivateAccount'],
     'POST:provider/settings/delete'           => ['ProviderDashController', 'deleteAccount'],
     'POST:provider/settings/feedback'         => ['ProviderDashController', 'submitFeedback'],
+    'POST:provider/settings/save-notifications'=> ['ProviderDashController', 'saveNotifications'],
 
     // Notifications (all roles)
     'POST:notifications/mark-read'     => ['NotificationController', 'markRead'],

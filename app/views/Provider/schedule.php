@@ -29,6 +29,23 @@ unset($_SESSION['flash']);
 /* ── Days config ── */
 $days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
+/* ── Ensure break columns exist (graceful migration) ── */
+try {
+    $db->exec("ALTER TABLE tbl_provider_availability ADD COLUMN break_start TIME DEFAULT NULL");
+} catch (\Throwable $e) {}
+try {
+    $db->exec("ALTER TABLE tbl_provider_availability ADD COLUMN break_end TIME DEFAULT NULL");
+} catch (\Throwable $e) {}
+
+/* ── Clean up accidental default break values (12:00/13:00 saved on all days) ── */
+/* Only clear breaks on unavailable days — a provider would never intentionally add a
+   break to a day they don't work, so any break there is from the bug */
+try {
+    $db->prepare("UPDATE tbl_provider_availability
+        SET break_start = NULL, break_end = NULL
+        WHERE provider_id = ? AND is_available = 0")->execute([$profileId]);
+} catch (\Throwable $e) {}
+
 /* ── Weekly availability ── */
 $stmt = $db->prepare("SELECT * FROM tbl_provider_availability WHERE provider_id = ?");
 $stmt->execute([$profileId]);
@@ -217,14 +234,7 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
         <div class="pv-pd-divider"></div>
         <a href="<?= BASE_URL ?>provider/profile" class="pv-pd-item" role="menuitem">
           <span class="pv-pd-item-ico"><i class="fa-solid fa-store"></i></span>
-          <span>Business Profile</span>
-          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
-               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </a>
-        <a href="<?= BASE_URL ?>provider/settings" class="pv-pd-item" role="menuitem">
-          <span class="pv-pd-item-ico"><i class="fa-solid fa-gear"></i></span>
-          <span>Settings</span>
+          <span>Profile</span>
           <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
@@ -325,11 +335,14 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
         <form method="POST" action="<?= BASE_URL ?>provider/availability/store" id="avForm">
           <div class="sc-days-list" role="list">
             <?php foreach($days as $day):
-              $row      = $availability[$day] ?? null;
-              $isActive = (bool)($row['is_available'] ?? false);
-              $start    = substr($row['start_time'] ?? '09:00', 0, 5);
-              $end      = substr($row['end_time']   ?? '18:00', 0, 5);
-              $isWeekend = in_array($day, ['Saturday','Sunday']);
+              $row        = $availability[$day] ?? null;
+              $isActive   = (bool)($row['is_available'] ?? false);
+              $start      = substr($row['start_time']  ?? '09:00', 0, 5);
+              $end        = substr($row['end_time']    ?? '18:00', 0, 5);
+              $breakStart = !empty($row['break_start']) ? substr($row['break_start'], 0, 5) : '12:00';
+              $breakEnd   = !empty($row['break_end'])   ? substr($row['break_end'],   0, 5) : '13:00';
+              $hasBreak   = !empty($row['break_start']) && !empty($row['break_end']);
+              $isWeekend  = in_array($day, ['Saturday','Sunday']);
             ?>
             <div class="sc-day-row <?= $isActive ? 'is-active' : '' ?> <?= $isWeekend ? 'is-weekend' : '' ?>"
                  id="row-<?= $day ?>" data-day="<?= $day ?>">
@@ -374,17 +387,17 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
                 <span class="sc-hours-badge" id="badge-<?= $day ?>"></span>
               </div>
 
-              <div class="sc-break-wrap" id="break-wrap-<?= $day ?>">
+              <div class="sc-break-wrap" id="break-wrap-<?= $day ?>" style="<?= $isActive ? '' : 'display:none' ?>">
                 <button type="button" class="sc-break-toggle" onclick="toggleBreak('<?= $day ?>')" id="break-btn-<?= $day ?>">
-                  <i class="fa-solid fa-plus" id="break-icon-<?= $day ?>"></i>
-                  <span id="break-btn-label-<?= $day ?>">Add Break</span>
+                  <i class="fa-solid <?= $hasBreak ? 'fa-minus' : 'fa-plus' ?>" id="break-icon-<?= $day ?>"></i>
+                  <span id="break-btn-label-<?= $day ?>"><?= $hasBreak ? 'Remove Break' : 'Add Break' ?></span>
                 </button>
-                <div class="sc-break-fields" id="break-fields-<?= $day ?>" style="display:none">
+                <div class="sc-break-fields" id="break-fields-<?= $day ?>" style="<?= $hasBreak ? 'display:flex' : 'display:none' ?>">
                   <div class="sc-time-group">
                     <label class="sc-time-lbl" for="bstart-<?= $day ?>">Break Start</label>
                     <div class="sc-time-wrap">
                       <i class="fa-regular fa-clock sc-time-ico"></i>
-                      <input type="time" id="bstart-<?= $day ?>" name="days[<?= $day ?>][break_start]" value="12:00" class="sc-time-input sc-time-input--break">
+                      <input type="time" id="bstart-<?= $day ?>" name="days[<?= $day ?>][break_start]" value="<?= $breakStart ?>" class="sc-time-input sc-time-input--break" <?= $hasBreak ? '' : 'disabled' ?>>
                     </div>
                   </div>
                   <span class="sc-time-arrow">→</span>
@@ -392,7 +405,7 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
                     <label class="sc-time-lbl" for="bend-<?= $day ?>">Break End</label>
                     <div class="sc-time-wrap">
                       <i class="fa-regular fa-clock sc-time-ico"></i>
-                      <input type="time" id="bend-<?= $day ?>" name="days[<?= $day ?>][break_end]" value="13:00" class="sc-time-input sc-time-input--break">
+                      <input type="time" id="bend-<?= $day ?>" name="days[<?= $day ?>][break_end]" value="<?= $breakEnd ?>" class="sc-time-input sc-time-input--break" <?= $hasBreak ? '' : 'disabled' ?>>
                     </div>
                   </div>
                 </div>
@@ -406,7 +419,7 @@ $availWeekdays = array_keys(array_filter($availability, fn($r) => $r['is_availab
             <div class="sc-unsaved" id="changeIndicator" style="opacity:0">
               <span class="sc-unsaved-dot"></span>Unsaved changes
             </div>
-            <button type="submit" class="sc-save-btn" onclick="showToast('check','Saved successfully!')">
+            <button type="submit" class="sc-save-btn">
               <i class="fa-solid fa-floppy-disk"></i>Save Schedule
             </button>
           </div>
@@ -876,18 +889,32 @@ function calNav(dir) {
 }
 
 function toggleDay(day, active) {
-  const row   = document.getElementById('row-' + day);
-  const times = document.getElementById('times-' + day);
-  const stat  = document.getElementById('status-' + day);
-  const bWrap = document.getElementById('break-wrap-' + day);
+  const row    = document.getElementById('row-' + day);
+  const times  = document.getElementById('times-' + day);
+  const stat   = document.getElementById('status-' + day);
+  const bWrap  = document.getElementById('break-wrap-' + day);
+  const fields = document.getElementById('break-fields-' + day);
+  const bstart = document.getElementById('bstart-' + day);
+  const bend   = document.getElementById('bend-'   + day);
+  const btn    = document.getElementById('break-btn-label-' + day);
+  const icon   = document.getElementById('break-icon-' + day);
+
   row.classList.toggle('is-active', active);
   times.querySelectorAll('input[type="time"]').forEach(i => i.disabled = !active);
+
   if (!active) {
     stat.textContent = 'Unavailable';
-    if (bWrap) bWrap.style.opacity = '0.35';
+    // Hide the entire break section and reset it
+    if (bWrap)   bWrap.style.display  = 'none';
+    if (fields)  fields.style.display = 'none';
+    if (bstart)  { bstart.disabled = true;  bstart.value = ''; }
+    if (bend)    { bend.disabled   = true;  bend.value   = ''; }
+    if (btn)     btn.textContent  = 'Add Break';
+    if (icon)    icon.className   = 'fa-solid fa-plus';
   } else {
     updateStatus(day);
-    if (bWrap) bWrap.style.opacity = '1';
+    // Show the break button (but not the fields — user must click Add Break)
+    if (bWrap) bWrap.style.display = '';
   }
   updateGlance(day, active);
   markUnsaved();
@@ -953,13 +980,19 @@ function setAll(active) {
 }
 
 function toggleBreak(day) {
-  const fields = document.getElementById('break-fields-' + day);
-  const btn    = document.getElementById('break-btn-label-' + day);
-  const icon   = document.getElementById('break-icon-' + day);
-  const show   = fields.style.display === 'none';
+  const fields    = document.getElementById('break-fields-' + day);
+  const btn       = document.getElementById('break-btn-label-' + day);
+  const icon      = document.getElementById('break-icon-' + day);
+  const bstart    = document.getElementById('bstart-' + day);
+  const bend      = document.getElementById('bend-'   + day);
+  const show      = fields.style.display === 'none';
   fields.style.display = show ? 'flex' : 'none';
-  if (btn)  btn.textContent  = show ? 'Remove Break' : 'Add Break';
-  if (icon) icon.className   = show ? 'fa-solid fa-minus' : 'fa-solid fa-plus';
+  if (btn)  btn.textContent = show ? 'Remove Break' : 'Add Break';
+  if (icon) icon.className  = show ? 'fa-solid fa-minus' : 'fa-solid fa-plus';
+  // Enable inputs when showing so they submit; disable + clear when hiding
+  if (bstart) { bstart.disabled = !show; if (!show) bstart.value = ''; }
+  if (bend)   { bend.disabled   = !show; if (!show) bend.value   = ''; }
+  markUnsaved();
 }
 
 function markUnsaved() {

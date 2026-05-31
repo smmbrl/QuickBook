@@ -27,13 +27,20 @@ if (!$provider) {
     header('Location: ' . BASE_URL . 'browse'); exit;
 }
 
-// ── Gallery ────────────────────────────────────────────────────
-$galStmt = $db->prepare("
-    SELECT * FROM tbl_provider_gallery
-    WHERE provider_id = ? ORDER BY sort_order ASC, id ASC
-");
-$galStmt->execute([$providerId]);
-$galleryPhotos = $galStmt->fetchAll();
+// ── Portfolio works (from tbl_portfolio — uploaded by provider) ────────────────
+try {
+    $galStmt = $db->prepare("
+        SELECT p.id, p.title, p.caption, p.image_url, p.extra_images, p.before_url, p.after_url,
+               p.is_featured, p.is_before_after, p.price, p.views, p.likes,
+               s.name AS service_name
+        FROM tbl_portfolio p
+        LEFT JOIN tbl_services s ON s.id = p.service_id
+        WHERE p.provider_id = ?
+        ORDER BY p.is_featured DESC, p.created_at DESC
+    ");
+    $galStmt->execute([$providerId]);
+    $galleryPhotos = $galStmt->fetchAll();
+} catch (\Exception $e) { $galleryPhotos = []; }
 
 // ── Services ───────────────────────────────────────────────────
 $svcStmt = $db->prepare("
@@ -482,14 +489,27 @@ $hasCoords   = $lat && $lng;
       transition: transform .3s var(--ease-out);
     }
     .pp-masonry-item:hover img { transform: scale(1.06); }
-    .pp-masonry-caption {
+    .pp-masonry-overlay {
       position: absolute; bottom: 0; left: 0; right: 0;
-      background: linear-gradient(0deg, rgba(0,0,0,.65) 0%, transparent 100%);
-      padding: .7rem .7rem .5rem; font-size: .66rem;
-      color: rgba(255,255,255,.92); font-family: var(--font-mono);
-      opacity: 0; transition: opacity .2s;
+      background: linear-gradient(0deg, rgba(0,0,0,.72) 0%, transparent 100%);
+      padding: .65rem .7rem .55rem;
+      opacity: 0; transition: opacity .22s;
+      display: flex; flex-direction: column; gap: .18rem;
     }
-    .pp-masonry-item:hover .pp-masonry-caption { opacity: 1; }
+    .pp-masonry-item:hover .pp-masonry-overlay { opacity: 1; }
+    .pp-masonry-service-tag {
+      font-size: .6rem; font-weight: 600; letter-spacing: .06em;
+      color: #E8C96A; font-family: var(--font-mono);
+      text-transform: uppercase;
+    }
+    .pp-masonry-title {
+      font-size: .72rem; font-weight: 700; color: #fff;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .pp-masonry-caption {
+      font-size: .62rem; color: rgba(255,255,255,.78); font-family: var(--font-mono);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
     .pp-masonry-zoom {
       position: absolute; top: .5rem; right: .5rem;
       background: rgba(0,0,0,.4); border-radius: 50%;
@@ -1362,15 +1382,25 @@ $hasCoords   = $lat && $lng;
                 </div>
               </div>
             <?php else: ?>
-              <div class="pp-masonry-item <?= $idx === 0 ? 'pp-masonry-featured' : '' ?>"
+              <div class="pp-masonry-item <?= ($idx === 0 || !empty($photo['is_featured'])) ? 'pp-masonry-featured' : '' ?>"
                    onclick="openLightbox(<?= $idx ?>)" role="button" tabindex="0"
                    aria-label="View portfolio photo <?= $idx + 1 ?>">
-                <img src="<?= htmlspecialchars($photo['image_url']) ?>"
-                     alt="<?= htmlspecialchars($photo['caption'] ?? 'Portfolio work') ?>"
+                <img src="<?= htmlspecialchars($photo['image_url'] ?? '') ?>"
+                     alt="<?= htmlspecialchars($photo['title'] ?? $photo['caption'] ?? 'Portfolio work') ?>"
                      loading="<?= $idx === 0 ? 'eager' : 'lazy' ?>">
-                <?php if ($photo['caption']): ?>
-                  <div class="pp-masonry-caption"><?= htmlspecialchars($photo['caption']) ?></div>
-                <?php endif; ?>
+                <div class="pp-masonry-overlay">
+                  <?php if (!empty($photo['service_name'])): ?>
+                    <div class="pp-masonry-service-tag">
+                      <i class="fa-solid fa-tag"></i> <?= htmlspecialchars($photo['service_name']) ?>
+                    </div>
+                  <?php endif; ?>
+                  <?php if (!empty($photo['title'])): ?>
+                    <div class="pp-masonry-title"><?= htmlspecialchars($photo['title']) ?></div>
+                  <?php endif; ?>
+                  <?php if (!empty($photo['caption'])): ?>
+                    <div class="pp-masonry-caption"><?= htmlspecialchars($photo['caption']) ?></div>
+                  <?php endif; ?>
+                </div>
                 <div class="pp-masonry-zoom" aria-hidden="true">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                     <circle cx="7" cy="7" r="4.5" stroke="white" stroke-width="1.5"/>
@@ -1876,19 +1906,54 @@ $hasCoords   = $lat && $lng;
   </div>
 </div>
 <script>
-const galleryPhotos = <?= json_encode(array_map(fn($p) => ['url' => $p['image_url'], 'caption' => $p['caption'] ?? ''], $galleryPhotos)) ?>;
+const galleryPhotos = <?= json_encode(array_map(function($p) {
+    $extras = !empty($p['extra_images']) ? json_decode($p['extra_images'], true) : [];
+    if (!is_array($extras)) $extras = [];
+    $allImgs = array_filter(array_merge([$p['image_url'] ?? ''], $extras));
+    return [
+        'url'    => $p['image_url'] ?? '',
+        'images' => array_values($allImgs),
+        'title'  => $p['title'] ?? '',
+        'caption'=> $p['caption'] ?? '',
+        'service'=> $p['service_name'] ?? '',
+    ];
+}, $galleryPhotos)) ?>;
 let currentIdx = 0;
-function openLightbox(idx) { currentIdx = idx % galleryPhotos.length; updateLightbox(); document.getElementById('lightbox').classList.add('open'); document.body.style.overflow = 'hidden'; }
+let currentImgIdx = 0;
+function openLightbox(idx) {
+  currentIdx = idx % galleryPhotos.length;
+  currentImgIdx = 0;
+  updateLightbox();
+  document.getElementById('lightbox').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
 function closeLightbox()   { document.getElementById('lightbox').classList.remove('open'); document.body.style.overflow = ''; }
 function updateLightbox() {
   const p = galleryPhotos[currentIdx];
-  document.getElementById('lightboxImg').src = p.url;
-  document.getElementById('lightboxImg').alt = p.caption || 'Portfolio photo ' + (currentIdx + 1);
-  document.getElementById('lightboxCaption').textContent = p.caption || '';
-  document.getElementById('lightboxCounter').textContent = (currentIdx + 1) + ' / ' + galleryPhotos.length;
+  const imgs = (p.images && p.images.length) ? p.images : [p.url];
+  currentImgIdx = Math.max(0, Math.min(currentImgIdx, imgs.length - 1));
+  document.getElementById('lightboxImg').src = imgs[currentImgIdx];
+  document.getElementById('lightboxImg').alt = p.title || p.caption || 'Portfolio photo ' + (currentIdx + 1);
+  var captionParts = [];
+  if (p.service) captionParts.push('🏷 ' + p.service);
+  if (p.title)   captionParts.push(p.title);
+  if (p.caption) captionParts.push(p.caption);
+  document.getElementById('lightboxCaption').textContent = captionParts.join(' · ') || '';
+  // Counter shows work position + image dot indicators if multiple
+  var counter = (currentIdx + 1) + ' / ' + galleryPhotos.length;
+  if (imgs.length > 1) counter += '  (' + (currentImgIdx + 1) + ' of ' + imgs.length + ' photos)';
+  document.getElementById('lightboxCounter').textContent = counter;
 }
-function nextPhoto() { currentIdx = (currentIdx + 1) % galleryPhotos.length; updateLightbox(); }
-function prevPhoto() { currentIdx = (currentIdx - 1 + galleryPhotos.length) % galleryPhotos.length; updateLightbox(); }
+function nextPhoto() {
+  const p = galleryPhotos[currentIdx];
+  const imgs = (p.images && p.images.length) ? p.images : [p.url];
+  if (currentImgIdx < imgs.length - 1) { currentImgIdx++; updateLightbox(); }
+  else { currentIdx = (currentIdx + 1) % galleryPhotos.length; currentImgIdx = 0; updateLightbox(); }
+}
+function prevPhoto() {
+  if (currentImgIdx > 0) { currentImgIdx--; updateLightbox(); }
+  else { currentIdx = (currentIdx - 1 + galleryPhotos.length) % galleryPhotos.length; const p2 = galleryPhotos[currentIdx]; const imgs2 = (p2.images && p2.images.length) ? p2.images : [p2.url]; currentImgIdx = imgs2.length - 1; updateLightbox(); }
+}
 document.getElementById('lightbox').addEventListener('click', e => { if (e.target === document.getElementById('lightbox')) closeLightbox(); });
 document.addEventListener('keydown', e => {
   if (!document.getElementById('lightbox').classList.contains('open')) return;

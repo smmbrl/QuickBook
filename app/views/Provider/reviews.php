@@ -34,9 +34,11 @@ try {
             id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             review_id   INT UNSIGNED NOT NULL,
             provider_id INT UNSIGNED NOT NULL,
-            reply_text  TEXT         NOT NULL,
+            reply       TEXT         NOT NULL,
             created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY uq_review (review_id)
+            updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_review_reply (review_id),
+            INDEX idx_provider (provider_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
 } catch (\Exception $e) { /* silently skip if insufficient privilege */ }
@@ -65,7 +67,7 @@ $reviews = $stReviews->fetchAll();
 /* ── Fetch replies separately (safe — tbl_review_replies may not exist yet) ── */
 $repliesMap = [];
 try {
-    $stReplies = $db->prepare("SELECT review_id, reply_text, created_at FROM tbl_review_replies WHERE provider_id = ?");
+    $stReplies = $db->prepare("SELECT id, review_id, reply AS reply_text, created_at FROM tbl_review_replies WHERE provider_id = ?");
     $stReplies->execute([$profileId]);
     foreach ($stReplies->fetchAll() as $rr) {
         $repliesMap[(int)$rr['review_id']] = $rr;
@@ -77,6 +79,7 @@ foreach ($reviews as &$rev) {
     $rid = (int)$rev['id'];
     $rev['reply_text'] = $repliesMap[$rid]['reply_text'] ?? null;
     $rev['replied_at'] = $repliesMap[$rid]['created_at'] ?? null;
+    $rev['reply_id']   = $repliesMap[$rid]['id'] ?? null;
 }
 unset($rev);
 
@@ -104,25 +107,7 @@ foreach ($stBreakdown->fetchAll() as $row) {
 }
 
 /* ── Handle reply POST ── */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply_review_id'])) {
-    $reviewId = (int)$_POST['reply_review_id'];
-    $replyText = trim($_POST['reply_text'] ?? '');
-    if ($replyText && $reviewId) {
-        try {
-            $chk = $db->prepare("SELECT r.id FROM tbl_reviews r WHERE r.id = ? AND r.provider_id = ?");
-            $chk->execute([$reviewId, $profileId]);
-            if ($chk->fetch()) {
-                $ins = $db->prepare("INSERT INTO tbl_review_replies (review_id, provider_id, reply_text, created_at) VALUES (?, ?, ?, NOW())
-                    ON DUPLICATE KEY UPDATE reply_text = VALUES(reply_text), created_at = NOW()");
-                $ins->execute([$reviewId, $profileId, $replyText]);
-                $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Reply posted successfully.'];
-            }
-        } catch (\Exception $e) {
-            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Failed to post reply.'];
-        }
-    }
-    header('Location: ' . BASE_URL . 'provider/reviews'); exit;
-}
+// POST handling is done by ProviderDashController::storeReply() via provider/reviews/reply/{id}
 
 /* ── Flash ── */
 $flash = $_SESSION['flash'] ?? null; unset($_SESSION['flash']);
@@ -153,6 +138,52 @@ function timeAgo(string $dt): string {
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/provider_reviews.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <script>(function(){ var t=localStorage.getItem('qb-theme')||'light'; if(t==='dark') document.documentElement.setAttribute('data-theme','dark'); })();</script>
+  <style>
+    /* ── Toast: fixed bottom-center ── */
+    .rv-flash {
+      position: fixed !important;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      margin: 0 !important;
+      min-width: 280px;
+      max-width: min(560px, calc(100vw - 2rem));
+      padding: .9rem 1.25rem .9rem 1rem;
+      border-radius: var(--r-md);
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      font-size: .88rem;
+      font-weight: 500;
+      z-index: 9999;
+      box-shadow: 0 8px 32px rgba(0,0,0,.22), 0 2px 8px rgba(0,0,0,.14);
+      animation: rvToastIn .35s cubic-bezier(.34,1.56,.64,1) both;
+    }
+    .rv-flash--out {
+      animation: rvToastOut .4s cubic-bezier(.55,0,.55,.75) forwards !important;
+    }
+    @keyframes rvToastIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(18px) scale(.94); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0)     scale(1);   }
+    }
+    @keyframes rvToastOut {
+      from { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1);    }
+      to   { opacity: 0; transform: translateX(-50%) translateY(12px) scale(.95);  }
+    }
+    .rv-flash-close {
+      margin-left: auto;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: rgba(0,0,0,.10);
+      border: none;
+      font-size: .9rem; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; flex-shrink: 0;
+      color: inherit; opacity: .7;
+      transition: opacity .15s;
+    }
+    .rv-flash-close:hover { opacity: 1; }
+  </style>
 </head>
 <body>
 <div class="grain" aria-hidden="true"></div>
@@ -234,14 +265,7 @@ function timeAgo(string $dt): string {
         <div class="pv-pd-divider"></div>
         <a href="<?= BASE_URL ?>provider/profile" class="pv-pd-item" role="menuitem">
           <span class="pv-pd-item-ico"><i class="fa-solid fa-store"></i></span>
-          <span>Business Profile</span>
-          <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
-               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </a>
-        <a href="<?= BASE_URL ?>provider/settings" class="pv-pd-item" role="menuitem">
-          <span class="pv-pd-item-ico"><i class="fa-solid fa-gear"></i></span>
-          <span>Settings</span>
+          <span>Profile</span>
           <svg class="pv-pd-item-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
@@ -270,29 +294,9 @@ function timeAgo(string $dt): string {
       </p>
       <h1 class="rv-hero-title">My <em>Reviews</em></h1>
       <p class="rv-hero-sub">Reply to customer feedback and build trust with your audience.</p>
-      <div class="rv-hero-badges">
-        <span class="rv-badge-pill rv-badge-pill--gold">
-          <i class="fa-solid fa-comments" style="font-size:.7rem"></i>
-          <?= $totalReviews ?> Reviews Total
-        </span>
-        <?php if ($unanswered > 0): ?>
-        <span class="rv-badge-pill rv-badge-pill--amber">
-          <i class="fa-solid fa-clock" style="font-size:.7rem"></i>
-          <?= $unanswered ?> Awaiting Reply
-        </span>
-        <?php endif; ?>
-      </div>
+
     </div>
-    <div class="rv-hero-right">
-      <a href="<?= BASE_URL ?>provider/dashboard" class="rv-hero-btn rv-hero-btn--ghost">
-        <i class="fa-solid fa-arrow-left" style="font-size:.75rem"></i>
-        Dashboard
-      </a>
-      <a href="<?= BASE_URL ?>provider/appointments" class="rv-hero-btn rv-hero-btn--gold">
-        <i class="fa-regular fa-calendar-check" style="font-size:.75rem"></i>
-        Appointments
-      </a>
-    </div>
+
   </div>
 </header>
 
@@ -302,9 +306,21 @@ function timeAgo(string $dt): string {
 <?php if ($flash): ?>
 <div class="rv-flash rv-flash--<?= $flash['type'] ?>" role="alert" id="rvFlash">
   <i class="fa-solid <?= $flash['type'] === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation' ?>"></i>
-  <?= htmlspecialchars($flash['msg']) ?>
-  <button class="rv-flash-close" onclick="document.getElementById('rvFlash').remove()">×</button>
+  <span><?= htmlspecialchars($flash['msg']) ?></span>
+  <button class="rv-flash-close" onclick="dismissFlash()" aria-label="Dismiss">×</button>
 </div>
+<script>
+(function () {
+  function dismissFlash() {
+    var el = document.getElementById('rvFlash');
+    if (!el) return;
+    el.classList.add('rv-flash--out');
+    el.addEventListener('animationend', function () { el.remove(); }, { once: true });
+  }
+  window.dismissFlash = dismissFlash;
+  setTimeout(dismissFlash, 3000);
+})();
+</script>
 <?php endif; ?>
 
 <!-- ══════════════════════════════════
@@ -453,16 +469,22 @@ function timeAgo(string $dt): string {
 
         <!-- Reply form -->
         <div class="rv-reply-form-wrap <?= $hasReply ? 'rv-reply-form-wrap--hidden' : '' ?>" id="replyWrap-<?= (int)$rev['id'] ?>">
-          <form method="POST" action="<?= BASE_URL ?>provider/reviews" class="rv-reply-form">
-            <input type="hidden" name="reply_review_id" value="<?= (int)$rev['id'] ?>">
+          <?php
+            // If already replied, the form edits the existing reply
+            $replyId = $rev['reply_id'] ?? null;
+            $formAction = $hasReply && $replyId
+              ? BASE_URL . 'provider/reviews/reply/update/' . (int)$replyId
+              : BASE_URL . 'provider/reviews/reply/' . (int)$rev['id'];
+          ?>
+          <form method="POST" action="<?= $formAction ?>" class="rv-reply-form">
             <div class="rv-reply-input-row">
               <div class="rv-reply-form-avatar"><?= $initials ?></div>
-              <textarea name="reply_text" class="rv-reply-textarea"
+              <textarea name="reply" class="rv-reply-textarea"
                         placeholder="Write a professional reply to this review…"
-                        rows="2" maxlength="1000" required></textarea>
+                        rows="2" maxlength="600" required><?= $hasReply ? htmlspecialchars($rev['reply_text']) : '' ?></textarea>
             </div>
             <div class="rv-reply-form-footer">
-              <span class="rv-reply-char-count"><span class="rv-char-num">0</span> / 1000</span>
+              <span class="rv-reply-char-count"><span class="rv-char-num"><?= $hasReply ? mb_strlen($rev['reply_text'] ?? '') : 0 ?></span> / 600</span>
               <div class="rv-reply-form-actions">
                 <?php if ($hasReply): ?>
                 <button type="button" class="rv-btn-cancel" onclick="document.getElementById('replyWrap-<?= (int)$rev['id'] ?>').classList.add('rv-reply-form-wrap--hidden')">
@@ -471,7 +493,7 @@ function timeAgo(string $dt): string {
                 <?php endif; ?>
                 <button type="submit" class="rv-btn-reply">
                   <i class="fa-solid fa-paper-plane" style="font-size:.75rem"></i>
-                  Post Reply
+                  <?= $hasReply ? 'Update Reply' : 'Post Reply' ?>
                 </button>
               </div>
             </div>

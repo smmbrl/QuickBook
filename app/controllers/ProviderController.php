@@ -13,6 +13,7 @@ class ProviderController
 
     public function show(string $id): void
     {
+        // $id must be in scope when the view is require'd so it can set $providerId
         require_once __DIR__ . '/../views/customer/provider-profile.php';
     }
 }

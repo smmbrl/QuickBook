@@ -12,6 +12,71 @@ class BookingController
         }
     }
 
+    /**
+     * GET  book/{id}
+     * Shows the booking form for a specific provider.
+     * $id = tbl_provider_profiles.id
+     */
+    public function show(string $id): void
+    {
+        if (($_SESSION['user_role'] ?? '') !== 'customer') {
+            header('Location: ' . BASE_URL . 'providers/' . (int)$id); exit;
+        }
+
+        $db         = Database::getInstance();
+        $providerId = (int)$id;
+
+        if ($providerId <= 0) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Invalid provider.'];
+            header('Location: ' . BASE_URL . 'browse'); exit;
+        }
+
+        // Validate provider exists and is active
+        $stmt = $db->prepare("
+            SELECT pp.id, pp.business_name, pp.profile_photo, pp.bio,
+                   pp.avg_rating, pp.total_reviews,
+                   u.first_name, u.last_name,
+                   c.name AS category_name
+            FROM tbl_provider_profiles pp
+            JOIN tbl_users u ON u.id = pp.user_id
+            LEFT JOIN tbl_categories c ON c.id = pp.category_id
+            WHERE pp.id = ? AND pp.is_approved = 1
+            LIMIT 1
+        ");
+        $stmt->execute([$providerId]);
+        $provider = $stmt->fetch();
+
+        if (!$provider) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Provider not found or unavailable.'];
+            header('Location: ' . BASE_URL . 'browse'); exit;
+        }
+
+        // Fetch active services for this provider
+        $stSvc = $db->prepare("
+            SELECT id, name, service_type, location_type, shop_address,
+                   price, duration_minutes, description
+            FROM tbl_services
+            WHERE provider_id = ? AND is_active = 1
+            ORDER BY name ASC
+        ");
+        $stSvc->execute([$providerId]);
+        $services = $stSvc->fetchAll();
+
+        // Fetch availability so the date-picker can block unavailable days
+        $stAvail = $db->prepare("
+            SELECT day_of_week, start_time, end_time, is_available
+            FROM tbl_provider_availability
+            WHERE provider_id = ?
+        ");
+        $stAvail->execute([$providerId]);
+        $availability = [];
+        foreach ($stAvail->fetchAll() as $row) {
+            $availability[$row['day_of_week']] = $row;
+        }
+
+        require __DIR__ . '/../views/book.php';
+    }
+
     public function store(): void
     {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -46,7 +111,7 @@ class BookingController
 
         if ($errors) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => implode(' ', $errors)];
-            header('Location: ' . BASE_URL . 'providers/' . $providerId); exit;
+            header('Location: ' . BASE_URL . 'book/' . $providerId); exit;
         }
 
         $svc = $db->prepare("
@@ -60,7 +125,7 @@ class BookingController
 
         if (!$service) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Service not found or unavailable.'];
-            header('Location: ' . BASE_URL . 'providers/' . $providerId); exit;
+            header('Location: ' . BASE_URL . 'book/' . $providerId); exit;
         }
 
         $dayOfWeek = date('l', strtotime($bookingDate));
@@ -73,7 +138,7 @@ class BookingController
 
         if (!$avRow) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => ucfirst($dayOfWeek) . ' is not an available day for this provider.'];
-            header('Location: ' . BASE_URL . 'providers/' . $providerId); exit;
+            header('Location: ' . BASE_URL . 'book/' . $providerId); exit;
         }
 
         if ($bookingTime) {
@@ -83,7 +148,7 @@ class BookingController
             if ($reqTime < $startTime || $reqTime > $endTime) {
                 $fmt = fn($t) => date('g:i A', strtotime($bookingDate . ' ' . $t));
                 $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Please choose a time between ' . $fmt($avRow['start_time']) . ' and ' . $fmt($avRow['end_time']) . '.'];
-                header('Location: ' . BASE_URL . 'providers/' . $providerId); exit;
+                header('Location: ' . BASE_URL . 'book/' . $providerId); exit;
             }
         }
 
@@ -95,7 +160,7 @@ class BookingController
         $dup->execute([$customerId, $serviceId, $bookingDate]);
         if ($dup->fetch()) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'You already have a pending or confirmed booking for this service on that date.'];
-            header('Location: ' . BASE_URL . 'providers/' . $providerId); exit;
+            header('Location: ' . BASE_URL . 'book/' . $providerId); exit;
         }
 
         $startTime   = $bookingTime ?: $avRow['start_time'];
@@ -186,11 +251,10 @@ class BookingController
             $body . " Payment: {$paymentMethod}.",
             BASE_URL . 'admin/bookings'
         );
-
         $_SESSION['flash'] = [
             'type' => 'success',
             'msg'  => 'Booking submitted! The provider will confirm your appointment shortly.',
         ];
-        header('Location: ' . BASE_URL . 'bookings'); exit;
+        header('Location: ' . BASE_URL . 'bookings/' . $bookingId); exit;
     }
 }
