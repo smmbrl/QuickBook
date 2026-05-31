@@ -70,7 +70,7 @@ $upcomingBookings = $stUpcomingList->fetchAll();
 $stProviders = $db->prepare("
     SELECT pp.id, pp.business_name, pp.profile_photo, pp.barangay, pp.city,
            pp.latitude, pp.longitude,
-           pp.address,
+           pp.business_address,
            c.name  AS category_name,
            c.slug  AS category_slug,
            u.first_name, u.last_name,
