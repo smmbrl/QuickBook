@@ -8,7 +8,8 @@ $unverified = $total - $verified;
 require_once __DIR__ . '/../../../config/database.php';
 $db = Database::getInstance();
 
-// Booking stats + services booked per customer
+$flash = $_SESSION['flash'] ?? null; unset($_SESSION['flash']);
+// Booking stats + business names booked per customer
 $stBk = $db->query("
     SELECT b.customer_id,
            COUNT(b.id)               AS total_bk,
@@ -17,9 +18,11 @@ $stBk = $db->query("
            SUM(b.status='cancelled') AS cancelled,
            MAX(b.booking_date)       AS last_booking,
            COALESCE(SUM(s.price),0)  AS total_spent,
-           GROUP_CONCAT(DISTINCT s.name ORDER BY s.name SEPARATOR ', ') AS services_booked
+           GROUP_CONCAT(DISTINCT COALESCE(NULLIF(pp.business_name,''), CONCAT(u2.first_name,' ',u2.last_name)) ORDER BY pp.business_name SEPARATOR ', ') AS businesses_booked
     FROM tbl_bookings b
     JOIN tbl_services s ON b.service_id = s.id
+    JOIN tbl_provider_profiles pp ON s.provider_id = pp.id
+    JOIN tbl_users u2 ON pp.user_id = u2.id
     GROUP BY b.customer_id
 ");
 $bkMap = [];
@@ -51,6 +54,17 @@ $maxBk = max(1, ...array_map(fn($u) => (int)($bkMap[$u['id']]['total_bk'] ?? 0),
 
   <!-- Header -->
   <div class="usr-header anim-1">
+
+  <?php if ($flash): ?>
+  <div style="margin-bottom:1rem;padding:.75rem 1rem;border-radius:10px;display:flex;align-items:center;gap:.6rem;font-size:.88rem;font-weight:500;
+              background:<?= $flash['type']==='success' ? 'rgba(22,163,74,.1)' : 'rgba(220,38,38,.1)' ?>;
+              border:1px solid <?= $flash['type']==='success' ? 'rgba(22,163,74,.3)' : 'rgba(220,38,38,.3)' ?>;
+              color:<?= $flash['type']==='success' ? '#16A34A' : '#DC2626' ?>">
+    <i class="fa-solid <?= $flash['type']==='success' ? 'fa-circle-check' : 'fa-circle-exclamation' ?>"></i>
+    <?= htmlspecialchars($flash['msg']) ?>
+  </div>
+  <?php endif ?>
+
     <div class="usr-eyebrow"><span class="usr-eyebrow-dot"></span>Management</div>
     <h1 class="usr-title">Platform <em>Customers</em></h1>
     <p class="usr-subtitle">All registered customers and their booking activity</p>
@@ -98,17 +112,18 @@ $maxBk = max(1, ...array_map(fn($u) => (int)($bkMap[$u['id']]['total_bk'] ?? 0),
         <thead>
           <tr>
             <th>Customer</th>
-            <th>Services Booked</th>
+            <th>Business Booked</th>
             <th>Bookings</th>
             <th>Total Spent</th>
             <th>Last Booking</th>
             <th>Joined</th>
             <th>Verified</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
         <?php if (empty($customers)): ?>
-          <tr><td colspan="7">
+          <tr><td colspan="8">
             <div class="usr-empty">
               <div class="usr-empty-icon"><i class="fa-solid fa-users"></i></div>
               <p>No customers registered yet.</p>
@@ -116,20 +131,22 @@ $maxBk = max(1, ...array_map(fn($u) => (int)($bkMap[$u['id']]['total_bk'] ?? 0),
           </td></tr>
         <?php else: ?>
           <?php foreach ($customers as $u):
-            $init    = strtoupper(substr($u['first_name'],0,1).substr($u['last_name'],0,1));
-            $isVerif = (bool)($u['is_verified'] ?? false);
+            $init     = strtoupper(substr($u['first_name'],0,1).substr($u['last_name'],0,1));
+            $isVerif  = (bool)($u['is_verified'] ?? false);
+            $isActive = (bool)($u['is_active']   ?? true);
             $bk      = $bkMap[$u['id']] ?? [];
             $totalBk = (int)($bk['total_bk']    ?? 0);
             $spent   = (float)($bk['total_spent'] ?? 0);
             $lastBk  = $bk['last_booking']       ?? null;
-            $services= $bk['services_booked']    ?? null;
+            $services= $bk['businesses_booked']  ?? null;
             $barPct  = $maxBk > 0 ? round($totalBk / $maxBk * 100) : 0;
             $search  = strtolower($u['first_name'].' '.$u['last_name'].' '.$u['email']);
           ?>
           <tr data-verified="<?= $isVerif ? '1' : '0' ?>"
-              data-search="<?= htmlspecialchars($search) ?>">
+              data-search="<?= htmlspecialchars($search) ?>"
+              style="<?= !$isActive ? 'opacity:.55' : '' ?>">
 
-            <td>
+            <td data-label="Customer">
               <div class="usr-td-customer">
                 <div class="usr-av"><?= $init ?></div>
                 <div>
@@ -139,7 +156,7 @@ $maxBk = max(1, ...array_map(fn($u) => (int)($bkMap[$u['id']]['total_bk'] ?? 0),
               </div>
             </td>
 
-            <td>
+            <td data-label="Business">
               <?php if ($services): ?>
                 <span class="usr-td-services" title="<?= htmlspecialchars($services) ?>"><?= htmlspecialchars($services) ?></span>
               <?php else: ?>
@@ -147,18 +164,34 @@ $maxBk = max(1, ...array_map(fn($u) => (int)($bkMap[$u['id']]['total_bk'] ?? 0),
               <?php endif ?>
             </td>
 
-            <td style="font-family:var(--font-mono);font-weight:600;color:var(--text-primary)"><?= $totalBk ?></td>
+            <td data-label="Bookings" style="font-family:var(--font-mono);font-weight:600;color:var(--text-primary)"><?= $totalBk ?></td>
 
-            <td class="usr-td-spent">₱<?= number_format($spent, 0) ?></td>
+            <td class="usr-td-spent" data-label="Spent">₱<?= number_format($spent, 0) ?></td>
 
-            <td class="usr-td-date"><?= $lastBk ? date('M j, Y', strtotime($lastBk)) : '—' ?></td>
+            <td class="usr-td-date" data-label="Last Booking"><?= $lastBk ? date('M j, Y', strtotime($lastBk)) : '—' ?></td>
 
-            <td class="usr-td-date"><?= date('M j, Y', strtotime($u['created_at'])) ?></td>
+            <td class="usr-td-date" data-label="Joined"><?= date('M j, Y', strtotime($u['created_at'])) ?></td>
 
-            <td>
+            <td data-label="Verified">
               <span class="usr-pill <?= $isVerif ? 'yes' : 'no' ?>">
                 <?= $isVerif ? 'Verified' : 'Unverified' ?>
               </span>
+            </td>
+
+            <td data-label="Actions">
+              <div style="display:flex;gap:.4rem;align-items:center">
+                <!-- Toggle active/inactive -->
+                <form method="POST" action="<?= BASE_URL ?>admin/users/<?= (int)$u['id'] ?>/toggle"
+                      onsubmit="return confirm('<?= $isActive ? 'Deactivate' : 'Activate' ?> <?= htmlspecialchars(addslashes($u['first_name'].' '.$u['last_name'])) ?>?')">
+                  <button type="submit" title="<?= $isActive ? 'Deactivate' : 'Activate' ?> account"
+                    style="border:none;cursor:pointer;border-radius:6px;padding:.28rem .5rem;font-size:.75rem;font-weight:600;
+                           background:<?= $isActive ? 'rgba(220,38,38,.1)' : 'rgba(22,163,74,.1)' ?>;
+                           color:<?= $isActive ? '#DC2626' : '#16A34A' ?>">
+                    <i class="fa-solid <?= $isActive ? 'fa-ban' : 'fa-circle-check' ?>"></i>
+                    <?= $isActive ? 'Deactivate' : 'Activate' ?>
+                  </button>
+                </form>
+              </div>
             </td>
 
           </tr>
@@ -215,7 +248,7 @@ function applyFilters() {
     };
     const tr = document.createElement('tr');
     tr.className = 'usr-empty-row';
-    tr.innerHTML = `<td colspan="7">
+    tr.innerHTML = `<td colspan="8">
       <div class="usr-empty">
         <div class="usr-empty-icon"><i class="fa-solid ${icons[f]}"></i></div>
         <p>${messages[f]}</p>

@@ -577,7 +577,7 @@ body::before {
   .admin-sidebar      { grid-template-columns:1fr; }
   .admin-pending-chip { display:none; }
   .admin-kpi-row      { grid-template-columns:repeat(2,1fr); }
-  .admin-pv-page      { padding:1.35rem 1.25rem 3rem; }
+  .admin-pv-page      { padding:.75rem 1.25rem 3rem; }
   .admin-hero-inner   { padding:2.4rem 1.25rem 1.5rem; }
   .admin-hero-stats   { margin:0 1.25rem 1.5rem; padding:0 1.25rem; flex-wrap:wrap; }
 }
@@ -748,3 +748,98 @@ body::before {
 }
 
 @media(max-width: 960px) { .adm-analytics-row { grid-template-columns: 1fr; } }
+/* ══════════════════════════════════════
+   MOBILE RESPONSIVE — Full mobile view
+   Additional breakpoints: 768px, 520px, 380px
+══════════════════════════════════════ */
+@media (max-width: 768px) {
+  .admin-pv-page { padding: .75rem 1rem 3rem; }
+
+  /* Hero: compact */
+  .admin-hero-inner { padding: 2rem 1.25rem 1.25rem; }
+  .admin-hero-name  { font-size: 1.9rem; }
+  .admin-hero-stats { margin: 0 1.25rem 1.5rem; padding: 0 1rem; flex-wrap: wrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .admin-hs-item    { flex-shrink: 0; padding: .75rem 1.25rem .75rem 0; }
+  .admin-hs-div     { margin-right: 1.25rem; }
+  .admin-pending-chip { font-size: .72rem; padding: .25rem .7rem; }
+
+  /* KPIs: 2 cols */
+  .admin-kpi-row { grid-template-columns: repeat(2, 1fr); gap: .85rem; }
+
+  /* Layout: single col */
+  .admin-layout { grid-template-columns: 1fr; }
+  .admin-sidebar { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+  /* Cards: tighter padding */
+  .admin-card { padding: 0; }
+  .admin-card-head { padding: 1rem 1.25rem; }
+
+  /* Analytics: single col */
+  .adm-analytics-row { grid-template-columns: 1fr; }
+
+  /* Snap stats: horizontal scroll */
+  .adm-snap-inline { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: .25rem; }
+  .adm-snap-inline::-webkit-scrollbar { display: none; }
+  .adm-snap-item { flex-shrink: 0; }
+
+  /* Booking rows */
+  .adm-booking-row  { padding: .85rem 1.1rem; gap: .65rem; }
+  .adm-user-row     { padding: .85rem 1.1rem; gap: .65rem; }
+}
+
+@media (max-width: 520px) {
+  .admin-kpi-row { grid-template-columns: 1fr 1fr; gap: .65rem; }
+  .admin-kpi     { padding: 1rem 1.1rem; }
+  .admin-kpi-val { font-size: 1.6rem; }
+
+  /* Sidebar: single col */
+  .admin-sidebar { grid-template-columns: 1fr; }
+
+  /* Hero: compact name */
+  .admin-hero-name { font-size: 1.6rem; }
+  .admin-hero-inner { padding: 1.5rem 1rem 1rem; }
+
+  /* Hero stats: show only key ones */
+  .admin-hero-meta { flex-wrap: wrap; gap: .5rem; }
+  .admin-status-badge { font-size: .7rem; }
+
+  /* Actions row */
+  .adm-actions { flex-direction: column; gap: .6rem; }
+  .adm-action  { flex-direction: row; padding: .8rem 1rem; }
+
+  /* Booking row: smaller */
+  .adm-booking-row  { padding: .75rem 1rem; }
+  .adm-user-row     { padding: .75rem 1rem; }
+  .adm-booking-av, .adm-av { width: 34px; height: 34px; font-size: .7rem; }
+  .adm-booking-service, .adm-user-name { font-size: .82rem; }
+
+  /* Chart cards: shorter */
+  .adm-chart-body { padding: 1rem; }
+  .adm-chart-body--donut { flex-direction: column; }
+  .adm-donut-wrap { width: 100%; justify-content: center; }
+}
+
+@media (max-width: 380px) {
+  .admin-pv-page { padding: .5rem .75rem 3rem; }
+  .admin-kpi-row { gap: .5rem; }
+  .admin-kpi-val { font-size: 1.4rem; }
+  .admin-hero-name { font-size: 1.4rem; }
+  .admin-layout { gap: 1rem; }
+}
+
+/* ── Spacing fixes ── */
+@media (max-width: 768px) {
+  .admin-kpi-row { margin-bottom: 1rem; gap: .75rem; }
+  .admin-layout  { gap: 1rem; }
+  .admin-main    { gap: 1rem; }
+  .admin-sidebar { gap: 1rem; }
+  .adm-analytics-section { gap: 1rem; }
+  .adm-analytics-row     { gap: 1rem; }
+  .admin-card-head { padding: .85rem 1.1rem; }
+}
+@media (max-width: 520px) {
+  .admin-kpi-row { margin-bottom: .75rem; gap: .5rem; }
+  .admin-layout  { gap: .75rem; }
+  .admin-main    { gap: .75rem; }
+  .admin-sidebar { gap: .75rem; }
+}

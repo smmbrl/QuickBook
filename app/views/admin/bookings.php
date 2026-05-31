@@ -2,6 +2,8 @@
 // app/views/admin/bookings.php
 $statusOptions = ['pending','confirmed','in_progress','completed','cancelled','rescheduled'];
 
+$flash = $_SESSION['flash'] ?? null; unset($_SESSION['flash']);
+
 $counts  = array_fill_keys($statusOptions, 0);
 $revenue = 0;
 foreach ($bookings as $b) {
@@ -46,6 +48,17 @@ $kpiConfig = [
 
   <!-- Header -->
   <div class="bk-header anim-1">
+
+  <?php if ($flash): ?>
+  <div style="margin-bottom:1rem;padding:.75rem 1rem;border-radius:10px;display:flex;align-items:center;gap:.6rem;font-size:.88rem;font-weight:500;
+              background:<?= $flash['type']==='success' ? 'rgba(22,163,74,.1)' : 'rgba(220,38,38,.1)' ?>;
+              border:1px solid <?= $flash['type']==='success' ? 'rgba(22,163,74,.3)' : 'rgba(220,38,38,.3)' ?>;
+              color:<?= $flash['type']==='success' ? '#16A34A' : '#DC2626' ?>">
+    <i class="fa-solid <?= $flash['type']==='success' ? 'fa-circle-check' : 'fa-circle-exclamation' ?>"></i>
+    <?= htmlspecialchars($flash['msg']) ?>
+  </div>
+  <?php endif ?>
+
     <div class="bk-eyebrow"><span class="bk-eyebrow-dot"></span>Management</div>
     <h1 class="bk-title">All <em>Bookings</em></h1>
     <p class="bk-subtitle">Platform-wide booking history and status control</p>
@@ -90,16 +103,17 @@ $kpiConfig = [
             <th>#ID</th>
             <th>Customer</th>
             <th>Service</th>
-            <th>Provider</th>
+            <th>Business / Provider</th>
             <th>Date</th>
             <th>Amount</th>
             <th>Status</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
         <?php if (empty($bookings)): ?>
           <tr>
-            <td colspan="7">
+            <td colspan="8">
               <div class="bk-empty">
                 <div class="bk-empty-icon">📭</div>
                 <p>No bookings found.</p>
@@ -111,22 +125,46 @@ $kpiConfig = [
             $initials = strtoupper(substr($b['cust_first'],0,1).substr($b['cust_last'],0,1));
             $sc       = in_array($b['status'], $statusOptions) ? $b['status'] : 'default';
             $label    = ucfirst(str_replace('_', ' ', $b['status']));
-            $search   = strtolower($b['cust_first'].' '.$b['cust_last'].' '.$b['service_name']);
+            $search   = strtolower($b['cust_first'].' '.$b['cust_last'].' '.($b['business_name'] ?? $b['service_name']));
           ?>
           <tr data-status="<?= htmlspecialchars($b['status']) ?>"
               data-search="<?= htmlspecialchars($search) ?>">
-            <td class="bk-td-id">#<?= $b['id'] ?></td>
-            <td>
+            <td class="bk-td-id" data-label="ID">#<?= $b['id'] ?></td>
+            <td data-label="Customer">
               <div class="bk-td-customer">
                 <div class="bk-td-av"><?= $initials ?></div>
                 <span class="bk-td-name"><?= htmlspecialchars($b['cust_first'].' '.$b['cust_last']) ?></span>
               </div>
             </td>
-            <td class="bk-td-service"><?= htmlspecialchars($b['service_name']) ?></td>
-            <td class="bk-td-provider"><?= htmlspecialchars($b['prov_first'].' '.$b['prov_last']) ?></td>
-            <td class="bk-td-date"><?= date('M d, Y', strtotime($b['booking_date'])) ?></td>
-            <td class="bk-td-amount">₱<?= number_format($b['total_amount'], 2) ?></td>
-            <td><span class="adm-pill adm-pill--<?= $sc ?>"><?= $label ?></span></td>
+            <td class="bk-td-service" data-label="Service"><?= htmlspecialchars($b['service_name']) ?></td>
+            <td class="bk-td-provider" data-label="Provider">
+              <div style="font-weight:600"><?= htmlspecialchars($b['business_name'] ?? ($b['prov_first'].' '.$b['prov_last'])) ?></div>
+              <div style="font-size:.78rem;opacity:.6"><?= htmlspecialchars($b['prov_first'].' '.$b['prov_last']) ?></div>
+            </td>
+            <td class="bk-td-date" data-label="Date"><?= date('M d, Y', strtotime($b['booking_date'])) ?></td>
+            <td class="bk-td-amount" data-label="Amount">₱<?= number_format($b['total_amount'], 2) ?></td>
+            <td data-label="Status"><span class="adm-pill adm-pill--<?= $sc ?>"><?= $label ?></span></td>
+            <td data-label="Actions">
+              <div class="bk-row-actions">
+                <!-- Status update -->
+                <form method="POST" action="<?= BASE_URL ?>admin/bookings/<?= (int)$b['id'] ?>" class="bk-status-form">
+                  <select name="status" class="bk-status-select" onchange="this.form.submit()" title="Change status">
+                    <?php foreach ($statusOptions as $opt): ?>
+                      <option value="<?= $opt ?>" <?= $b['status'] === $opt ? 'selected' : '' ?>>
+                        <?= ucfirst(str_replace('_',' ',$opt)) ?>
+                      </option>
+                    <?php endforeach ?>
+                  </select>
+                </form>
+                <!-- Delete -->
+                <form method="POST" action="<?= BASE_URL ?>admin/bookings/<?= (int)$b['id'] ?>/delete"
+                      onsubmit="return confirm('Delete booking #<?= $b['id'] ?>? This cannot be undone.')">
+                  <button type="submit" class="bk-del-btn" title="Delete booking">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
           </tr>
           <?php endforeach ?>
         <?php endif ?>

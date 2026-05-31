@@ -387,3 +387,41 @@ body {
   .adm-sb-toggle-inline { display: flex; }
   .adm-sb-logo-img { width: 26px; height: 26px; }
 }
+/* ══════════════════════════════════════
+   EXTENDED MOBILE NAV — 520px / 380px
+══════════════════════════════════════ */
+@media (max-width: 520px) {
+  /* Topbar: tighten padding */
+  .adm-topbar { padding: .5rem .85rem .5rem .75rem; }
+
+  /* Shrink icon buttons slightly */
+  .adm-topbar-btn,
+  .adm-topbar-right .pv-notif-btn { width: 36px; height: 36px; font-size: .88rem; }
+
+  /* Profile chip: hide name/role text, keep avatar */
+  .adm-topbar-profile-info { display: none; }
+  .adm-topbar-profile { padding: .25rem; gap: 0; }
+
+  /* Avatar: slightly bigger for tap target */
+  .adm-topbar-av { width: 34px; height: 34px; }
+
+  /* Sidebar: full width drawer on small screens */
+  .adm-sidebar-nav { width: min(280px, 85vw); }
+
+  /* Notification panel: full width on small screens */
+  .adm-topbar-right .pv-notif-panel {
+    right: .5rem !important;
+    left: .5rem !important;
+    max-width: none !important;
+    width: auto !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .adm-topbar { padding: .45rem .65rem .45rem .6rem; }
+  .adm-topbar-right { gap: .5rem; }
+  .adm-topbar-btn,
+  .adm-topbar-right .pv-notif-btn { width: 32px; height: 32px; font-size: .8rem; }
+  .adm-topbar-av { width: 30px; height: 30px; }
+  .adm-sb-toggle-inline { width: 32px; height: 32px; }
+}

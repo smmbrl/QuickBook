@@ -126,6 +126,24 @@ class TwoFactorController
         header('Location: ' . BASE_URL . ($map[$user['role']] ?? 'home')); exit;
     }
 
+    public function showDisable(): void
+    {
+        $this->requireLogin();
+
+        $userId = (int) $_SESSION['user_id'];
+        $user   = $this->userModel->findById($userId);
+
+        if (!$user || !$user['totp_enabled']) {
+            header('Location: ' . BASE_URL . $this->profileUrlForRole($_SESSION['user_role'] ?? '')); exit;
+        }
+
+        $error      = $_SESSION['flash_error'] ?? null;
+        $profileUrl = $this->profileUrlForRole($_SESSION['user_role'] ?? '');
+        unset($_SESSION['flash_error']);
+
+        require_once __DIR__ . '/../views/auth/2fa-disable.php';
+    }
+
     public function disable(): void
     {
         $this->requireLogin();

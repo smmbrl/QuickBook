@@ -5,11 +5,26 @@ function adminNav(string $active = ''): void {
     $name     = htmlspecialchars($_SESSION['user_name'] ?? 'Admin');
     $initials = strtoupper(substr($name, 0, 2));
 
+    // Load avatar from DB so it reflects the latest upload
+    $avatarUrl = null;
+    try {
+        require_once __DIR__ . '/../../../config/database.php';
+        $db = Database::getInstance();
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        if ($userId) {
+            $stmt = $db->prepare("SELECT avatar_url FROM tbl_users WHERE id = ? AND role = 'admin' LIMIT 1");
+            $stmt->execute([$userId]);
+            $row = $stmt->fetch();
+            $avatarUrl = $row['avatar_url'] ?? null;
+        }
+    } catch (Exception $e) { /* silently skip */ }
+
     $links = [
         'dashboard' => ['label' => 'Dashboard',  'icon' => 'fa-gauge-high',      'url' => 'admin/dashboard'],
         'bookings'  => ['label' => 'Bookings',   'icon' => 'fa-calendar-check',  'url' => 'admin/bookings'],
         'providers' => ['label' => 'Providers',  'icon' => 'fa-store',           'url' => 'admin/providers'],
         'users'     => ['label' => 'Users',      'icon' => 'fa-users',           'url' => 'admin/users'],
+        'feedback'  => ['label' => 'Feedback',   'icon' => 'fa-comments',        'url' => 'admin/feedback'],
         'reports'   => ['label' => 'Reports',    'icon' => 'fa-chart-bar',       'url' => 'admin/reports'],
         'logs'      => ['label' => 'Logs',       'icon' => 'fa-scroll',          'url' => 'admin/logs'],
     ];
@@ -32,7 +47,14 @@ function adminNav(string $active = ''): void {
 
     <!-- Profile chip — clickable -->
     <a href="<?= BASE_URL ?>admin/profile" class="adm-topbar-profile" title="View and edit profile">
-      <div class="adm-topbar-av"><?= $initials ?></div>
+      <div class="adm-topbar-av" id="topbarAvatarWrap">
+        <?php if (!empty($avatarUrl)): ?>
+          <img src="<?= htmlspecialchars($avatarUrl) ?>" alt="<?= $name ?>" id="topbarAvatarImg"
+               style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;">
+        <?php else: ?>
+          <span id="topbarAvatarInitials"><?= $initials ?></span>
+        <?php endif; ?>
+      </div>
       <div class="adm-topbar-profile-info">
         <span class="adm-topbar-profile-role" style="font-size:1rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">ADMIN</span>
       </div>

@@ -47,9 +47,11 @@ class AdminController
         ")->fetchAll();
 
         $newUsers = $this->db->query("
-            SELECT id, first_name, last_name, email, role, created_at
-            FROM tbl_users
-            ORDER BY created_at DESC LIMIT 8
+            SELECT u.id, u.first_name, u.last_name, u.email, u.role, u.created_at,
+                   pp.id AS provider_profile_id
+            FROM tbl_users u
+            LEFT JOIN tbl_provider_profiles pp ON pp.user_id = u.id AND u.role = 'provider'
+            ORDER BY u.created_at DESC LIMIT 8
         ")->fetchAll();
 
         require_once __DIR__ . '/../views/admin/dashboard.php';
@@ -61,7 +63,8 @@ class AdminController
             SELECT b.*,
                    cu.first_name AS cust_first, cu.last_name AS cust_last,
                    pu.first_name AS prov_first, pu.last_name AS prov_last,
-                   s.name AS service_name
+                   s.name AS service_name,
+                   pp.business_name
             FROM tbl_bookings b
             JOIN tbl_users cu ON cu.id = b.customer_id
             JOIN tbl_provider_profiles pp ON pp.id = b.provider_id
@@ -187,6 +190,7 @@ class AdminController
     {
         $providers = $this->db->query("
             SELECT u.id, u.first_name, u.last_name, u.email, u.created_at,
+                   pp.id AS provider_profile_id,
                    pp.business_name, pp.is_approved,
                    COUNT(s.id) AS service_count
             FROM tbl_users u
@@ -240,7 +244,7 @@ class AdminController
     public function users(): void
     {
         $users = $this->db->query("
-            SELECT id, first_name, last_name, email, role, is_verified, created_at
+            SELECT id, first_name, last_name, email, role, is_verified, is_active, created_at
             FROM tbl_users
             ORDER BY created_at DESC
         ")->fetchAll();
@@ -328,7 +332,7 @@ class AdminController
     {
         $userId = (int)($_SESSION['user_id'] ?? 0);
         $stmt = $this->db->prepare(
-            "SELECT id, first_name, last_name, email, bio, profile_picture FROM tbl_users WHERE id = ?"
+            "SELECT id, first_name, last_name, email, phone, gender, date_of_birth FROM tbl_users WHERE id = ?"
         );
         $stmt->execute([$userId]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -342,7 +346,7 @@ class AdminController
     }
 
     /**
-     * Handle profile updates
+     * Handle profile update (modal form or direct POST)
      */
     public function updateProfile(): void
     {
@@ -352,151 +356,351 @@ class AdminController
         }
 
         $userId = (int)($_SESSION['user_id'] ?? 0);
-        $success = false;
-        $error = null;
 
-        try {
-            // Parse full name
-            $fullName = trim($_POST['full_name'] ?? '');
-            $names = explode(' ', $fullName, 2);
-            $firstName = trim($names[0] ?? '');
-            $lastName = trim($names[1] ?? '');
+        $firstName = trim($_POST['first_name'] ?? '');
+        $lastName  = trim($_POST['last_name']  ?? '');
+        $email     = trim($_POST['email']      ?? '');
+        $phone     = trim($_POST['phone']      ?? '') ?: null;
+        $gender    = in_array($_POST['gender'] ?? '', ['male','female','non_binary','prefer_not_to_say']) ? $_POST['gender'] : null;
+        $dob       = $_POST['date_of_birth'] ?? null ?: null;
 
-            if (!$firstName) {
-                throw new Exception('First name is required');
-            }
-
-            $email = trim($_POST['email'] ?? '');
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                throw new Exception('Valid email is required');
-            }
-
-            // Check if email is already used by another user
-            $stmt = $this->db->prepare(
-                "SELECT COUNT(*) FROM tbl_users WHERE email = ? AND id != ?"
-            );
-            $stmt->execute([$email, $userId]);
-            $existingEmail = (int) $stmt->fetchColumn();
-
-            if ($existingEmail > 0) {
-                throw new Exception('Email is already in use');
-            }
-
-            $bio = trim($_POST['bio'] ?? '');
-            if (strlen($bio) > 500) {
-                throw new Exception('Bio must be 500 characters or less');
-            }
-
-            // Handle password change
-            $passwordUpdate = '';
-            $passwordParams = [];
-            $currentPassword = $_POST['current_password'] ?? '';
-            $newPassword = $_POST['new_password'] ?? '';
-            $confirmPassword = $_POST['confirm_password'] ?? '';
-
-            if ($newPassword || $confirmPassword || $currentPassword) {
-                // If any password field is filled, validate all
-                if (!$currentPassword) {
-                    throw new Exception('Current password is required to set a new password');
-                }
-
-                if ($newPassword !== $confirmPassword) {
-                    throw new Exception('New passwords do not match');
-                }
-
-                if (strlen($newPassword) < 8) {
-                    throw new Exception('Password must be at least 8 characters');
-                }
-
-                // Validate password strength
-                if (!preg_match('/[A-Z]/', $newPassword) || 
-                    !preg_match('/[0-9]/', $newPassword) || 
-                    !preg_match('/[!@#$%^&*]/', $newPassword)) {
-                    throw new Exception('Password must contain uppercase, number, and special character');
-                }
-
-                // Verify current password
-                $stmt = $this->db->prepare(
-                    "SELECT password FROM tbl_users WHERE id = ?"
-                );
-                $stmt->execute([$userId]);
-                $currentUser = $stmt->fetch();
-
-                if (!password_verify($currentPassword, $currentUser['password'])) {
-                    throw new Exception('Current password is incorrect');
-                }
-
-                $hashedPassword = password_hash($newPassword, PASSWORD_BCRYPT);
-                $passwordUpdate = ', password = ?';
-                $passwordParams = [$hashedPassword];
-            }
-
-            // Handle profile picture
-            $profilePictureData = $_POST['profile_picture'] ?? '';
-            $profilePictureUpdate = '';
-            $pictureParams = [];
-
-            if ($profilePictureData && strpos($profilePictureData, 'data:image') === 0) {
-                // Decode base64 image
-                $imageData = base64_decode(preg_replace('#^data:image/\w+;base64,#i', '', $profilePictureData));
-                $fileName = 'admin_' . $userId . '_' . time() . '.png';
-                $uploadPath = __DIR__ . '/../../public/assets/img/profiles/' . $fileName;
-
-                // Create directory if it doesn't exist
-                if (!is_dir(dirname($uploadPath))) {
-                    mkdir(dirname($uploadPath), 0755, true);
-                }
-
-                // Save the image
-                if (file_put_contents($uploadPath, $imageData)) {
-                    $profilePictureUrl = 'assets/img/profiles/' . $fileName;
-                    $profilePictureUpdate = ', profile_picture = ?';
-                    $pictureParams = [$profilePictureUrl];
-                }
-            }
-
-            // Build update query
-            $updateParts = [$firstName, $lastName, $email, $bio];
-            $updateQuery = "UPDATE tbl_users SET first_name = ?, last_name = ?, email = ?, bio = ?";
-
-            if ($passwordUpdate) {
-                $updateQuery .= $passwordUpdate;
-                $updateParts = array_merge($updateParts, $passwordParams);
-            }
-
-            if ($profilePictureUpdate) {
-                $updateQuery .= $profilePictureUpdate;
-                $updateParts = array_merge($updateParts, $pictureParams);
-            }
-
-            $updateQuery .= " WHERE id = ?";
-            $updateParts[] = $userId;
-
-            // Execute update
-            $stmt = $this->db->prepare($updateQuery);
-            $stmt->execute($updateParts);
-
-            // Update session
-            $_SESSION['user_name'] = $firstName . ' ' . $lastName;
-
-            $success = true;
-            $this->logAction('update_profile', 'admin', $userId, 'Admin updated their profile');
-
-            // Redirect with success message
-            header('Location: ' . BASE_URL . 'admin/profile?success=1');
+        if (!$firstName || !$lastName || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Please fill in all required fields with valid data.'];
+            header('Location: ' . BASE_URL . 'admin/profile');
             exit;
-
-        } catch (Exception $e) {
-            $error = $e->getMessage();
         }
 
-        // Load user data for display
-        $stmt = $this->db->prepare(
-            "SELECT id, first_name, last_name, email, bio, profile_picture FROM tbl_users WHERE id = ?"
-        );
-        $stmt->execute([$userId]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        // Check email uniqueness (excluding self)
+        $check = $this->db->prepare("SELECT id FROM tbl_users WHERE email = ? AND id != ?");
+        $check->execute([$email, $userId]);
+        if ($check->fetch()) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'That email address is already in use.'];
+            header('Location: ' . BASE_URL . 'admin/profile');
+            exit;
+        }
 
-        require __DIR__ . '/../views/admin/profile.php';
+        $stmt = $this->db->prepare("
+            UPDATE tbl_users
+            SET first_name = ?, last_name = ?, email = ?, phone = ?, gender = ?, date_of_birth = ?
+            WHERE id = ? AND role = 'admin'
+        ");
+        $stmt->execute([$firstName, $lastName, $email, $phone, $gender, $dob, $userId]);
+
+        $_SESSION['user_name'] = trim($firstName . ' ' . $lastName);
+        $this->writeLog('update_profile', 'user', $userId, 'Admin updated their own profile');
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Profile updated successfully.'];
+        header('Location: ' . BASE_URL . 'admin/profile');
+        exit;
     }
+
+
+    /**
+     * Handle password change
+     */
+    public function changePassword(): void
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            header('Location: ' . BASE_URL . 'admin/profile');
+            exit;
+        }
+
+        $userId    = (int)($_SESSION['user_id'] ?? 0);
+        $currentPw = $_POST['current_password'] ?? '';
+        $newPw     = $_POST['new_password']     ?? '';
+        $confirmPw = $_POST['confirm_password'] ?? '';
+
+        $stmt = $this->db->prepare("SELECT password_hash FROM tbl_users WHERE id = ? LIMIT 1");
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch();
+
+        if (!$user || !password_verify($currentPw, $user['password_hash'])) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Current password is incorrect.'];
+            header('Location: ' . BASE_URL . 'admin/profile'); exit;
+        }
+        if (strlen($newPw) < 8) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'New password must be at least 8 characters.'];
+            header('Location: ' . BASE_URL . 'admin/profile'); exit;
+        }
+        if ($newPw !== $confirmPw) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'New passwords do not match.'];
+            header('Location: ' . BASE_URL . 'admin/profile'); exit;
+        }
+
+        $hash = password_hash($newPw, PASSWORD_BCRYPT, ['cost' => 12]);
+        $this->db->prepare("UPDATE tbl_users SET password_hash = ? WHERE id = ?")->execute([$hash, $userId]);
+
+        $this->writeLog('change_password', 'user', $userId, 'Admin changed their password');
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Password changed successfully.'];
+        header('Location: ' . BASE_URL . 'admin/profile'); exit;
+    }
+
+    /**
+     * Handle avatar/profile photo upload
+     */
+    public function uploadAvatar(): void
+    {
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $isAjax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
+
+        $jsonError = function(string $msg) use ($isAjax): void {
+            if ($isAjax) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'error' => $msg]);
+            } else {
+                $_SESSION['flash'] = ['type' => 'error', 'msg' => $msg];
+                header('Location: ' . BASE_URL . 'admin/profile');
+            }
+            exit;
+        };
+
+        if (empty($_FILES['avatar']) || $_FILES['avatar']['error'] !== UPLOAD_ERR_OK) {
+            $jsonError('No file uploaded or upload error occurred.');
+        }
+
+        $file     = $_FILES['avatar'];
+        $allowed  = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+        $mimeType = mime_content_type($file['tmp_name']);
+
+        if (!isset($allowed[$mimeType])) {
+            $jsonError('Only JPG, PNG, or WEBP images are allowed.');
+        }
+        if ($file['size'] > 3 * 1024 * 1024) {
+            $jsonError('Image must be under 3 MB.');
+        }
+
+        $base64 = 'data:' . $mimeType . ';base64,' . base64_encode(file_get_contents($file['tmp_name']));
+        $this->db->prepare("UPDATE tbl_users SET avatar_url = ? WHERE id = ? AND role = 'admin'")->execute([$base64, $userId]);
+
+        $this->writeLog('upload_avatar', 'user', $userId, 'Admin updated profile photo');
+
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => true, 'avatar' => $base64]);
+            exit;
+        }
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Profile photo updated successfully.'];
+        header('Location: ' . BASE_URL . 'admin/profile'); exit;
+    }
+
+    /**
+     * Save notification preferences
+     */
+    public function saveNotificationPrefs(): void
+    {
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $this->writeLog('update_notification_prefs', 'user', $userId, 'Admin updated notification preferences');
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Notification preferences saved.'];
+        header('Location: ' . BASE_URL . 'admin/profile'); exit;
+    }
+
+    /**
+     * Submit admin feedback
+     */
+    public function submitFeedback(): void
+    {
+        $userId  = (int)($_SESSION['user_id'] ?? 0);
+        $type    = trim($_POST['feedback_type'] ?? '');
+        $rating  = (int)($_POST['rating']       ?? 0);
+        $message = trim($_POST['message']       ?? '');
+        $area    = trim($_POST['area']          ?? '');
+
+        if (empty($message)) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Please provide a feedback message.'];
+            header('Location: ' . BASE_URL . 'admin/profile'); exit;
+        }
+
+        $details = "Type: {$type} | Area: {$area} | Rating: {$rating}/5 | " . mb_substr($message, 0, 200);
+        $this->writeLog('admin_feedback', 'user', $userId, $details);
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Thank you for your feedback!'];
+        header('Location: ' . BASE_URL . 'admin/profile'); exit;
+    }
+
+    /**
+     * Revoke all other sessions
+     */
+    public function revokeSessions(): void
+    {
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $this->writeLog('revoke_sessions', 'user', $userId, 'Admin revoked all other sessions');
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'All other sessions have been signed out.'];
+        header('Location: ' . BASE_URL . 'admin/profile'); exit;
+    }
+
+    /**
+     * Deactivate/delete a user account (soft delete via is_active = 0)
+     */
+    public function deleteUser(string $id): void
+    {
+        $userId = (int)$id;
+        $stmt   = $this->db->prepare("SELECT first_name, last_name, role FROM tbl_users WHERE id = ?");
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch();
+
+        if (!$user || $user['role'] === 'admin') {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'User not found or cannot deactivate an admin.'];
+            header('Location: ' . BASE_URL . 'admin/users'); exit;
+        }
+
+        $this->db->prepare("UPDATE tbl_users SET is_active = 0 WHERE id = ?")->execute([$userId]);
+
+        $name = trim($user['first_name'] . ' ' . $user['last_name']);
+        $this->writeLog('delete_user', 'user', $userId, "User {$name} (ID #{$userId}) deactivated");
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => "{$name}'s account has been deactivated."];
+        $redirect = $user['role'] === 'provider' ? 'admin/providers' : 'admin/users';
+        header('Location: ' . BASE_URL . $redirect); exit;
+    }
+
+    /* ──────────────────────────────────────────────────────────────
+       FEEDBACK MANAGEMENT
+    ────────────────────────────────────────────────────────────── */
+
+    /**
+     * Display the feedback management page
+     */
+    public function feedback(): void
+    {
+        require_once __DIR__ . '/../views/admin/feedback.php';
+    }
+
+    /**
+     * Toggle a review's visibility (hide / restore)
+     */
+    public function toggleReview(string $id): void
+    {
+        $reviewId = (int)$id;
+        $stmt = $this->db->prepare("SELECT is_visible FROM tbl_reviews WHERE id = ?");
+        $stmt->execute([$reviewId]);
+        $row = $stmt->fetch();
+
+        if (!$row) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Review not found.'];
+            header('Location: ' . BASE_URL . 'admin/feedback?tab=reviews'); exit;
+        }
+
+        $newVis = $row['is_visible'] ? 0 : 1;
+        $this->db->prepare("UPDATE tbl_reviews SET is_visible = ? WHERE id = ?")->execute([$newVis, $reviewId]);
+
+        $action = $newVis ? 'restored' : 'hidden';
+        $this->writeLog('toggle_review', 'review', $reviewId, "Review #{$reviewId} {$action}");
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Review ' . $action . ' successfully.'];
+        header('Location: ' . BASE_URL . 'admin/feedback?tab=reviews'); exit;
+    }
+
+    /**
+     * Update app-feedback status
+     */
+    public function updateFeedback(string $id): void
+    {
+        $fbId   = (int)$id;
+        $status = $_POST['status'] ?? '';
+        $allowed = ['open', 'reviewed', 'resolved', 'dismissed'];
+
+        if (!in_array($status, $allowed)) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Invalid status.'];
+            header('Location: ' . BASE_URL . 'admin/feedback?tab=feedback'); exit;
+        }
+
+        $this->db->prepare("UPDATE tbl_app_feedback SET status = ? WHERE id = ?")->execute([$status, $fbId]);
+        $this->writeLog('update_feedback_status', 'feedback', $fbId, "Status set to {$status}");
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Feedback status updated.'];
+        header('Location: ' . BASE_URL . 'admin/feedback?tab=feedback'); exit;
+    }
+
+    /**
+     * Save admin note on app feedback
+     */
+    public function noteFeedback(string $id): void
+    {
+        $fbId = (int)$id;
+        $note = trim($_POST['admin_note'] ?? '');
+
+        $this->db->prepare("UPDATE tbl_app_feedback SET admin_note = ? WHERE id = ?")->execute([$note ?: null, $fbId]);
+        $this->writeLog('note_feedback', 'feedback', $fbId, 'Admin note updated');
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Note saved.'];
+        header('Location: ' . BASE_URL . 'admin/feedback?tab=feedback'); exit;
+    }
+
+    /**
+     * Delete an app-feedback item
+     */
+    public function deleteFeedback(string $id): void
+    {
+        $fbId = (int)$id;
+        $this->db->prepare("DELETE FROM tbl_app_feedback WHERE id = ?")->execute([$fbId]);
+        $this->writeLog('delete_feedback', 'feedback', $fbId, "Feedback #{$fbId} deleted");
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Feedback deleted.'];
+        header('Location: ' . BASE_URL . 'admin/feedback?tab=feedback'); exit;
+    }
+
+    /**
+     * Delete a provider review reply
+     */
+    public function deleteReply(string $id): void
+    {
+        $replyId = (int)$id;
+        $this->db->prepare("DELETE FROM tbl_review_replies WHERE id = ?")->execute([$replyId]);
+        $this->writeLog('delete_reply', 'review_reply', $replyId, "Reply #{$replyId} deleted by admin");
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Provider reply removed.'];
+        // Redirect back to whichever tab invoked this
+        $ref = $_SERVER['HTTP_REFERER'] ?? '';
+        $tab = str_contains($ref, 'tab=replies') ? 'replies' : 'reviews';
+        header('Location: ' . BASE_URL . 'admin/feedback?tab=' . $tab); exit;
+    }
+
+    /**
+     * Edit a provider review reply
+     */
+    public function editReply(string $id): void
+    {
+        $replyId = (int)$id;
+        $reply   = trim($_POST['reply'] ?? '');
+
+        if (!$reply) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Reply cannot be empty.'];
+            header('Location: ' . BASE_URL . 'admin/feedback?tab=replies'); exit;
+        }
+
+        $this->db->prepare("UPDATE tbl_review_replies SET reply = ? WHERE id = ?")->execute([$reply, $replyId]);
+        $this->writeLog('edit_reply', 'review_reply', $replyId, "Reply #{$replyId} edited by admin");
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Reply updated successfully.'];
+        header('Location: ' . BASE_URL . 'admin/feedback?tab=replies'); exit;
+    }
+
+    /**
+     * Toggle user active/inactive status
+     */
+    public function toggleUser(string $id): void
+    {
+        $userId = (int)$id;
+        $stmt   = $this->db->prepare("SELECT first_name, last_name, role, is_active FROM tbl_users WHERE id = ?");
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch();
+
+        if (!$user || $user['role'] === 'admin') {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'User not found or cannot modify an admin.'];
+            header('Location: ' . BASE_URL . 'admin/users'); exit;
+        }
+
+        $newStatus = $user['is_active'] ? 0 : 1;
+        $this->db->prepare("UPDATE tbl_users SET is_active = ? WHERE id = ?")->execute([$newStatus, $userId]);
+
+        $name   = trim($user['first_name'] . ' ' . $user['last_name']);
+        $action = $newStatus ? 'activated' : 'deactivated';
+        $this->writeLog('toggle_user', 'user', $userId, "User {$name} (ID #{$userId}) {$action}");
+
+        $_SESSION['flash'] = ['type' => 'success', 'msg' => "{$name}'s account has been {$action}."];
+        $redirect = $user['role'] === 'provider' ? 'admin/providers' : 'admin/users';
+        header('Location: ' . BASE_URL . $redirect); exit;
+    }
+
 }

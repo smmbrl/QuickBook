@@ -828,7 +828,7 @@ body::before {
 }
 
 @media (max-width: 680px) {
-  .content { padding: 3.5rem 1.1rem 3rem; }
+  .content { padding: .75rem 1.1rem 3rem; }
   .stats-grid { grid-template-columns: 1fr 1fr; gap: .75rem; }
   .stat-value { font-size: 1.8rem; }
   .col-row { height: 130px; }
@@ -836,4 +836,76 @@ body::before {
 
 @media (max-width: 440px) {
   .stats-grid { grid-template-columns: 1fr; }
+}
+/* ══════════════════════════════════════
+   MOBILE RESPONSIVE — Full mobile view
+   Breakpoints: 768px, 520px, 380px
+══════════════════════════════════════ */
+@media (max-width: 768px) {
+  .content { padding: .75rem 1rem 3rem; }
+  .page-greeting { flex-direction: column; align-items: flex-start; gap: 1rem; }
+  .page-greeting h1 { font-size: 1.8rem; }
+
+  /* Export buttons: full-width row */
+  .rpt-btn-group { justify-content: flex-start; gap: .6rem; }
+  .rpt-export-btn { flex: 1; justify-content: center; min-width: 0; }
+
+  /* Stats grid: 2 cols */
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: .75rem; }
+
+  /* Report grid: single col */
+  .report-grid { grid-template-columns: 1fr; }
+  .report-grid .span2 { grid-column: 1; }
+
+  /* Panel header: wrap */
+  .panel-header { flex-wrap: wrap; gap: .5rem; padding: 1rem 1.1rem; }
+
+  /* Bar chart: adjust padding */
+  .bar-chart { padding: 1rem 1.1rem 1.2rem; }
+
+  /* Leaderboard: tighter */
+  .prov-leaderboard-row { padding: .8rem 1.1rem; gap: .7rem; }
+}
+
+@media (max-width: 520px) {
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: .6rem; }
+  .stat-value { font-size: 1.6rem; }
+
+  /* Revenue chart: shorter */
+  .line-chart-wrap, .revenue-chart { height: 140px !important; min-height: 140px; }
+  .col-row { height: 110px; }
+
+  /* Bar chart: narrower labels */
+  .bar-label { font-size: .68rem; max-width: 90px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-end { font-size: .65rem; }
+
+  /* Leaderboard: compact */
+  .plr-stats { min-width: auto; }
+  .plr-rev { font-size: .82rem; }
+  .plr-bkn { font-size: .55rem; }
+  .plr-name { font-size: .82rem; }
+
+  /* Service bars */
+  .sb-bar-wrap { height: 6px; }
+}
+
+@media (max-width: 380px) {
+  .content { padding: .5rem .75rem 3rem; }
+  .stats-grid { grid-template-columns: 1fr; }
+  .page-greeting h1 { font-size: 1.5rem; }
+  .rpt-btn-group { flex-direction: column; }
+  .rpt-export-btn { width: 100%; }
+}
+
+/* ── Spacing fixes ── */
+@media (max-width: 768px) {
+  .page-greeting { margin-bottom: 1rem; }
+  .stats-grid    { margin-bottom: 1rem; }
+  .report-grid   { gap: 1rem; }
+  .panel-header  { padding: .85rem 1.1rem; }
+}
+@media (max-width: 520px) {
+  .page-greeting { margin-bottom: .75rem; }
+  .stats-grid    { gap: .5rem; margin-bottom: .75rem; }
+  .report-grid   { gap: .75rem; }
 }
