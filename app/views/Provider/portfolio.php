@@ -444,11 +444,11 @@ $itemsJson = json_encode(array_values($items));
 </header>
 
 <?php if (!$isVerified): ?>
-<div class="pf-verify-banner" role="alert">
-  <i class="fa-solid fa-clock pf-verify-banner__icon"></i>
+<div class="pf-verify-banner" role="alert" style="background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.25);">
+  <i class="fa-solid fa-clock pf-verify-banner__icon" style="color:#3B82F6;"></i>
   <span>
-    <strong class="pf-verify-banner__title">Account pending verification.</strong>
-    An admin needs to verify your account before you can upload portfolio works.
+    <strong class="pf-verify-banner__title" style="color:#3B82F6;">Profile setup in progress.</strong>
+    You can upload your portfolio works now. Your profile will become visible to customers once an admin approves your account.
   </span>
 </div>
 <?php endif; ?>
@@ -458,27 +458,12 @@ $itemsJson = json_encode(array_values($items));
 ═══════════════════════════════════════ -->
 <div class="pf-actions-bar">
   <div class="pf-actions-right">
-    <?php if ($isVerified): ?>
     <button class="pf-action-btn pf-action-btn--primary" onclick="openUploadModal()">
       <i class="fa-solid fa-cloud-arrow-up"></i> Upload Work
     </button>
     <button class="pf-action-btn pf-action-btn--feature" onclick="openBulkFeatureModal()">
       <i class="fa-solid fa-star"></i> Manage Featured
     </button>
-    <?php else: ?>
-    <button class="pf-action-btn pf-action-btn--primary" disabled
-            style="opacity:.5;cursor:not-allowed;"
-            title="Account verification required to upload portfolio works"
-            onclick="showToast('fa-shield-halved','Your account must be verified by an admin before uploading.','error'); return false;">
-      <i class="fa-solid fa-cloud-arrow-up"></i> Upload Work
-    </button>
-    <button class="pf-action-btn pf-action-btn--feature" disabled
-            style="opacity:.5;cursor:not-allowed;"
-            title="Account verification required"
-            onclick="showToast('fa-shield-halved','Your account must be verified by an admin before managing featured works.','error'); return false;">
-      <i class="fa-solid fa-star"></i> Manage Featured
-    </button>
-    <?php endif; ?>
   </div>
 </div>
 
@@ -568,24 +553,12 @@ $itemsJson = json_encode(array_values($items));
 
   <?php if (empty($items)): ?>
   <div class="pf-empty">
-    <?php if (!$isVerified): ?>
-      <div class="pf-empty-icon" style="color:#C9A84C;"><i class="fa-solid fa-shield-halved"></i></div>
-      <div class="pf-empty-title">Account Pending Verification</div>
-      <p class="pf-empty-text">
-        Your account is currently being reviewed by our admin team.<br>
-        Once verified, you'll be able to upload your portfolio works and start attracting clients.
-      </p>
-      <div style="display:inline-flex;align-items:center;gap:.55rem;padding:.55rem 1.1rem;border-radius:99px;background:rgba(201,168,76,.10);border:1px solid rgba(201,168,76,.3);font-size:.82rem;font-weight:600;color:#C9A84C;margin-top:.25rem;">
-        <i class="fa-solid fa-clock"></i> Verification in progress
-      </div>
-    <?php else: ?>
-      <div class="pf-empty-icon"><i class="fa-solid fa-images"></i></div>
-      <div class="pf-empty-title">No portfolio items yet</div>
-      <p class="pf-empty-text">Start building your creative portfolio! Upload your best work to attract more customers.</p>
-      <button class="pf-action-btn pf-action-btn--primary" onclick="openUploadModal()">
-        <i class="fa-solid fa-plus"></i> Upload Your First Work
-      </button>
-    <?php endif; ?>
+    <div class="pf-empty-icon"><i class="fa-solid fa-images"></i></div>
+    <div class="pf-empty-title">No portfolio items yet</div>
+    <p class="pf-empty-text">Start building your creative portfolio! Upload your best work to attract more customers.</p>
+    <button class="pf-action-btn pf-action-btn--primary" onclick="openUploadModal()">
+      <i class="fa-solid fa-plus"></i> Upload Your First Work
+    </button>
   </div>
   <?php else: ?>
 
@@ -791,10 +764,15 @@ $itemsJson = json_encode(array_values($items));
           </div>
 
           <div class="pf-form-group">
-            <label class="pf-form-label" for="portfolioServiceName">SERVICE</label>
-            <input type="text" name="service_name" id="portfolioServiceName" class="pf-form-control"
-                   placeholder="e.g. Nail Extension, Hair Color, Massage">
-            <input type="hidden" name="service_id" id="portfolioServiceId" value="0">
+            <label class="pf-form-label" for="portfolioServiceId">LINK TO SERVICE <span style="font-weight:400;color:var(--text-dim);">(optional — enables &ldquo;Book this Look&rdquo;)</span></label>
+            <select name="service_id" id="portfolioServiceId" class="pf-form-control"
+                    onchange="document.getElementById('portfolioServiceName').value = this.options[this.selectedIndex].text !== '-- None --' ? this.options[this.selectedIndex].text : ''">
+              <option value="0">-- None --</option>
+              <?php foreach ($services as $svc): ?>
+              <option value="<?= (int)$svc['id'] ?>"><?= htmlspecialchars($svc['name']) ?></option>
+              <?php endforeach; ?>
+            </select>
+            <input type="hidden" name="service_name" id="portfolioServiceName" value="">
           </div>
 
           <div class="pf-form-group">
@@ -895,9 +873,14 @@ $itemsJson = json_encode(array_values($items));
 
           <div class="pf-form-group">
             <label class="pf-form-label" for="editServiceName">SERVICE</label>
-            <input type="text" name="service_name" id="editServiceName" class="pf-form-control"
-                   placeholder="e.g. Nail Extension, Hair Color, Massage">
-            <input type="hidden" name="service_id" value="0">
+            <select name="service_id" id="editServiceId" class="pf-form-control"
+                    onchange="document.getElementById('editServiceName').value = this.options[this.selectedIndex].text !== '-- None --' ? this.options[this.selectedIndex].text : ''">
+              <option value="0">-- None --</option>
+              <?php foreach ($services as $svc): ?>
+              <option value="<?= (int)$svc['id'] ?>"><?= htmlspecialchars($svc['name']) ?></option>
+              <?php endforeach; ?>
+            </select>
+            <input type="hidden" name="service_name" id="editServiceName" value="">
           </div>
 
           <div class="pf-form-group">
@@ -1305,9 +1288,18 @@ $itemsJson = json_encode(array_values($items));
     var editPriceAmt = document.getElementById('editPriceAmount');
     if (editPriceAmt) editPriceAmt.value = priceNum > 0 ? priceNum : '';
 
-    // Pre-fill service text input
+    // Pre-fill service select and hidden name
+    var editSvcSelect = document.getElementById('editServiceId');
     var svcInput = document.getElementById('editServiceName');
-    if (svcInput) svcInput.value = item.service_name || '';
+    if (editSvcSelect) {
+      var svcId = item.service_id ? String(item.service_id) : '0';
+      editSvcSelect.value = svcId;
+      // If that value exists in options, also set service_name from selected text
+      var selOption = editSvcSelect.options[editSvcSelect.selectedIndex];
+      if (svcInput) svcInput.value = (selOption && selOption.text !== '-- None --') ? selOption.text : (item.service_name || '');
+    } else if (svcInput) {
+      svcInput.value = item.service_name || '';
+    }
 
     // Show current image as big cover
     var curImg  = document.getElementById('editCurrentImg');

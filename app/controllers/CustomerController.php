@@ -431,7 +431,7 @@ class CustomerController
         $avStmt->execute([$service['profile_id']]);
         $availability = $avStmt->fetchAll();
 
-        require_once __DIR__ . '/../views/customer/service-detail.php';
+        require_once __DIR__ . '/../views/customer/appointment_booking.php';
     }
 
     public function loyalty(): void
@@ -598,5 +598,95 @@ class CustomerController
         }
 
         header('Location: ' . BASE_URL . 'profile'); exit;
+    }
+
+    public function deactivateAccount(): void
+    {
+        $db     = Database::getInstance();
+        $userId = (int)$_SESSION['user_id'];
+
+        // Soft-deactivate: set is_active = 0 so user cannot log in
+        $db->prepare("UPDATE tbl_users SET is_active = 0, updated_at = NOW() WHERE id = ?")
+           ->execute([$userId]);
+
+        // Notify admins
+        $adminStmt = $db->prepare("SELECT id FROM tbl_users WHERE role = 'admin' LIMIT 5");
+        $adminStmt->execute();
+        $adminIds = $adminStmt->fetchAll(\PDO::FETCH_COLUMN);
+
+        $custName = $_SESSION['user_name'] ?? 'A customer';
+        foreach ($adminIds as $adminId) {
+            $db->prepare("
+                INSERT INTO tbl_notifications
+                    (user_id, type, title, message, body, link_url, is_read, created_at)
+                VALUES (?, 'system', 'Account Deactivated', ?, ?, ?, 0, NOW())
+            ")->execute([
+                (int)$adminId,
+                "Customer \"{$custName}\" has deactivated their account.",
+                'The account has been soft-deactivated and the user has been logged out.',
+                BASE_URL . 'admin/users',
+            ]);
+        }
+
+        // Destroy session and redirect to login
+        session_destroy();
+        header('Location: ' . BASE_URL . 'login'); exit;
+    }
+
+    public function deleteAccount(): void
+    {
+        $db     = Database::getInstance();
+        $userId = (int)$_SESSION['user_id'];
+
+        // Anonymise personal data — keep booking records for provider/admin history
+        $db->prepare("
+            UPDATE tbl_users
+            SET first_name     = 'Deleted',
+                last_name      = 'User',
+                email          = CONCAT('deleted_', id, '@quickbook.invalid'),
+                phone          = NULL,
+                avatar_url     = NULL,
+                password_hash  = '',
+                is_active      = 0,
+                deleted_at     = NOW(),
+                updated_at     = NOW()
+            WHERE id = ?
+        ")->execute([$userId]);
+
+        // Remove loyalty points
+        $db->prepare("DELETE FROM tbl_loyalty_points WHERE user_id = ?")->execute([$userId]);
+
+        // Remove notifications
+        $db->prepare("DELETE FROM tbl_notifications WHERE user_id = ?")->execute([$userId]);
+
+        // Remove favourites
+        $db->prepare("DELETE FROM tbl_provider_favorites WHERE customer_id = ?")->execute([$userId]);
+
+        // Soft-cancel any active bookings
+        $db->prepare("
+            UPDATE tbl_bookings
+            SET status = 'cancelled', deleted_at = NOW(), updated_at = NOW()
+            WHERE customer_id = ? AND status IN ('pending','confirmed','rescheduled')
+        ")->execute([$userId]);
+
+        // Notify admins
+        $adminStmt = $db->prepare("SELECT id FROM tbl_users WHERE role = 'admin' LIMIT 5");
+        $adminStmt->execute();
+        $adminIds = $adminStmt->fetchAll(\PDO::FETCH_COLUMN);
+        foreach ($adminIds as $adminId) {
+            $db->prepare("
+                INSERT INTO tbl_notifications
+                    (user_id, type, title, message, body, link_url, is_read, created_at)
+                VALUES (?, 'system', 'Account Deleted', ?, ?, ?, 0, NOW())
+            ")->execute([
+                (int)$adminId,
+                "A customer account (ID: {$userId}) has been permanently deleted.",
+                'Personal data has been anonymised and active bookings cancelled.',
+                BASE_URL . 'admin/users',
+            ]);
+        }
+
+        session_destroy();
+        header('Location: ' . BASE_URL . 'login'); exit;
     }
 }

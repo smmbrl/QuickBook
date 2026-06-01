@@ -128,7 +128,9 @@ $sql = "
             WHERE s.provider_id = pp.id AND s.is_active = 1) AS service_count,
            (SELECT GROUP_CONCAT(DISTINCT s.location_type ORDER BY s.location_type SEPARATOR ',')
             FROM tbl_services s
-            WHERE s.provider_id = pp.id AND s.is_active = 1) AS svc_location_types
+            WHERE s.provider_id = pp.id AND s.is_active = 1) AS svc_location_types,
+           (SELECT id FROM tbl_services s
+            WHERE s.provider_id = pp.id AND s.is_active = 1 ORDER BY s.id ASC LIMIT 1) AS first_service_id
     FROM tbl_provider_profiles pp
     JOIN tbl_users u           ON pp.user_id = u.id
     LEFT JOIN tbl_categories c ON pp.category_id = c.id
@@ -305,7 +307,7 @@ foreach ($providers as $p) {
         'address'     => $p['business_address'] ?? '',
         'minPrice'    => $p['min_price'] !== null ? '₱' . number_format((float)$p['min_price'], 0) : '',
         'urlView'     => BASE_URL . 'providers/' . (int)$p['profile_id'],
-        'urlBook'     => BASE_URL . 'book/'      . (int)$p['profile_id'],
+        'urlBook'     => !empty($p['first_service_id']) ? BASE_URL . 'services/' . (int)$p['first_service_id'] : BASE_URL . 'providers/' . (int)$p['profile_id'],
         'photo'       => $p['profile_photo'] ?? $p['avatar_url'] ?? '',
         'isVerified'  => !empty($p['is_verified']),
         'serviceMode' => $serviceMode,
@@ -376,6 +378,8 @@ $serviceTypeLabels = [
     'on-site'  => 'Home Service',
     'flexible' => 'Flexible',
 ];
+$flash = $_SESSION['flash'] ?? null;
+unset($_SESSION['flash']);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -555,6 +559,13 @@ $serviceTypeLabels = [
 
 <!-- ════════════ PAGE BODY ════════════ -->
 <main class="pv-page" role="main">
+
+<?php if ($flash): ?>
+<div class="bd-flash bd-flash--<?= htmlspecialchars($flash['type']) ?>" role="alert" style="margin:1.2rem auto;max-width:1200px;">
+  <?= $flash['type'] === 'success' ? '<i class="fa-solid fa-circle-check"></i>' : '<i class="fa-solid fa-triangle-exclamation"></i>' ?>
+  <?= htmlspecialchars($flash['msg']) ?>
+</div>
+<?php endif; ?>
 
   <!-- CATEGORIES -->
   <section class="pv-cat-section" role="region" aria-label="Filter by category">

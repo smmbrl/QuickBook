@@ -77,7 +77,8 @@ $stProviders = $db->prepare("
            COUNT(DISTINCT b.id) AS booking_count,
            GROUP_CONCAT(DISTINCT s.service_type ORDER BY s.service_type SEPARATOR ', ') AS service_types,
            GROUP_CONCAT(DISTINCT s.location_type ORDER BY s.location_type SEPARATOR ',') AS location_types,
-           MIN(s.price) AS min_price
+           MIN(s.price) AS min_price,
+           (SELECT id FROM tbl_services WHERE provider_id = pp.id AND is_active = 1 ORDER BY id ASC LIMIT 1) AS first_service_id
     FROM tbl_provider_profiles pp
     JOIN tbl_users u ON pp.user_id = u.id
     LEFT JOIN tbl_services s ON s.provider_id = pp.id AND s.is_active = 1
@@ -195,8 +196,8 @@ foreach ($featuredProviders as $p) {
         'category'     => !empty($p['service_types']) ? ucwords(strtolower(trim(explode(',', $p['service_types'])[0]))) : '',
         'categorySlug' => $dashCatSlugs[(int)$p['id']] ?? '',
         'serviceMode'  => $serviceMode,
-        'urlView'      => BASE_URL . 'provider/' . (int)$p['id'],
-        'urlBook'      => BASE_URL . 'book/'     . (int)$p['id'],
+        'urlView'      => BASE_URL . 'providers/' . (int)$p['id'],
+        'urlBook'      => !empty($p['first_service_id']) ? BASE_URL . 'services/' . (int)$p['first_service_id'] : BASE_URL . 'providers/' . (int)$p['id'],
         'minPrice'     => !empty($p['min_price']) ? '₱' . number_format((float)$p['min_price'], 0) : '',
     ];
 }
@@ -247,6 +248,8 @@ function starRating(float $r): string {
 }
 
 $spentDisplay = fmtMoney($totalSpent);
+$flash = $_SESSION['flash'] ?? null;
+unset($_SESSION['flash']);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -454,6 +457,13 @@ $spentDisplay = fmtMoney($totalSpent);
 <!-- ══ MAIN PAGE ══ -->
 <main class="pv-page" role="main">
 
+<?php if ($flash): ?>
+<div class="bd-flash bd-flash--<?= htmlspecialchars($flash['type']) ?>" role="alert" style="margin:1.2rem auto;max-width:1200px;">
+  <?= $flash['type'] === 'success' ? '<i class="fa-solid fa-circle-check"></i>' : '<i class="fa-solid fa-triangle-exclamation"></i>' ?>
+  <?= htmlspecialchars($flash['msg']) ?>
+</div>
+<?php endif; ?>
+
   <!-- ── Main layout: providers + sidebar ── -->
   <div class="pv-layout">
 
@@ -570,10 +580,10 @@ $spentDisplay = fmtMoney($totalSpent);
 
             <!-- Actions -->
             <div class="pv-pc-actions">
-              <a href="<?= BASE_URL ?>provider/<?= (int)$p['id'] ?>" class="pv-pc-btn pv-pc-btn--ghost">
+              <a href="<?= BASE_URL ?>providers/<?= (int)$p['id'] ?>" class="pv-pc-btn pv-pc-btn--ghost">
                 <i class="fa-regular fa-user" aria-hidden="true"></i> View Profile
               </a>
-              <a href="<?= BASE_URL ?>book/<?= (int)$p['id'] ?>" class="pv-pc-btn pv-pc-btn--primary">
+              <a href="<?= !empty($p['first_service_id']) ? BASE_URL . 'services/' . (int)$p['first_service_id'] : BASE_URL . 'providers/' . (int)$p['id'] ?>" class="pv-pc-btn pv-pc-btn--primary">
                 <i class="fa-solid fa-calendar-check" aria-hidden="true"></i> Book Appointment
               </a>
             </div>

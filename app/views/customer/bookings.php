@@ -183,6 +183,9 @@ function pvTimelineIcon(string $status): string {
         default       => 'fa-calendar',
     };
 }
+
+$flash = $_SESSION['flash'] ?? null;
+unset($_SESSION['flash']);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -350,6 +353,15 @@ function pvTimelineIcon(string $status): string {
 </header>
 
 <main class="pv-page" role="main">
+
+<?php if ($flash): ?>
+<div class="bd-flash bd-flash--<?= htmlspecialchars($flash['type']) ?>" role="alert" style="margin:1.2rem auto;max-width:900px;">
+  <?= $flash['type'] === 'success'
+    ? '<i class="fa-solid fa-circle-check"></i>'
+    : '<i class="fa-solid fa-triangle-exclamation"></i>' ?>
+  <?= htmlspecialchars($flash['msg']) ?>
+</div>
+<?php endif; ?>
 
   <!-- ══ STAT FILTER CARDS ══ -->
   <div class="pv-filter-cards" role="region" aria-label="Filter bookings by status">
@@ -738,13 +750,13 @@ function pvTimelineIcon(string $status): string {
               <?php endif; ?>
 
               <?php if ($isUpcoming && ($isPending || $isConfirmed)): ?>
-                <a href="<?= $cancelUrl ?>"
-                   class="pv-btn pv-btn--cancel"
-                   title="Cancel booking"
-                   onclick="return confirm('Cancel this booking?')">
-                  <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                  Cancel
-                </a>
+                <form method="POST" action="<?= $cancelUrl ?>" style="display:inline"
+                      onsubmit="return confirm('Cancel this booking?')">
+                  <button type="submit" class="pv-btn pv-btn--cancel" title="Cancel booking">
+                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                    Cancel
+                  </button>
+                </form>
               <?php endif; ?>
 
               <?php if ($hasCoords || $providerAddr): ?>

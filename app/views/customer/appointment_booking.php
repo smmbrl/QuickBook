@@ -24,7 +24,7 @@ $stUpcoming = $db->prepare("SELECT COUNT(*) FROM tbl_bookings WHERE customer_id 
 $stUpcoming->execute([$userId]);
 $upcomingCount = (int)$stUpcoming->fetchColumn();
 
-$stCustAddr = $db->prepare("SELECT address, phone FROM tbl_users WHERE id = ? LIMIT 1");
+$stCustAddr = $db->prepare("SELECT home_address AS address, phone FROM tbl_users WHERE id = ? LIMIT 1");
 $stCustAddr->execute([$userId]);
 $custRow = $stCustAddr->fetch();
 $customerSavedAddress = htmlspecialchars($custRow['address'] ?? '');

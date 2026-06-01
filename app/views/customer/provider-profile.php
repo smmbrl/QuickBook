@@ -32,9 +32,13 @@ try {
     $galStmt = $db->prepare("
         SELECT p.id, p.title, p.caption, p.image_url, p.extra_images, p.before_url, p.after_url,
                p.is_featured, p.is_before_after, p.price, p.views, p.likes,
-               s.name AS service_name
+               p.service_id,
+               s.name AS service_name,
+               s.price AS service_price,
+               s.duration_minutes AS service_duration,
+               s.description AS service_description
         FROM tbl_portfolio p
-        LEFT JOIN tbl_services s ON s.id = p.service_id
+        LEFT JOIN tbl_services s ON s.id = p.service_id AND s.is_active = 1
         WHERE p.provider_id = ?
         ORDER BY p.is_featured DESC, p.created_at DESC
     ");
@@ -88,13 +92,18 @@ $cmpStmt->execute([$providerId]);
 $completedCount = (int)$cmpStmt->fetchColumn();
 
 // ── Favorites check & count ────────────────────────────────────
-$isFavStmt = $db->prepare("SELECT id FROM tbl_provider_favorites WHERE customer_id = ? AND provider_id = ?");
-$isFavStmt->execute([$customerId, $providerId]);
-$isFavorited = (bool)$isFavStmt->fetchColumn();
+try {
+    $isFavStmt = $db->prepare("SELECT id FROM tbl_provider_favorites WHERE customer_id = ? AND provider_id = ?");
+    $isFavStmt->execute([$customerId, $providerId]);
+    $isFavorited = (bool)$isFavStmt->fetchColumn();
 
-$favCntStmt = $db->prepare("SELECT COUNT(*) FROM tbl_provider_favorites WHERE provider_id = ?");
-$favCntStmt->execute([$providerId]);
-$favoriteCount = (int)$favCntStmt->fetchColumn();
+    $favCntStmt = $db->prepare("SELECT COUNT(*) FROM tbl_provider_favorites WHERE provider_id = ?");
+    $favCntStmt->execute([$providerId]);
+    $favoriteCount = (int)$favCntStmt->fetchColumn();
+} catch (\Exception $e) {
+    $isFavorited   = false;
+    $favoriteCount = 0;
+}
 
 // ── Nav data ───────────────────────────────────────────────────
 $stPoints = $db->prepare("SELECT COALESCE(SUM(points),0) FROM tbl_loyalty_points WHERE user_id = ?");
@@ -159,32 +168,52 @@ function renderStars(float $r): string {
     return $out;
 }
 
-function isOpenNow(?string $hoursJson): ?bool {
+// ── Timezone: always use Philippine Standard Time (UTC+8) ──────
+// The server runs UTC; all business hours are local Manila time.
+$phTz   = new DateTimeZone('Asia/Manila');
+$phNow  = new DateTime('now', $phTz);
+
+function isOpenNow(?string $hoursJson, DateTime $now): ?bool {
     if (!$hoursJson) return null;
     $hours = json_decode($hoursJson, true);
     if (!$hours) return null;
-    $dayKey = strtolower(date('D'));
+    $dayKey = strtolower($now->format('D'));
     $day    = $hours[$dayKey] ?? null;
     if (!$day || empty($day['open']) || empty($day['close'])) return null;
-    $now = strtotime(date('H:i'));
-    return $now >= strtotime($day['open']) && $now <= strtotime($day['close']);
+    $toMinutes = function(string $t): int {
+        $parts = explode(':', $t);
+        return (int)$parts[0] * 60 + (int)($parts[1] ?? 0);
+    };
+    $nowMin   = (int)$now->format('G') * 60 + (int)$now->format('i');
+    $openMin  = $toMinutes($day['open']);
+    $closeMin = $toMinutes($day['close']);
+    return $nowMin >= $openMin && $nowMin <= $closeMin;
 }
 
-$todayName  = date('l');
+$toMinutes = function(string $t): int {
+    $parts = explode(':', $t);
+    return (int)$parts[0] * 60 + (int)($parts[1] ?? 0);
+};
+
+$todayName  = $phNow->format('l');   // e.g. "Monday" in Manila time
 $todayAvail = null;
 foreach ($availability as $av) {
     if ($av['day_of_week'] === $todayName) { $todayAvail = $av; break; }
 }
 
-$openStatus = isOpenNow($provider['business_hours'] ?? null);
-if ($openStatus === null && $todayAvail) {
-    $nowTs      = strtotime(date('H:i'));
-    $openStatus = $nowTs >= strtotime($todayAvail['start_time'])
-               && $nowTs <= strtotime($todayAvail['end_time']);
+// Priority: tbl_provider_availability (provider-set schedule) first;
+// fall back to business_hours JSON only if no DB record for today.
+if ($todayAvail) {
+    $nowMin     = (int)$phNow->format('G') * 60 + (int)$phNow->format('i');
+    $startMin   = $toMinutes($todayAvail['start_time']);
+    $endMin     = $toMinutes($todayAvail['end_time']);
+    $openStatus = ($nowMin >= $startMin && $nowMin <= $endMin);
+} else {
+    $openStatus = isOpenNow($provider['business_hours'] ?? null, $phNow);
 }
 
 $daysOfWeek = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-$todayIdx   = (int)(date('N')) - 1;
+$todayIdx   = (int)($phNow->format('N')) - 1;  // 1=Mon … 7=Sun, in Manila time
 $availDays  = array_column($availability, 'day_of_week');
 $nextAvail  = null;
 for ($i = 1; $i <= 7; $i++) {
@@ -698,9 +727,7 @@ $hasCoords   = $lat && $lng;
        BOOKING TYPE TOGGLE
     ══════════════════════════════════════ */
     .pp-loc-toggle-wrap {
-      background: var(--card-bg); border: 1.5px solid var(--card-border);
-      border-radius: var(--r-lg); padding: 1.1rem 1.3rem; margin-bottom: 1.5rem;
-      box-shadow: var(--shadow-sm);
+      /* background/border/radius/shadow now come from .pv-card */
     }
     .pp-loc-toggle-label {
       font-size: .72rem; font-family: var(--font-mono); letter-spacing: .1em;
@@ -941,6 +968,59 @@ $hasCoords   = $lat && $lng;
       font-family: var(--font-mono); font-size: .7rem; color: rgba(255,255,255,.45);
       min-width: 60px; text-align: center;
     }
+    /* Lightbox service info + book button */
+    .pp-lightbox-book-panel {
+      width: 100%; max-width: 520px;
+      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+      border-radius: 14px; padding: .9rem 1.1rem;
+      display: flex; align-items: center; gap: .9rem;
+    }
+    .pp-lightbox-svc-info { flex: 1; min-width: 0; }
+    .pp-lightbox-svc-name {
+      font-size: .82rem; font-weight: 700; color: rgba(255,255,255,.92);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .pp-lightbox-svc-meta {
+      font-size: .71rem; color: rgba(255,255,255,.48);
+      font-family: var(--font-mono); margin-top: .18rem;
+      display: flex; gap: .6rem; flex-wrap: wrap;
+    }
+    .pp-lightbox-book-btn {
+      flex-shrink: 0;
+      background: var(--cat-accent, #c084fc);
+      color: #fff; border: none; border-radius: 9px;
+      padding: .52rem 1.1rem; font-size: .78rem; font-weight: 700;
+      cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center; gap: .4rem;
+      transition: filter .15s, transform .15s; white-space: nowrap;
+    }
+    .pp-lightbox-book-btn:hover { filter: brightness(1.12); transform: translateY(-1px); }
+    .pp-lightbox-book-panel.no-service {
+      justify-content: center;
+    }
+    /* Portfolio grid hover book badge */
+    .pp-masonry-book-badge {
+      position: absolute; bottom: .6rem; right: .6rem;
+      background: rgba(0,0,0,.72); backdrop-filter: blur(6px);
+      color: #fff; font-size: .65rem; font-weight: 700; letter-spacing: .04em;
+      padding: .3rem .65rem; border-radius: 7px;
+      opacity: 0; transform: translateY(4px);
+      transition: opacity .2s, transform .2s;
+      pointer-events: none;
+    }
+    .pp-masonry-item:hover .pp-masonry-book-badge { opacity: 1; transform: translateY(0); }
+    /* Hero book button */
+    .pp-hero-book-btn {
+      display: inline-flex; align-items: center; gap: .45rem;
+      background: var(--cat-accent, #c084fc);
+      color: #fff; border: none; border-radius: 10px;
+      padding: .6rem 1.3rem; font-size: .82rem; font-weight: 700;
+      cursor: pointer; text-decoration: none;
+      transition: filter .15s, transform .15s, box-shadow .15s;
+      box-shadow: 0 4px 18px rgba(0,0,0,.18);
+      margin-top: .25rem;
+    }
+    .pp-hero-book-btn:hover { filter: brightness(1.1); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.25); }
 
     /* ══════════════════════════════════════
        SHARE TOAST
@@ -1002,18 +1082,8 @@ $hasCoords   = $lat && $lng;
       <span class="pv-logo-badge">Customer</span>
     </a>
 
-    <!-- BACK TO BOOKINGS — prominent, replaces nav links -->
-    <div style="flex:1;display:flex;justify-content:center;">
-      <a href="<?= BASE_URL ?>bookings" class="pp-nav-back-btn" aria-label="Back to Bookings">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <path d="M9 2L4 7L9 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        Back to Bookings
-        <?php if ($upcomingCount): ?>
-          <span class="pv-sup"><?= $upcomingCount ?></span>
-        <?php endif; ?>
-      </a>
-    </div>
+    <!-- Nav center spacer -->
+    <div style="flex:1;"></div>
 
     <!-- Nav end -->
     <div class="pv-nav-end">
@@ -1324,8 +1394,8 @@ $hasCoords   = $lat && $lng;
 
         <!-- Tab bar -->
         <div class="pp-tabs" role="tablist">
-          <button class="pp-tab active" onclick="switchTab('gallery',this)" id="tabGallery"
-                  role="tab" aria-selected="true" aria-controls="panelGallery">
+          <button class="pp-tab <?= empty($galleryPhotos) ? '' : 'active' ?>" onclick="switchTab('gallery',this)" id="tabGallery"
+                  role="tab" aria-selected="<?= empty($galleryPhotos) ? 'false' : 'true' ?>" aria-controls="panelGallery">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <rect x=".7" y=".7" width="5.3" height="5.3" rx="1.2" stroke="currentColor" stroke-width="1.3"/>
               <rect x="8"  y=".7" width="5.3" height="5.3" rx="1.2" stroke="currentColor" stroke-width="1.3"/>
@@ -1336,8 +1406,8 @@ $hasCoords   = $lat && $lng;
             <span class="pp-tab-count"><?= count($galleryPhotos) ?></span>
           </button>
 
-          <button class="pp-tab" onclick="switchTab('services',this)" id="tabServices"
-                  role="tab" aria-selected="false" aria-controls="panelServices">
+          <button class="pp-tab <?= empty($galleryPhotos) ? 'active' : '' ?>" onclick="switchTab('services',this)" id="tabServices"
+                  role="tab" aria-selected="<?= empty($galleryPhotos) ? 'true' : 'false' ?>" aria-controls="panelServices">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <path d="M1 3h12M1 7h12M1 11h7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
             </svg>
@@ -1357,7 +1427,7 @@ $hasCoords   = $lat && $lng;
         </div>
 
         <!-- ── PORTFOLIO PANEL ── -->
-        <div class="pp-panel" id="panelGallery" role="tabpanel" aria-labelledby="tabGallery">
+        <div class="pp-panel <?= empty($galleryPhotos) ? 'pp-panel--hidden' : '' ?>" id="panelGallery" role="tabpanel" aria-labelledby="tabGallery">
           <?php if (empty($galleryPhotos)): ?>
           <div class="pp-gallery-empty">
             <div style="font-size:2.4rem;margin-bottom:.75rem;"><?= $catEmoji ?></div>
@@ -1407,6 +1477,9 @@ $hasCoords   = $lat && $lng;
                     <path d="M10.5 10.5L14 14" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
                   </svg>
                 </div>
+                <?php if (!empty($photo['service_id'])): ?>
+                <div class="pp-masonry-book-badge">📅 Book this look</div>
+                <?php endif; ?>
               </div>
             <?php endif; ?>
             <?php endforeach; ?>
@@ -1423,7 +1496,7 @@ $hasCoords   = $lat && $lng;
         </div>
 
         <!-- ── SERVICES PANEL ── -->
-        <div class="pp-panel pp-panel--hidden" id="panelServices" role="tabpanel" aria-labelledby="tabServices">
+        <div class="pp-panel <?= empty($galleryPhotos) ? '' : 'pp-panel--hidden' ?>" id="panelServices" role="tabpanel" aria-labelledby="tabServices">
           <?php if (empty($services)): ?>
           <div class="pp-svc-empty">
             <div style="font-size:2.2rem;"><?= $catEmoji ?></div>
@@ -1583,39 +1656,76 @@ $hasCoords   = $lat && $lng;
 
       <!-- ══ BOOKING TYPE TOGGLE ══ -->
       <?php if ($showToggle): ?>
-      <div class="pp-loc-toggle-wrap" id="locToggleWrap">
-        <span class="pp-loc-toggle-label">How would you like your service?</span>
-        <div class="pp-loc-toggle">
-          <button type="button" class="pp-loc-btn active" id="btnInShop" onclick="setLocType('shop')">
-            🏪 Visit the Shop
-          </button>
-          <button type="button" class="pp-loc-btn" id="btnHomeService" onclick="setLocType('home')">
-            🏠 Home Service
-          </button>
+      <div class="pv-card pp-loc-toggle-wrap" id="locToggleWrap">
+        <div class="pv-card-head">
+          <h2>
+            <span style="display:flex;align-items:center;gap:.55rem;">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <path d="M7 1C4.79 1 3 2.79 3 5c0 3.25 4 8 4 8s4-4.75 4-8c0-2.21-1.79-4-4-4z" stroke="currentColor" stroke-width="1.3"/>
+                <circle cx="7" cy="5" r="1.5" stroke="currentColor" stroke-width="1.2"/>
+              </svg>
+              Service Location
+            </span>
+          </h2>
         </div>
-        <div class="pp-home-addr-row" id="homeAddrRow">
-          <input type="text" id="homeAddress" class="pp-home-addr-input"
-                 placeholder="Enter your full address for home service…"
-                 aria-label="Your address for home service">
+        <div style="padding:1.1rem 1.3rem;">
+          <span class="pp-loc-toggle-label">How would you like your service?</span>
+          <div class="pp-loc-toggle">
+            <button type="button" class="pp-loc-btn active" id="btnInShop" onclick="setLocType('shop')">
+              🏪 Visit the Shop
+            </button>
+            <button type="button" class="pp-loc-btn" id="btnHomeService" onclick="setLocType('home')">
+              🏠 Home Service
+            </button>
+          </div>
+          <div class="pp-home-addr-row" id="homeAddrRow">
+            <input type="text" id="homeAddress" class="pp-home-addr-input"
+                   placeholder="Enter your full address for home service…"
+                   aria-label="Your address for home service">
+          </div>
         </div>
       </div>
       <?php elseif ($offersHome && !$offersShop): ?>
-      <div class="pp-loc-toggle-wrap">
-        <span class="pp-loc-toggle-label">Service type</span>
-        <div class="pp-loc-toggle">
-          <button type="button" class="pp-loc-btn active home-active">🏠 Home Service Only</button>
+      <div class="pv-card pp-loc-toggle-wrap">
+        <div class="pv-card-head">
+          <h2>
+            <span style="display:flex;align-items:center;gap:.55rem;">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <path d="M1 7l6-5 6 5v6H9V9H5v4H1V7z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+              </svg>
+              Service Location
+            </span>
+          </h2>
         </div>
-        <div class="pp-home-addr-row visible">
-          <input type="text" id="homeAddress" class="pp-home-addr-input"
-                 placeholder="Enter your full address for home service…"
-                 aria-label="Your address for home service">
+        <div style="padding:1.1rem 1.3rem;">
+          <span class="pp-loc-toggle-label">Service type</span>
+          <div class="pp-loc-toggle">
+            <button type="button" class="pp-loc-btn active home-active">🏠 Home Service Only</button>
+          </div>
+          <div class="pp-home-addr-row visible">
+            <input type="text" id="homeAddress" class="pp-home-addr-input"
+                   placeholder="Enter your full address for home service…"
+                   aria-label="Your address for home service">
+          </div>
         </div>
       </div>
       <?php elseif ($offersShop && !$offersHome): ?>
-      <div class="pp-loc-toggle-wrap">
-        <span class="pp-loc-toggle-label">Service type</span>
-        <div class="pp-loc-toggle">
-          <button type="button" class="pp-loc-btn active">🏪 In-Shop Only</button>
+      <div class="pv-card pp-loc-toggle-wrap">
+        <div class="pv-card-head">
+          <h2>
+            <span style="display:flex;align-items:center;gap:.55rem;">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <path d="M1 5h12l-1 7H2L1 5zM1 5l1-3h10l1 3" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+              </svg>
+              Service Location
+            </span>
+          </h2>
+        </div>
+        <div style="padding:1.1rem 1.3rem;">
+          <span class="pp-loc-toggle-label">Service type</span>
+          <div class="pp-loc-toggle">
+            <button type="button" class="pp-loc-btn active">🏪 In-Shop Only</button>
+          </div>
         </div>
       </div>
       <?php endif; ?>
@@ -1903,6 +2013,30 @@ $hasCoords   = $lat && $lng;
       <span class="pp-lightbox-counter" id="lightboxCounter"></span>
       <button class="pp-lightbox-btn" onclick="nextPhoto()" aria-label="Next">›</button>
     </div>
+    <!-- Service info + Book button -->
+    <div class="pp-lightbox-book-panel" id="lightboxBookPanel" style="display:none;">
+      <div class="pp-lightbox-svc-info">
+        <div class="pp-lightbox-svc-name" id="lightboxSvcName"></div>
+        <div class="pp-lightbox-svc-meta" id="lightboxSvcMeta"></div>
+      </div>
+      <a href="#" class="pp-lightbox-book-btn" id="lightboxBookBtn" style="--cat-accent:<?= $catAccent ?>">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="2" y="3" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M5 1v3M11 1v3M2 7h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Book this Look
+      </a>
+    </div>
+    <!-- Fallback: no linked service — go to Services tab -->
+    <div class="pp-lightbox-book-panel no-service" id="lightboxNoSvcPanel" style="display:none;">
+      <button class="pp-lightbox-book-btn" onclick="closeLightbox();switchTab('services',document.getElementById('tabServices'));" style="--cat-accent:<?= $catAccent ?>">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="2" y="3" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M5 1v3M11 1v3M2 7h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        View Services &amp; Book
+      </button>
+    </div>
   </div>
 </div>
 <script>
@@ -1910,12 +2044,23 @@ const galleryPhotos = <?= json_encode(array_map(function($p) {
     $extras = !empty($p['extra_images']) ? json_decode($p['extra_images'], true) : [];
     if (!is_array($extras)) $extras = [];
     $allImgs = array_filter(array_merge([$p['image_url'] ?? ''], $extras));
+    $dur = '';
+    if (!empty($p['service_duration'])) {
+        $mins = (int)$p['service_duration'];
+        $dur  = $mins >= 60
+            ? ($mins % 60 === 0 ? ($mins/60).'h' : floor($mins/60).'h '.($mins%60).'m')
+            : $mins.'m';
+    }
     return [
-        'url'    => $p['image_url'] ?? '',
-        'images' => array_values($allImgs),
-        'title'  => $p['title'] ?? '',
-        'caption'=> $p['caption'] ?? '',
-        'service'=> $p['service_name'] ?? '',
+        'url'          => $p['image_url'] ?? '',
+        'images'       => array_values($allImgs),
+        'title'        => $p['title'] ?? '',
+        'caption'      => $p['caption'] ?? '',
+        'service'      => $p['service_name'] ?? '',
+        'service_id'   => $p['service_id'] ? (int)$p['service_id'] : null,
+        'service_price'=> $p['service_price'] ? number_format((float)$p['service_price'], 0) : null,
+        'service_dur'  => $dur,
+        'service_desc' => $p['service_description'] ?? '',
     ];
 }, $galleryPhotos)) ?>;
 let currentIdx = 0;
@@ -1943,6 +2088,24 @@ function updateLightbox() {
   var counter = (currentIdx + 1) + ' / ' + galleryPhotos.length;
   if (imgs.length > 1) counter += '  (' + (currentImgIdx + 1) + ' of ' + imgs.length + ' photos)';
   document.getElementById('lightboxCounter').textContent = counter;
+
+  // Book panel: show service info if linked, fallback otherwise
+  var bookPanel   = document.getElementById('lightboxBookPanel');
+  var noSvcPanel  = document.getElementById('lightboxNoSvcPanel');
+  if (p.service_id) {
+    bookPanel.style.display  = 'flex';
+    noSvcPanel.style.display = 'none';
+    document.getElementById('lightboxSvcName').textContent = p.service || 'Book Appointment';
+    var meta = [];
+    if (p.service_price) meta.push('₱' + p.service_price);
+    if (p.service_dur)   meta.push('⏱ ' + p.service_dur);
+    if (p.service_desc)  meta.push(p.service_desc.substring(0, 60) + (p.service_desc.length > 60 ? '…' : ''));
+    document.getElementById('lightboxSvcMeta').textContent = meta.join('  ·  ');
+    document.getElementById('lightboxBookBtn').href = '<?= BASE_URL ?>services/' + p.service_id;
+  } else {
+    bookPanel.style.display  = 'none';
+    noSvcPanel.style.display = '<?= !empty($services) ? "flex" : "none" ?>';
+  }
 }
 function nextPhoto() {
   const p = galleryPhotos[currentIdx];

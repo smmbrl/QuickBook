@@ -53,7 +53,7 @@ $statusLabels = [
     'completed'    => ['label' => 'Completed',            'icon' => '<i class=""></i>', 'color' => 'blue'],
     'cancelled'    => ['label' => 'Cancelled',            'icon' => '✖',  'color' => 'red'],
     'rejected'     => ['label' => 'Rejected',             'icon' => '✖',  'color' => 'red'],
-    'rescheduled'  => ['label' => 'Rescheduled',          'icon' => '<i class=""></i>', 'color' => 'yellow'],
+    'rescheduled'  => ['label' => 'Rescheduled',          'icon' => '<i class="fa-solid fa-rotate"></i>', 'color' => 'yellow'],
 ];
 $statusInfo = $statusLabels[$status] ?? ['label' => ucfirst($status), 'icon' => '<i class=""></i>', 'color' => 'white'];
 
@@ -271,7 +271,7 @@ $bdAvg    = $bdTotal
           <div class="bd-detail-item">
             <div class="bd-detail-label">Location Type</div>
             <div class="bd-detail-val">
-              <?= $booking['location_type'] === 'Home' ? '<i class="fa-solid fa-house"></i> Home Service' : '<i class="fa-solid fa-store"></i> ' . htmlspecialchars($booking['location_type']) ?>
+              <?= in_array($booking['location_type'], ['On-site', 'Home']) ? '<i class="fa-solid fa-house"></i> Home Service' : '<i class="fa-solid fa-store"></i> ' . htmlspecialchars($booking['location_type']) ?>
             </div>
           </div>
           <?php endif; ?>
@@ -448,7 +448,7 @@ $bdAvg    = $bdTotal
       <!-- Price summary -->
       <div class="pv-card bd-card">
         <?php
-          $isHomeService  = ($booking['location_type'] ?? '') === 'Home';
+          $isHomeService  = in_array($booking['location_type'] ?? '', ['On-site', 'Home']);
           $homeServiceFee = 50;
           $total          = $booking['price'] + ($isHomeService ? $homeServiceFee : 0);
           $payMethod = $booking['payment_method'] ?? null;
