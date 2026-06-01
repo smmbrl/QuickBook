@@ -149,8 +149,8 @@ class AuthController
                     (user_id, business_name, category_id, business_address,
                      business_address_lat, business_address_lng,
                      business_address_place_id, business_address_verified,
-                     service_type, city)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Bacolod City')"
+                     service_type, city, is_approved)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Bacolod City', 1)"
             );
             $stmt->execute([
                 $userId,

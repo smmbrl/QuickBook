@@ -1064,17 +1064,11 @@ class ProviderDashController
         $this->_ensurePortfolioTable($db);
 
         // Fetch provider profile id + approval status
-        $stmt = $db->prepare("SELECT id, is_approved FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
+        $stmt = $db->prepare("SELECT id FROM tbl_provider_profiles WHERE user_id = ? LIMIT 1");
         $stmt->execute([$userId]);
         $profile = $stmt->fetch();
         if (!$profile) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Provider profile not found.'];
-            header('Location: ' . BASE_URL . 'provider/portfolio'); exit;
-        }
-
-        // Block uploads until admin approves the account
-        if (empty($profile['is_approved']) || (int)$profile['is_approved'] !== 1) {
-            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Your account must be verified by an admin before you can upload portfolio works.'];
             header('Location: ' . BASE_URL . 'provider/portfolio'); exit;
         }
 
@@ -1083,7 +1077,14 @@ class ProviderDashController
         $title         = trim($_POST['title']        ?? '');
         $caption       = trim($_POST['caption']      ?? '');
         $serviceName   = trim($_POST['service_name'] ?? '');
-        $serviceId     = null;   // service_id not required; free-text service_name used instead
+        // Try to resolve service_id from the submitted service_name
+        $serviceId = null;
+        $postedSvcId = (int)($_POST['service_id'] ?? 0);
+        if ($postedSvcId > 0) {
+            $svcCheck = $db->prepare("SELECT id FROM tbl_services WHERE id = ? AND provider_id = ? AND is_active = 1 LIMIT 1");
+            $svcCheck->execute([$postedSvcId, $providerId]);
+            if ($svcCheck->fetchColumn()) $serviceId = $postedSvcId;
+        }
         $isFeatured    = isset($_POST['is_featured'])    ? 1 : 0;
         $isBeforeAfter = isset($_POST['is_before_after']) ? 1 : 0;
 
@@ -1194,7 +1195,19 @@ class ProviderDashController
         $title       = trim($_POST['title']        ?? '');
         $caption     = trim($_POST['caption']      ?? '');
         $serviceName = trim($_POST['service_name'] ?? '');
-        $serviceId   = null;   // service_id not required; free-text service_name used
+
+        // Resolve service_id from POST (submitted via the services dropdown)
+        $serviceId   = null;
+        $postedSvcId = (int)($_POST['service_id'] ?? 0);
+        if ($postedSvcId > 0) {
+            $svcCheck = $db->prepare("SELECT id, name FROM tbl_services WHERE id = ? AND provider_id = ? AND is_active = 1 LIMIT 1");
+            $svcCheck->execute([$postedSvcId, (int)$item['provider_id']]);
+            $svcRow = $svcCheck->fetch();
+            if ($svcRow) {
+                $serviceId   = $postedSvcId;
+                $serviceName = $serviceName ?: $svcRow['name'];
+            }
+        }
         $isFeatured  = isset($_POST['is_featured']) ? 1 : 0;
 
         // Accept either the pre-formatted hidden price or a raw price_amount

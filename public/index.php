@@ -143,6 +143,9 @@ $routes = [
     'POST:notifications/mark-read'     => ['NotificationController', 'markRead'],
     'POST:notifications/mark-all-read' => ['NotificationController', 'markAllRead'],
 
+    // API endpoints
+    'POST:api/favorites/toggle' => ['ApiController', 'toggleFavorite'],
+
     // Admin
     'GET:admin/dashboard'              => ['AdminController', 'dashboard'],
     'GET:admin/bookings'               => ['AdminController', 'bookings'],

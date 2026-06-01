@@ -12,69 +12,22 @@ class BookingController
         }
     }
 
-    /**
-     * GET  book/{id}
-     * Shows the booking form for a specific provider.
-     * $id = tbl_provider_profiles.id
-     */
     public function show(string $id): void
     {
-        if (($_SESSION['user_role'] ?? '') !== 'customer') {
-            header('Location: ' . BASE_URL . 'providers/' . (int)$id); exit;
-        }
-
+        // GET:book/{provider_id} — redirect to the provider's public profile so the
+        // customer can pick a service and then submit the booking form.
         $db         = Database::getInstance();
         $providerId = (int)$id;
 
-        if ($providerId <= 0) {
-            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Invalid provider.'];
-            header('Location: ' . BASE_URL . 'browse'); exit;
-        }
-
-        // Validate provider exists and is active
-        $stmt = $db->prepare("
-            SELECT pp.id, pp.business_name, pp.profile_photo, pp.bio,
-                   pp.avg_rating, pp.total_reviews,
-                   u.first_name, u.last_name,
-                   c.name AS category_name
-            FROM tbl_provider_profiles pp
-            JOIN tbl_users u ON u.id = pp.user_id
-            LEFT JOIN tbl_categories c ON c.id = pp.category_id
-            WHERE pp.id = ? AND pp.is_approved = 1
-            LIMIT 1
-        ");
+        $stmt = $db->prepare("SELECT id FROM tbl_provider_profiles WHERE id = ? AND is_approved = 1 LIMIT 1");
         $stmt->execute([$providerId]);
-        $provider = $stmt->fetch();
 
-        if (!$provider) {
-            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Provider not found or unavailable.'];
-            header('Location: ' . BASE_URL . 'browse'); exit;
+        if ($stmt->fetchColumn()) {
+            header('Location: ' . BASE_URL . 'providers/' . $providerId); exit;
         }
 
-        // Fetch active services for this provider
-        $stSvc = $db->prepare("
-            SELECT id, name, service_type, location_type, shop_address,
-                   price, duration_minutes, description
-            FROM tbl_services
-            WHERE provider_id = ? AND is_active = 1
-            ORDER BY name ASC
-        ");
-        $stSvc->execute([$providerId]);
-        $services = $stSvc->fetchAll();
-
-        // Fetch availability so the date-picker can block unavailable days
-        $stAvail = $db->prepare("
-            SELECT day_of_week, start_time, end_time, is_available
-            FROM tbl_provider_availability
-            WHERE provider_id = ?
-        ");
-        $stAvail->execute([$providerId]);
-        $availability = [];
-        foreach ($stAvail->fetchAll() as $row) {
-            $availability[$row['day_of_week']] = $row;
-        }
-
-        require __DIR__ . '/../views/book.php';
+        $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Provider not found or not available.'];
+        header('Location: ' . BASE_URL . 'browse'); exit;
     }
 
     public function store(): void
@@ -97,6 +50,11 @@ class BookingController
         $allowedPayments = ['gcash', 'paymaya', 'card', 'cash'];
         if (!in_array($paymentMethod, $allowedPayments)) $paymentMethod = 'cash';
 
+        // Fallback redirect URL — back to the service booking page or browse
+        $fallback = $serviceId
+            ? BASE_URL . 'services/' . $serviceId
+            : BASE_URL . 'browse';
+
         $errors = [];
         if (!$serviceId)   $errors[] = 'Please select a service.';
         if (!$providerId)  $errors[] = 'Provider not found.';
@@ -111,7 +69,7 @@ class BookingController
 
         if ($errors) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => implode(' ', $errors)];
-            header('Location: ' . BASE_URL . 'book/' . $providerId); exit;
+            header('Location: ' . $fallback); exit;
         }
 
         $svc = $db->prepare("
@@ -125,7 +83,7 @@ class BookingController
 
         if (!$service) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Service not found or unavailable.'];
-            header('Location: ' . BASE_URL . 'book/' . $providerId); exit;
+            header('Location: ' . $fallback); exit;
         }
 
         $dayOfWeek = date('l', strtotime($bookingDate));
@@ -138,7 +96,7 @@ class BookingController
 
         if (!$avRow) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => ucfirst($dayOfWeek) . ' is not an available day for this provider.'];
-            header('Location: ' . BASE_URL . 'book/' . $providerId); exit;
+            header('Location: ' . $fallback); exit;
         }
 
         if ($bookingTime) {
@@ -148,7 +106,7 @@ class BookingController
             if ($reqTime < $startTime || $reqTime > $endTime) {
                 $fmt = fn($t) => date('g:i A', strtotime($bookingDate . ' ' . $t));
                 $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Please choose a time between ' . $fmt($avRow['start_time']) . ' and ' . $fmt($avRow['end_time']) . '.'];
-                header('Location: ' . BASE_URL . 'book/' . $providerId); exit;
+                header('Location: ' . $fallback); exit;
             }
         }
 
@@ -160,7 +118,7 @@ class BookingController
         $dup->execute([$customerId, $serviceId, $bookingDate]);
         if ($dup->fetch()) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'You already have a pending or confirmed booking for this service on that date.'];
-            header('Location: ' . BASE_URL . 'book/' . $providerId); exit;
+            header('Location: ' . $fallback); exit;
         }
 
         $startTime   = $bookingTime ?: $avRow['start_time'];
@@ -203,12 +161,12 @@ class BookingController
             VALUES (?, ?, 'earn', 10, ?, 'Booking placed', NOW())
         ")->execute([$customerId, $bookingId, $currentBalance + 10]);
 
-        // ── Resolve provider user_id ───────────────────────────────────────
+        // Resolve provider user_id
         $provUserStmt = $db->prepare("SELECT user_id FROM tbl_provider_profiles WHERE id = ? LIMIT 1");
         $provUserStmt->execute([$providerId]);
         $providerUserId = (int)($provUserStmt->fetchColumn() ?: 0);
 
-        // ── Names & formatted date/time ────────────────────────────────────
+        // Names & formatted date/time
         $custStmt = $db->prepare("SELECT first_name, last_name FROM tbl_users WHERE id = ? LIMIT 1");
         $custStmt->execute([$customerId]);
         $custUser  = $custStmt->fetch();
@@ -223,7 +181,7 @@ class BookingController
         $fTime = $bookingTime ? date('g:i A', strtotime($bookingTime)) : 'TBD';
         $body  = "Scheduled for {$fDate} at {$fTime}. Amount: ₱" . number_format($totalAmount, 2) . '.';
 
-        // ── Notify customer ────────────────────────────────────────────────
+        // Notify customer
         NotificationHelper::send($db, [$customerId], 'booking',
             'Booking Submitted',
             "Your booking for \"{$service['name']}\" has been submitted and is awaiting confirmation.",
@@ -231,7 +189,7 @@ class BookingController
             BASE_URL . 'bookings/' . $bookingId
         );
 
-        // ── Notify provider ────────────────────────────────────────────────
+        // Notify provider
         if ($providerUserId) {
             NotificationHelper::send($db, [$providerUserId], 'booking',
                 'New Booking Request',
@@ -241,7 +199,7 @@ class BookingController
             );
         }
 
-        // ── Notify all admins ──────────────────────────────────────────────
+        // Notify admins
         NotificationHelper::send(
             $db,
             NotificationHelper::adminIds($db),
@@ -251,6 +209,7 @@ class BookingController
             $body . " Payment: {$paymentMethod}.",
             BASE_URL . 'admin/bookings'
         );
+
         $_SESSION['flash'] = [
             'type' => 'success',
             'msg'  => 'Booking submitted! The provider will confirm your appointment shortly.',

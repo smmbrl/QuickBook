@@ -5,9 +5,9 @@
 require_once __DIR__ . '/../../../config/database.php';
 $db       = Database::getInstance();
 $userId   = (int)($_SESSION['user_id'] ?? 0);
-$userName  = htmlspecialchars(trim(($_SESSION['first_name'] ?? '') . ' ' . ($_SESSION['last_name'] ?? '')) ?: ($_SESSION['user_name'] ?? 'Customer'));
+$userName  = htmlspecialchars($_SESSION['user_name'] ?? 'Customer');
 $userEmail = htmlspecialchars($_SESSION['user_email'] ?? '');
-$initials  = strtoupper(substr($_SESSION['first_name'] ?? $userName, 0, 1) . substr($_SESSION['last_name'] ?? '', 0, 1));
+$initials  = strtoupper(substr($userName, 0, 2));
 
 // Fetch avatar
 $stAvR = $db->prepare("SELECT avatar_url FROM tbl_users WHERE id = ? LIMIT 1");
